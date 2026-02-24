@@ -1,0 +1,76 @@
+# Nixx architecture
+
+This directory contains technical design documentation for Nixx.
+
+## Documents
+
+- [API design](api-design.md) - OpenAI-compatible API endpoints *(coming soon)*
+- [Memory system](memory-system.md) - Vector DB + graph storage design *(coming soon)*
+- [Security](security.md) - Encryption and privacy considerations *(coming soon)*
+- [Configuration](configuration.md) - User profile and system config *(coming soon)*
+
+## High-level architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Frontend Layer                       │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │ Terminal UI  │  │     Zed      │  │   VS Code    │  │
+│  │  (Textual)   │  │   (native)   │  │ (Continue.dev)│  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
+│         │                 │                  │           │
+│         └─────────────────┴──────────────────┘           │
+│                           │                              │
+└───────────────────────────┼──────────────────────────────┘
+                            │
+                ┌───────────▼──────────────┐
+                │   OpenAI-compatible API  │
+                │      (FastAPI)           │
+                └───────────┬──────────────┘
+                            │
+        ┌───────────────────┴──────────────────┐
+        │                                      │
+┌───────▼────────┐                   ┌─────────▼────────┐
+│ LLM Orchestrator│                   │  Memory System   │
+│ (Ollama/vLLM)  │                   │  (Vector DB +    │
+│                │                   │   Graph)         │
+└────────────────┘                   └──────────────────┘
+```
+
+## Core components
+
+### Frontend layer
+Multiple frontend options, all speaking to the same backend:
+- **Terminal UI**: Textual-based custom interface
+- **Zed**: Native assistant integration
+- **VS Code**: Via Continue.dev extension
+- **Neovim**: Via AI plugins (codecompanion.nvim, etc.)
+
+### API server
+FastAPI-based server implementing OpenAI-compatible endpoints:
+- `/v1/chat/completions` - Primary chat interface
+- `/v1/completions` - Code completions
+- `/v1/models` - Available models
+- `/api/memory/*` - Memory management (custom endpoints)
+- `/api/hardware/*` - Hardware monitoring (custom endpoints)
+
+### LLM orchestrator
+Manages interaction with local LLM backend:
+- Model selection and routing
+- Context window management
+- Streaming response handling
+- Multi-model support for different tasks
+
+### Memory system
+Hybrid storage for persistent context:
+- **Vector DB** (ChromaDB): Semantic search over conversations and knowledge
+- **Relational DB** (SQLite/PostgreSQL): Structured data, relationships, metadata
+- **Graph relationships**: Connections between projects, conversations, and context
+
+## Design principles
+
+1. **API-first**: OpenAI compatibility enables frontend flexibility
+2. **Local-first**: All data and inference on user's hardware
+3. **Privacy-focused**: Encrypted storage, no external dependencies
+4. **Modular**: Swappable components (vector DBs, LLM backends, frontends)
+5. **Generalizable**: Config-driven for any user's setup

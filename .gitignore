@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Nixx specific
+*.db
+*.sqlite
+*.sqlite3
+data/
+logs/
+*.log
+config/user.yaml
+config/secrets.yaml
+.env
+.env.local
+
+# Model files
+models/
+*.gguf
+*.bin
+*.safetensors
+
+# Vector DB
+chroma/
+qdrant_storage/
+
+# Build logs (private until published)
+docs/build-log/*-unpublished.md
+
+# Temporary files
+tmp/
+temp/
+*.tmp
