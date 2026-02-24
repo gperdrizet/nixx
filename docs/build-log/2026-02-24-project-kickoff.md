@@ -70,9 +70,49 @@ The decision to make it generalizable (not just hardcoded to my setup) adds work
 
 Starting with the memory layer first (not execution/automation) feels right. Just having unified context across workspaces would be transformative.
 
+## Technical Decisions
+
+**Brand voice and language:**
+- No "AI" buzzword - it's meaningless marketing speak in 2026
+- No "agent" - use context-specific terms or "Nixx" directly
+- Be specific, technical, direct - no pseudo-impressive jargon
+- Just say what we mean
+
+**LLM backend: Ollama**
+- Evaluated Ollama vs vLLM vs llama.cpp
+- Chose Ollama for ease of experimentation and model switching
+- Dead simple setup, OpenAI-compatible API built-in
+- Good enough for single P100, can switch to vLLM later if needed
+
+**Database: PostgreSQL**
+- Not SQLite - need a real database for this
+- Will use existing PostgreSQL server
+
+**Development environment:**
+- Primary development machine: Ubuntu (not Arch)
+- ML box with P100 GPU will run Nixx backend
+- ThinkPad laptop for TUI testing
+
+**Project tagline evolution:**
+- Started: "Self-hosted personal AI agent..."
+- Removed "AI" buzzword
+- Added "knowledge base" to clarify purpose
+- Changed "knowledge graphs" to "semantic networks" (avoid redundancy)
+- Final: "Self-hosted personal knowledge base and memory system using vector search and semantic networks"
+
+## Repository
+
+GitHub: https://github.com/gperdrizet/nixx
+
+Initial commit pushed with project structure and documentation.
+
+## Meta Note
+
+This conversation itself demonstrates the problem Nixx solves: switching from this machine to the Ubuntu box means losing all this context. The irony is perfect - we're building the solution to the problem we're experiencing right now.
+
 ## Time Spent
 
-~2 hours planning and initial setup
+~3 hours planning, setup, and initial decisions
 
 ---
 
