@@ -80,8 +80,6 @@ source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-
-# (More setup instructions coming soon)
 ```
 
 ## Project status
