@@ -1,8 +1,8 @@
 # Nixx
 
-**Self-hosted personal knowledge base and memory system using vector search and semantic networks**
+Self-hosted personal knowledge base and memory system using vector search and semantic networks.
 
-Nixx is an open-source, local-first system designed to provide unified context across all your projects, workspaces, and conversations. Instead of fragmenting your interactions across isolated chat sessions, Nixx maintains persistent memory and understands the connections between your work.
+Nixx is an open-source, local-first system designed to provide unified context across all your projects, workspaces, and conversations. Instead of fragmenting your interactions across isolated chat sessions and workspaces, Nixx maintains persistent memory and understands the connections between you and your work.
 
 ## Philosophy
 
@@ -63,8 +63,8 @@ Follow the build journey in [docs/blog/](docs/blog/) where we document the devel
 ### Requirements
 
 - Python 3.10+
-- CUDA-capable GPU (tested on P100 16GB)
-- 16GB+ system RAM
+- CUDA-capable GPU (12+ GB)
+- 64 GB+ system RAM
 - Linux (tested on Ubuntu)
 
 ### Setup
