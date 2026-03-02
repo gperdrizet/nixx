@@ -10,7 +10,7 @@ See [docs/architecture/README.md](../docs/architecture/README.md) and [docs/inde
 Frontend Layer (TUI / Zed / VS Code / Neovim)
         ↓
   OpenAI-compatible API (FastAPI + Uvicorn)
-        ↓
+        ↓                       ↓
   LLM Orchestrator          Memory System
   (Ollama / vLLM)     (ChromaDB + SQLite/PostgreSQL + Graph)
 ```
@@ -35,7 +35,7 @@ mypy src/
 pytest
 ```
 
-Tool config lives in [pyproject.toml](../pyproject.toml) (line length 100, `py310` target, `disallow_untyped_defs = true`).
+Tool config lives in [pyproject.toml](../pyproject.toml) (line length 100, `py313` target, `disallow_untyped_defs = true`).
 
 ## Conventions
 
@@ -49,7 +49,6 @@ Tool config lives in [pyproject.toml](../pyproject.toml) (line length 100, `py31
 
 ## Pitfalls
 
-- `requires-python = ">=3.13"` but ruff/mypy/black target `py310` — do not widen this gap further; plan to align to 3.13.
 - `NixxConfig()` instantiation creates directories on disk — avoid instantiating it in test module scope.
 - `nixx.cli` and `nixx.server` are declared as entry points but do not exist yet — don't import them until the modules are created.
 - Target hardware is CUDA GPU (≥12 GB VRAM), ≥64 GB RAM, Linux — don't add CPU-only fallback paths without a flag.
