@@ -1,0 +1,55 @@
+# Nixx — Project Guidelines
+
+Self-hosted personal knowledge base and memory system. Maintains persistent, unified context across all workspaces and conversations for a single user. Local-first, MIT licensed.
+
+See [docs/architecture/README.md](../docs/architecture/README.md) and [docs/index.md](../docs/index.md) for full design context.
+
+## Architecture
+
+```
+Frontend Layer (TUI / Zed / VS Code / Neovim)
+        ↓
+  OpenAI-compatible API (FastAPI + Uvicorn)
+        ↓
+  LLM Orchestrator          Memory System
+  (Ollama / vLLM)     (ChromaDB + SQLite/PostgreSQL + Graph)
+```
+
+All frontends communicate only through the OpenAI-compatible API — no direct backend imports from frontend code. Default LLM: `qwen2.5-coder:7b` via Ollama. PostgreSQL is the production database; SQLite is dev-only.
+
+Entry points: `nixx` → `nixx.cli:main` | `nixx-server` → `nixx.server:main`
+
+## Build and Test
+
+```bash
+# Setup
+python -m venv venv && source venv/bin/activate
+pip install -e ".[dev]"
+
+# Lint / format / type-check
+ruff check src/
+black src/
+mypy src/
+
+# Tests
+pytest
+```
+
+Tool config lives in [pyproject.toml](../pyproject.toml) (line length 100, `py310` target, `disallow_untyped_defs = true`).
+
+## Conventions
+
+**Language**: Never use "AI" or "agent" — use precise, context-specific terms or "nixx" directly. Be technical and direct; no buzzwords or jargon.
+
+**Config**: `NixxConfig` (pydantic-settings) reads from `.env` with `NIXX_` prefix. User profile is `./config/user.yaml` — see [config/user.yaml.example](../config/user.yaml.example).
+
+**Behavior model**: Nixx is suggestion-only — it never acts autonomously. Always ask before making changes to user data or system state.
+
+**Docs**: Raw daily build logs go in `docs/build-log/YYYY-MM-DD-title.md`. Polished posts are published to `docs/blog/` with a 1-week delay.
+
+## Pitfalls
+
+- `requires-python = ">=3.13"` but ruff/mypy/black target `py310` — do not widen this gap further; plan to align to 3.13.
+- `NixxConfig()` instantiation creates directories on disk — avoid instantiating it in test module scope.
+- `nixx.cli` and `nixx.server` are declared as entry points but do not exist yet — don't import them until the modules are created.
+- Target hardware is CUDA GPU (≥12 GB VRAM), ≥64 GB RAM, Linux — don't add CPU-only fallback paths without a flag.
