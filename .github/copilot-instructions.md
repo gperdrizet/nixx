@@ -35,7 +35,7 @@ mypy src/
 pytest
 ```
 
-Tool config lives in [pyproject.toml](../pyproject.toml) (line length 100, `py313` target, `disallow_untyped_defs = true`).
+Tool config lives in [pyproject.toml](../pyproject.toml) (line length 100, `py312` target, `disallow_untyped_defs = true`).
 
 ## Conventions
 

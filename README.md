@@ -62,30 +62,54 @@ Follow the build journey in [docs/blog/](docs/blog/) where we document the devel
 
 ### Requirements
 
-- Python 3.10+
-- CUDA-capable GPU (12+ GB)
+- Python 3.12+
+- [Ollama](https://ollama.com) (LLM backend)
+- CUDA-capable GPU (12+ GB VRAM)
 - 64 GB+ system RAM
-- Linux (tested on Ubuntu)
+- Linux
 
 ### Setup
 
 ```bash
-# Clone repository
+# 1. Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 2. Pull the default model
+ollama pull qwen2.5-coder:7b
+
+# 3. Clone repository
 git clone https://github.com/yourusername/nixx.git
 cd nixx
 
-# Create virtual environment
-python -m venv venv
+# 4. Create virtual environment
+python3 -m venv venv
 source venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# 5. Install dependencies
+pip install -e ".[dev]"
+
+# 6. Configure
+cp .env.example .env
+# Edit .env — at minimum set NIXX_DATABASE_URL (defaults to SQLite, no changes needed for quick start)
+
+# 7. Start the server
+nixx-server
 ```
+
+Verify it's working:
+```bash
+curl http://localhost:8000/health
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "hello"}]}'
+```
+
+See [docs/architecture/README.md](docs/architecture/README.md) for the full setup options including PostgreSQL.
 
 ## Project status
 
 - [x] Project planning and architecture design
-- [ ] Backend API server
+- [x] Backend API server (`/v1/chat/completions`, `/v1/completions`)
 - [ ] Memory system implementation
 - [ ] Terminal UI
 - [ ] Zed integration testing

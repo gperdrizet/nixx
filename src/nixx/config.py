@@ -1,7 +1,7 @@
 """Configuration management for Nixx."""
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,6 +44,9 @@ class NixxConfig(BaseSettings):
         default="sqlite:///./data/nixx.db", description="Database connection URL"
     )
     db_echo: bool = Field(default=False, description="Enable SQL query logging")
+    postgres_password: Optional[str] = Field(
+        default=None, description="Password for the nixx PostgreSQL role (used by init-db.sh)"
+    )
 
     # Security settings
     encryption_key: Optional[str] = Field(
@@ -60,9 +63,9 @@ class NixxConfig(BaseSettings):
         default=False, description="Enable hardware monitoring"
     )
 
-    def __init__(self, **kwargs):
+    def __init__(self, **data: Any) -> None:
         """Initialize config and ensure directories exist."""
-        super().__init__(**kwargs)
+        super().__init__(**data)
         self.memory_path.mkdir(parents=True, exist_ok=True)
         Path("./data").mkdir(parents=True, exist_ok=True)
         Path("./config").mkdir(parents=True, exist_ok=True)
