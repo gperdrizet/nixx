@@ -15,7 +15,6 @@ from pydantic import BaseModel
 from nixx.config import NixxConfig
 from nixx.llm.client import OllamaClient
 
-
 # ── OpenAI-compatible request models ──────────────────────────────────────────
 
 
@@ -109,8 +108,13 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         if request.stream:
             return StreamingResponse(
                 _completion_event_stream(
-                    llm, model, request.prompt, temperature, request.max_tokens,
-                    completion_id, created,
+                    llm,
+                    model,
+                    request.prompt,
+                    temperature,
+                    request.max_tokens,
+                    completion_id,
+                    created,
                 ),
                 media_type="text/event-stream",
             )

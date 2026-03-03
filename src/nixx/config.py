@@ -24,17 +24,13 @@ class NixxConfig(BaseSettings):
 
     # LLM settings
     llm_provider: str = Field(default="ollama", description="LLM provider (ollama, vllm)")
-    llm_base_url: str = Field(
-        default="http://localhost:11434", description="Base URL for LLM API"
-    )
+    llm_base_url: str = Field(default="http://localhost:11434", description="Base URL for LLM API")
     llm_model: str = Field(default="qwen2.5-coder:7b", description="Default LLM model")
     llm_temperature: float = Field(default=0.7, description="LLM temperature")
 
     # Memory settings
     memory_provider: str = Field(default="chroma", description="Vector DB provider")
-    memory_path: Path = Field(
-        default=Path("./data/memory"), description="Path to memory storage"
-    )
+    memory_path: Path = Field(default=Path("./data/memory"), description="Path to memory storage")
     embedding_model: str = Field(
         default="all-MiniLM-L6-v2", description="Sentence transformer model for embeddings"
     )
