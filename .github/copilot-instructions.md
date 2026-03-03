@@ -50,5 +50,5 @@ Tool config lives in [pyproject.toml](../pyproject.toml) (line length 100, `py31
 ## Pitfalls
 
 - `NixxConfig()` instantiation creates directories on disk — avoid instantiating it in test module scope.
-- `nixx.cli` and `nixx.server` are declared as entry points but do not exist yet — don't import them until the modules are created.
+- `nixx.server` and `nixx.cli` both exist — `nixx.server` is the FastAPI app, `nixx.cli` provides `nixx serve` and `nixx status` subcommands.
 - Target hardware is CUDA GPU (≥12 GB VRAM), ≥64 GB RAM, Linux — don't add CPU-only fallback paths without a flag.
