@@ -118,13 +118,38 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 
 See [docs/architecture/README.md](docs/architecture/README.md) for the full setup options including PostgreSQL.
 
+## Code quality
+
+Three tools run automatically on every `git commit` via pre-commit hooks, and again in CI on every push to `main`.
+
+| Tool | What it checks | Auto-fixes? |
+|---|---|---|
+| **ruff** | Linting — unused imports, undefined names, style violations | Yes (`--fix`) |
+| **black** | Formatting — line wrapping, quote style, spacing | Yes (rewrites the file) |
+| **mypy** | Type annotations — catches type mismatches without running the code | No |
+
+**When a commit is blocked:**
+- Pre-commit prints which hook failed and which files were modified
+- If black or ruff auto-fixed something, the file on disk is now different from what was staged
+- Run `git diff <file>` to see exactly what changed
+- Then `git add <file> && git commit` again — the second attempt will pass
+
+To run checks manually:
+```bash
+ruff check src/ tests/        # lint
+black src/ tests/             # format in-place
+black --check src/ tests/     # format check only (no changes)
+mypy src/ tests/              # type check
+pytest -v                     # run tests
+```
+
 ## Project status
 
 - [x] Project planning and architecture design
 - [x] Backend API server (`/v1/chat/completions`, `/v1/completions`)
 - [x] CLI (`nixx serve`, `nixx status`)
 - [x] Test suite and CI
-- [ ] Memory system (pgvector + Ollama embeddings)
+- [x] Memory system (pgvector + Ollama embeddings)
 - [ ] Terminal UI
 - [ ] Zed integration testing
 - [ ] Knowledge ingestion tools
