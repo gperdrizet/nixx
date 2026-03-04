@@ -15,7 +15,7 @@ Frontend Layer (TUI / Zed / VS Code / Neovim)
   (Ollama / vLLM)     (ChromaDB + SQLite/PostgreSQL + Graph)
 ```
 
-All frontends communicate only through the OpenAI-compatible API — no direct backend imports from frontend code. Default LLM: `qwen2.5-coder:7b` via Ollama. PostgreSQL is the production database; SQLite is dev-only.
+All frontends communicate only through the OpenAI-compatible API — no direct backend imports from frontend code. Default LLM: `qwen2.5-coder:7b` via Ollama. Default embedding model: `mxbai-embed-large` via Ollama (1024d). PostgreSQL + pgvector is the only supported database; SQLite is not used.
 
 Entry points: `nixx` → `nixx.cli:main` | `nixx-server` → `nixx.server:main`
 

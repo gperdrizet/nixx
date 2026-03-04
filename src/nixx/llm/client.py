@@ -76,6 +76,18 @@ class OllamaClient:
                     if line:
                         yield json.loads(line)
 
+    async def embed(self, model: str, text: str) -> list[float]:
+        """Return an embedding vector for the given text."""
+        async with httpx.AsyncClient(timeout=self._timeout) as http:
+            response = await http.post(
+                f"{self._base_url}/api/embed",
+                json={"model": model, "input": text},
+            )
+            response.raise_for_status()
+            data = response.json()
+            # Ollama returns {"embeddings": [[...float...]]}
+            return cast(list[float], data["embeddings"][0])
+
     def _chat_payload(
         self,
         model: str,

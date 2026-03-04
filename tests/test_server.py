@@ -7,7 +7,7 @@ import httpx
 
 from nixx.config import NixxConfig
 from nixx.server import create_app
-from tests.conftest import CHAT_RESPONSE
+from tests.conftest import CHAT_RESPONSE, _mock_memory_store
 
 # ── /health ───────────────────────────────────────────────────────────────────
 
@@ -15,7 +15,10 @@ from tests.conftest import CHAT_RESPONSE
 async def test_health(app_client: httpx.AsyncClient) -> None:
     response = await app_client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    data = response.json()
+    assert data["status"] == "ok"
+    assert "model" in data
+    assert "llm" in data
 
 
 # ── /v1/chat/completions ──────────────────────────────────────────────────────
@@ -51,6 +54,7 @@ async def test_chat_completions_model_override(config: NixxConfig) -> None:
     with patch("nixx.server.OllamaClient") as MockClient:
         MockClient.return_value.chat = AsyncMock(return_value=CHAT_RESPONSE)
         app = create_app(config)
+        app.state.memory = _mock_memory_store()
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -67,6 +71,7 @@ async def test_chat_completions_ollama_error(config: NixxConfig) -> None:
             side_effect=httpx.ConnectError("All connection attempts failed")
         )
         app = create_app(config)
+        app.state.memory = _mock_memory_store()
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -86,6 +91,7 @@ async def test_chat_completions_streaming(config: NixxConfig) -> None:
     with patch("nixx.server.OllamaClient") as MockClient:
         MockClient.return_value.chat_stream = mock_chat_stream
         app = create_app(config)
+        app.state.memory = _mock_memory_store()
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:

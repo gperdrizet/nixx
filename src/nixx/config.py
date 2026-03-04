@@ -29,11 +29,10 @@ class NixxConfig(BaseSettings):
     llm_temperature: float = Field(default=0.7, description="LLM temperature")
 
     # Memory settings
-    memory_provider: str = Field(default="chroma", description="Vector DB provider")
+    memory_provider: str = Field(default="pgvector", description="Vector DB provider")
     memory_path: Path = Field(default=Path("./data/memory"), description="Path to memory storage")
-    embedding_model: str = Field(
-        default="all-MiniLM-L6-v2", description="Sentence transformer model for embeddings"
-    )
+    embedding_model: str = Field(default="mxbai-embed-large", description="Ollama embedding model")
+    embedding_dimensions: int = Field(default=1024, description="Embedding vector dimensions")
 
     # Database settings
     database_url: str = Field(

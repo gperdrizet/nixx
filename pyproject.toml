@@ -17,9 +17,9 @@ dependencies = [
     "python-multipart>=0.0.6",
     "pyyaml>=6.0.1",
     "sqlalchemy>=2.0.25",
+    "asyncpg>=0.29.0",
+    "pgvector>=0.3.0",
     "cryptography>=42.0.0",
-    "chromadb>=0.4.22",
-    "sentence-transformers>=2.3.1",
     "python-dotenv>=1.0.1",
 ]
 
@@ -44,12 +44,6 @@ target-version = ['py312']
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-
-[tool.mypy]
-python_version = "3.12"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
 
 [project.scripts]
 nixx = "nixx.cli:main"

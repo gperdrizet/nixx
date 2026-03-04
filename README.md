@@ -64,6 +64,7 @@ Follow the build journey in [docs/blog/](docs/blog/) where we document the devel
 
 - Python 3.12+
 - [Ollama](https://ollama.com) (LLM backend)
+- PostgreSQL 14+ with the [pgvector](https://github.com/pgvector/pgvector) extension
 - CUDA-capable GPU (12+ GB VRAM)
 - 64 GB+ system RAM
 - Linux
@@ -74,26 +75,37 @@ Follow the build journey in [docs/blog/](docs/blog/) where we document the devel
 # 1. Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
 
-# 2. Pull the default model
-ollama pull qwen2.5-coder:7b
+# 2. Pull the default models
+ollama pull qwen2.5-coder:7b      # inference
+ollama pull mxbai-embed-large     # embeddings
 
-# 3. Clone repository
+# 3. Install pgvector on your PostgreSQL instance
+#    If using Docker:
+docker exec -it <your-postgres-container> bash -c \
+  'apt-get install -y postgresql-$PG_MAJOR-pgvector'
+#    If using a native install:
+#    sudo apt install postgresql-16-pgvector  (adjust version)
+
+# 4. Create the nixx database role and enable the extension
+bash scripts/init-db.sh   # reads NIXX_POSTGRES_PASSWORD from .env
+
+# 5. Clone repository
 git clone https://github.com/yourusername/nixx.git
 cd nixx
 
-# 4. Create virtual environment
+# 6. Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
 
-# 5. Install dependencies
+# 7. Install dependencies
 pip install -e ".[dev]"
 
-# 6. Configure
+# 8. Configure
 cp .env.example .env
-# Edit .env — at minimum set NIXX_DATABASE_URL (defaults to SQLite, no changes needed for quick start)
+# Edit .env — set NIXX_DATABASE_URL and NIXX_POSTGRES_PASSWORD
 
-# 7. Start the server
-nixx-server
+# 9. Start the server
+nixx serve
 ```
 
 Verify it's working:
@@ -110,7 +122,9 @@ See [docs/architecture/README.md](docs/architecture/README.md) for the full setu
 
 - [x] Project planning and architecture design
 - [x] Backend API server (`/v1/chat/completions`, `/v1/completions`)
-- [ ] Memory system implementation
+- [x] CLI (`nixx serve`, `nixx status`)
+- [x] Test suite and CI
+- [ ] Memory system (pgvector + Ollama embeddings)
 - [ ] Terminal UI
 - [ ] Zed integration testing
 - [ ] Knowledge ingestion tools

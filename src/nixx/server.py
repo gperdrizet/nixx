@@ -1,9 +1,11 @@
 """Nixx API server — OpenAI-compatible endpoint for local LLM inference."""
 
 import json
+import logging
 import time
 import uuid
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
@@ -14,6 +16,10 @@ from pydantic import BaseModel
 
 from nixx.config import NixxConfig
 from nixx.llm.client import OllamaClient
+from nixx.memory.db import create_pool, init_schema
+from nixx.memory.store import MemoryStore
+
+logger = logging.getLogger(__name__)
 
 # ── OpenAI-compatible request models ──────────────────────────────────────────
 
@@ -46,12 +52,21 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
     if config is None:
         config = NixxConfig()
 
-    app = FastAPI(title="nixx", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        pool = await create_pool(config)
+        await init_schema(pool, dimensions=config.embedding_dimensions)
+        app.state.memory = MemoryStore(config, pool)
+        logger.info("Memory store ready")
+        yield
+        await pool.close()
+
+    app = FastAPI(title="nixx", version="0.1.0", lifespan=lifespan)
     llm = OllamaClient(base_url=config.llm_base_url)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok"}
+        return {"status": "ok", "model": config.llm_model, "llm": config.llm_provider}
 
     @app.post("/v1/chat/completions", response_model=None)
     async def chat_completions(
@@ -64,6 +79,18 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         messages = [{"role": m.role, "content": m.content} for m in request.messages]
         completion_id = f"chatcmpl-{uuid.uuid4().hex}"
         created = int(time.time())
+
+        # Retrieve relevant memory context and prepend to messages
+        memory: MemoryStore = app.state.memory
+        user_text = " ".join(m["content"] for m in messages if m["role"] == "user")
+        if user_text:
+            try:
+                recalled = await memory.recall(user_text)
+                context_block = memory.format_context(recalled)
+                if context_block:
+                    messages = [{"role": "system", "content": context_block}] + messages
+            except Exception as exc:
+                logger.warning("Memory recall failed (continuing without context): %s", exc)
 
         if request.stream:
             return StreamingResponse(
@@ -79,6 +106,16 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=502, detail=f"LLM backend error: {exc}") from exc
 
         content = result.get("message", {}).get("content", "")
+
+        # Persist the exchange to memory
+        if user_text:
+            try:
+                await memory.remember(user_text, source="conversation")
+                if content:
+                    await memory.remember(content, source="conversation")
+            except Exception as exc:
+                logger.warning("Memory save failed: %s", exc)
+
         return {
             "id": completion_id,
             "object": "chat.completion",

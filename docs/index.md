@@ -31,7 +31,7 @@ The goal is to eliminate context fragmentation - no more isolated conversations 
 
 - **Backend**: Python, FastAPI, SQLAlchemy
 - **LLM**: Ollama/vLLM (local inference on P100 GPU)
-- **Memory**: ChromaDB (vector search) + SQLite/PostgreSQL
+- **Memory**: pgvector (vector search) + PostgreSQL
 - **TUI**: Textual + Rich
 - **API**: OpenAI-compatible for editor integration
 
