@@ -26,18 +26,24 @@ env/
 ENV/
 .venv
 
+# Testing and type checking
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
 # IDEs
-.vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+# track .vscode/settings.json but nothing else
+.vscode/*
+!.vscode/settings.json
 
 # Nixx specific
-*.db
-*.sqlite
-*.sqlite3
 data/
 logs/
 *.log
@@ -51,13 +57,6 @@ models/
 *.gguf
 *.bin
 *.safetensors
-
-# Vector DB
-chroma/
-qdrant_storage/
-
-# Build logs (private until published)
-docs/build-log/*-unpublished.md
 
 # Temporary files
 tmp/

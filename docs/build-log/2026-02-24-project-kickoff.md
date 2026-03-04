@@ -1,16 +1,16 @@
-# Build Log - February 24, 2026: Project Kickoff
+# Build log: February 24, 2026 - project kickoff
 
-## The Problem
+## The problem
 
 I've been living with a frustrating problem: context fragmentation. I spend a lot of time programming with Claude or GPT through GitHub Copilot, and each VS Code workspace is an isolated conversation. The Claude helping me recover a RAID array doesn't know about the RSS curation platform I discussed with a different Claude yesterday. That RSS Claude doesn't know about the AI/ML class business I'm developing, or my kid's Minecraft server, or the seed library I need to dust off and make my picks from for this year's garden.
 
 My life isn't fragmented - it's an interconnected graph of projects, goals, and knowledge. My tools shouldn't fragment it artificially. In 2026 - the models aren't interesting, it's the way we discover and manage context that makes everything go.
 
-## The Vision
+## The vision
 
 Build **nixx**: one project to rule them all. A self-hosted memory system that knows everything I'm working on. Local-first (running on my own hardware), open source (MIT license), and built for others to deploy too.
 
-### Key Design Decisions
+### Key design decisions
 
 **Architecture**: OpenAI-compatible API backend + custom terminal UI
 
@@ -46,7 +46,7 @@ Build **nixx**: one project to rule them all. A self-hosted memory system that k
 - GitHub Pages hosted from same repo
 - Daily build logs become weekly posts
 
-## Today's Work
+## Today's work
 
 Initialized the project:
 
@@ -58,7 +58,7 @@ Initialized the project:
 - Set up docs/ directory for build logs and GitHub Pages
 - This build log entry
 
-## Next Steps
+## Next steps
 
 1. Design the core architecture in more detail
    - API endpoints and data models
@@ -76,7 +76,7 @@ The decision to make it generalizable (not just hardcoded to my setup) adds work
 
 Starting with the memory layer first (not execution/automation) feels right. Just having unified context across workspaces would be transformative.
 
-## Technical Decisions
+## Technical decisions
 
 ### Brand voice and language
 
@@ -117,11 +117,11 @@ GitHub: https://github.com/gperdrizet/nixx
 
 Initial commit pushed with project structure and documentation.
 
-## Meta Note
+## Meta note
 
 This conversation itself demonstrates the problem nixx solves: switching from my laptop brainstorming session to the Ubuntu development box means losing all this context. The irony is perfect - we're building the solution to the problem we're experiencing right now.
 
-## Time Spent
+## Time spent
 
 ~3 hours brainstorming planning, setup, and initial decisions
 

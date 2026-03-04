@@ -1,0 +1,16 @@
+{
+    "cSpell.words": [
+        "frontends"
+    ],
+    "pylint.enabled": false,
+    "python.linting.pylintEnabled": false,
+    "python.linting.enabled": false,
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit"
+        }
+    }
+}
+}

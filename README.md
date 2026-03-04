@@ -102,7 +102,7 @@ pip install -e ".[dev]"
 
 # 8. Configure
 cp .env.example .env
-# Edit .env — set NIXX_DATABASE_URL and NIXX_POSTGRES_PASSWORD
+# Edit .env - set NIXX_DATABASE_URL and NIXX_POSTGRES_PASSWORD
 
 # 9. Start the server
 nixx serve
@@ -124,15 +124,16 @@ Three tools run automatically on every `git commit` via pre-commit hooks, and ag
 
 | Tool | What it checks | Auto-fixes? |
 |---|---|---|
-| **ruff** | Linting — unused imports, undefined names, style violations | Yes (`--fix`) |
-| **black** | Formatting — line wrapping, quote style, spacing | Yes (rewrites the file) |
-| **mypy** | Type annotations — catches type mismatches without running the code | No |
+| **ruff** | Linting - unused imports, undefined names, style violations | Yes (`--fix`) |
+| **black** | Formatting - line wrapping, quote style, spacing | Yes (rewrites the file) |
+| **mypy** | Type annotations - catches type mismatches without running the code | No |
 
 **When a commit is blocked:**
+
 - Pre-commit prints which hook failed and which files were modified
 - If black or ruff auto-fixed something, the file on disk is now different from what was staged
 - Run `git diff <file>` to see exactly what changed
-- Then `git add <file> && git commit` again — the second attempt will pass
+- Then `git add <file> && git commit` again - the second attempt will pass
 
 To run checks manually:
 ```bash
