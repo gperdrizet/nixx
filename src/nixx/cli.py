@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from nixx.config import NixxConfig
+from nixx.tui.app import NixxApp
 
 console = Console()
 
@@ -54,6 +55,17 @@ def _status(config: NixxConfig, args: argparse.Namespace) -> None:
     console.print(table)
 
 
+def _chat(config: NixxConfig, args: argparse.Namespace) -> None:
+    """Launch the chat TUI."""
+    # Allow host/port override the same way serve/status do
+    if args.host:
+        config.host = args.host
+    if args.port:
+        config.port = args.port
+
+    NixxApp(config).run()
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nixx",
@@ -74,6 +86,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", parents=[shared], help="Check server health")
 
+    sub.add_parser("chat", parents=[shared], help="Launch the chat TUI")
+
     return parser
 
 
@@ -86,3 +100,5 @@ def main() -> None:
         _serve(config, args)
     elif args.command == "status":
         _status(config, args)
+    elif args.command == "chat":
+        _chat(config, args)

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from nixx.cli import _build_parser, _serve, _status
+from nixx.cli import _build_parser, _chat, _serve, _status
 from nixx.config import NixxConfig
 
 # ── Parser tests ──────────────────────────────────────────────────────────────
@@ -93,3 +93,37 @@ def test_status_http_error_exits(config: NixxConfig) -> None:
         with pytest.raises(SystemExit) as exc_info:
             _status(config, args)
     assert exc_info.value.code == 1
+
+
+# ── _chat tests ───────────────────────────────────────────────────────────────
+
+
+def test_parser_chat_defaults() -> None:
+    args = _build_parser().parse_args(["chat"])
+    assert args.command == "chat"
+    assert args.host is None
+    assert args.port is None
+
+
+def test_parser_chat_flags() -> None:
+    args = _build_parser().parse_args(["chat", "--host", "0.0.0.0", "--port", "9000"])
+    assert args.host == "0.0.0.0"
+    assert args.port == 9000
+
+
+def test_chat_launches_app(config: NixxConfig) -> None:
+    args = _build_parser().parse_args(["chat"])
+    mock_app = MagicMock()
+    with patch("nixx.cli.NixxApp", return_value=mock_app) as mock_cls:
+        _chat(config, args)
+    mock_cls.assert_called_once_with(config)
+    mock_app.run.assert_called_once()
+
+
+def test_chat_host_port_override(config: NixxConfig) -> None:
+    args = _build_parser().parse_args(["chat", "--host", "0.0.0.0", "--port", "9999"])
+    mock_app = MagicMock()
+    with patch("nixx.cli.NixxApp", return_value=mock_app):
+        _chat(config, args)
+    assert config.host == "0.0.0.0"
+    assert config.port == 9999

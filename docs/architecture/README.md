@@ -1,85 +1,202 @@
 # Nixx architecture
 
-This directory contains technical design documentation for Nixx.
+## System diagram
 
-## Documents
-
-- [API design](api-design.md) - OpenAI-compatible API endpoints *(coming soon)*
-- [Memory system](memory-system.md) - Vector DB + graph storage design *(coming soon)*
-- [Security](security.md) - Encryption and privacy considerations *(coming soon)*
-- [Configuration](configuration.md) - User profile and system config *(coming soon)*
-
-## High-level architecture
+Processes, modules, and communication paths as they exist today.
 
 ```text
-┌────────────────────────────────────────────────────────┐
-│                     Frontend Layer                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ Terminal UI  │  │     Zed      │  │   VS Code    │  │
-│  │  (Textual)   │  │   (native)   │  │(Continue.dev)│  │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
-│         │                 │                 │          │
-│         └─────────────────┴─────────────────┘          │
-│                           │                            │
-└───────────────────────────┼────────────────────────────┘
-                            │
-                ┌───────────▼──────────────┐
-                │   OpenAI-compatible API  │
-                │      (FastAPI)           │
-                └───────────┬──────────────┘
-                            │
-        ┌───────────────────┴──────────────────┐
-        │                                      │
-┌───────▼────────┐                   ┌─────────▼────────┐
-│LLM Orchestrator│                   │  Memory System   │
-│ (Ollama/vLLM)  │                   │  (Vector DB +    │
-│                │                   │   Graph)         │
-└────────────────┘                   └──────────────────┘
+                ┌─────────────────────────────────────────┐
+                │  nixx chat · Python · Textual         │
+                │                                         │
+                │  NixxApp                                │
+                │    _history  list[dict]  (ephemeral)    │
+                │    ScrollableContainer · Input          │
+                └───────────────────┬─────────────────────┘
+                                    │  POST /v1/chat/completions  (HTTP + SSE)
+                                    │  GET  /v1/debug/context
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  nixx serve · Python · Uvicorn + FastAPI                          │
+│                                                                     │
+│  ┌───────────────────────────┐    ┌──────────────────────────────┐  │
+│  │ POST /v1/chat/completions │    │ prompts.py                   │  │
+│  │ GET  /v1/debug/context    │───▶│ SYSTEM_PROMPT                │  │
+│  │ GET  /health              │    └──────────────────────────────┘  │
+│  └─────────────┬─────────────┘                                      │
+│                │              ┌──────────────────────────────────┐  │
+│                └─────────────▶│ MemoryStore                      │  │
+│                               │ remember · recall · format_ctx   │  │
+│                               └──────────┬───────────────────┬───┘  │
+│  ┌──────────────────────────┐            │ embed             │ SQL  │
+│  │ OllamaClient             │◀───────────┘           asyncpg │      │
+│  │ chat_stream · embed      │                       pgvector │      │
+│  └──────────────┬───────────┘                                │      │
+└─────────────────│────────────────────────────────────────────┬─│────┘
+                  │  HTTP /api/chat + /api/embed               │ │
+                  ▼                                            ▼ ▼
+  ┌───────────────────────────────┐   ┌────────────────────────────────────────┐
+  │  Ollama · port 11434          │   │  PostgreSQL + pgvector · port 5432     │
+  │                               │   │                                        │
+  │  qwen2.5-coder:7b             │   │  memories                              │
+  │    inference                  │   │    id · content · embedding(1024d)     │
+  │  mxbai-embed-large            │   │    source · metadata · created_at      │
+  │    1024-d embeddings          │   │                                        │
+  └───────────────────────────────┘   │  conversations  ┐ schema exists,       │
+                                      │  messages       ┘ not yet written to   │
+                                      └────────────────────────────────────────┘
 ```
 
-## Core components
+---
 
-### Frontend layer
+## Data and state diagram
 
-Multiple frontend options (priority order), all speaking to the same backend:
+Where data lives, what it contains, and how it flows between structures.
 
-- **Terminal UI**: Textual-based custom interface
-- **Zed**: Native assistant integration
-- **VS Code**: Via Continue.dev extension
-- **Neovim**: Via AI plugins (codecompanion.nvim, etc.)
+```text
+  IN-PROCESS · nixx chat
+  ──────────────────────────────────────────────────────────────────────
+  NixxApp._history
 
-### API server
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  [ {role: user,      content: what are we building?},            │
+  │    {role: assistant, content: nixx is a personal...},            │
+  │    {role: user,      content: <current turn>}  ]                 │
+  │                                                                  │
+  │  lives for one nixx chat session only · lost on exit             │
+  └────────────────────────────┬─────────────────────────────────────┘
+                               │  sent in full every turn
+                               ▼
+  assembled by server per turn
+  ┌──────────────────────────────────────────────────────────────────┐
+  │                                                                  │
+  │  system ── SYSTEM_PROMPT  (from prompts.py)                      │
+  │            + recalled memory bullets  if similarity >= 0.5       │
+  │              ↑                                                   │
+  │              └── top-5 rows from memories, queried by            │
+  │                  cosine similarity to all user turns             │
+  │                                                                  │
+  │  user    ── turn 1                                               │
+  │  asst.   ── turn 1 response                                      │
+  │  ...                                                             │
+  │  user    ── current turn  ◀── also used as the recall query      │
+  │                                                                  │
+  └────────────────────────────┬─────────────────────────────────────┘
+                               │  sent to Ollama · qwen2.5-coder:7b
+                               ▼  response streamed back token by token
 
-FastAPI-based server implementing OpenAI-compatible endpoints (priority order):
 
-#### Phase I
+  PERSISTENT · PostgreSQL
+  ──────────────────────────────────────────────────────────────────────
+  memories
 
-- `/v1/chat/completions` - Primary chat interface
-- `/v1/completions` - Code completions
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  column       type            constraint   notes                        │
+  │  ──────────── ─────────────── ──────────── ──────────────────────────── │
+  │  id           bigint          PK           auto-increment               │
+  │  content      text                         verbatim message text        │
+  │  embedding    vector(1024)                 from mxbai-embed-large       │
+  │  source       text                         conversation | document      │
+  │  metadata     jsonb                        {}  arbitrary tags           │
+  │  created_at   timestamptz                  auto                         │
+  └─────────────────────────────────────────────────────────────────────────┘
+       ▲  recalled per turn (cosine similarity search via pgvector)
+       │
+       │  stored after each turn
+       │  NOTE: non-streaming path only · TUI turns not saved yet
+       │
 
-#### Phase II
+  conversations  ┐
+  messages       ┘  schema exists · not yet written to
+```
 
-- `/v1/models` - Available models
-- `/api/memory/*` - Memory management (custom endpoints)
-- `/api/todo/*` - Task management/project orchestration and time tracking
-- `/api/hardware/*` - Hardware monitoring (custom endpoints)
+---
 
-### LLM orchestrator
+## Planned architecture
 
-Manages interaction with local LLM backend:
+Buffer + sources redesign. The "tape recorder" is the buffer - everything goes in. A source is a
+meaningful unit marked explicitly from the buffer by the user (or proposed by nixx). Not every
+buffer entry becomes a source. Documents, web pages, repos, and buffer sections are all sources.
+Only sources feed into the recall index.
 
-- Model selection and routing
-- Context window management
-- Streaming response handling
-- Multi-model/mode support for different tasks
+Three tiers: buffer → sources → memories.
 
-### Memory system
+```text
+  IN-PROCESS · nixx chat  (unchanged)
+  ──────────────────────────────────────────────────────────────────────
+  NixxApp._history
 
-Hybrid storage for persistent context:
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  [ {role: user,      content: what are we building?},            │
+  │    {role: assistant, content: nixx is a personal...},            │
+  │    {role: user,      content: <current turn>}  ]                 │
+  │                                                                  │
+  │  ephemeral · lost on exit · NOT the source of truth              │
+  └────────────────────────────┬─────────────────────────────────────┘
+                               │  sent in full every turn
+                               │  each new message also written to buffer
+                               ▼
+  assembled by server per turn (unchanged)
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  system ── SYSTEM_PROMPT + recalled memory bullets               │
+  │  user    ── turn 1                                               │
+  │  asst.   ── turn 1 response                                      │
+  │  ...                                                             │
+  │  user    ── current turn                                         │
+  └────────────────────────────┬─────────────────────────────────────┘
+                               │  sent to Ollama · response written to buffer
+                               ▼
 
-- **Vector DB** (ChromaDB): Semantic search over conversations and knowledge
-- **Relational DB** (PostgreSQL): Structured data, relationships, metadata
-- **Graph DB**: Connections between projects, conversations, and context
+  PERSISTENT · PostgreSQL
+  ──────────────────────────────────────────────────────────────────────
+  buffer · persistent append-only tape
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  column       type            constraint   notes                        │
+  │  ──────────── ─────────────── ──────────── ──────────────────────────── │
+  │  id           bigint          PK           auto-increment               │
+  │  role         text                         user | assistant | system    │
+  │  content      text                         verbatim text                │
+  │  origin       text                         tui | vscode | api           │
+  │  created_at   timestamptz                  auto                         │
+  └────────────────────────────────────┬────────────────────────────────────┘
+                                       │
+                      /source "name"   │  user marks a buffer range as a source
+                      nixx proposes    │  at a natural decision or milestone point
+                      not everything   │  needs to be sourced - tape always has more
+                      documents, repos,│  web pages also enter here directly
+                      code gen, etc.   │
+                                       ▼
+  sources · meaningful units that feed memory
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  column       type            constraint   notes                        │
+  │  ──────────── ─────────────── ──────────── ──────────────────────────── │
+  │  id           bigint          PK           auto-increment               │
+  │  name         text                         user-provided label          │
+  │  type         text                         buffer | document | repo | web│
+  │  summary      text                         nixx-generated summary       │
+  │  start_id     bigint          FK buffer    first buffer row (if buffer) │
+  │  end_id       bigint          FK buffer    last buffer row  (if buffer) │
+  │  created_at   timestamptz                  auto                         │
+  └────────────────────────────────────┬────────────────────────────────────┘
+                                       │  embed summary → store in memories
+                                       │  raw buffer rows stay in buffer
+                                       ▼
+  memories · embedded recall index
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  column       type            constraint   notes                        │
+  │  ──────────── ─────────────── ──────────── ──────────────────────────── │
+  │  id           bigint          PK           auto-increment               │
+  │  content      text                         source summary or doc chunk  │
+  │  embedding    vector(1024)                 from mxbai-embed-large       │
+  │  source_id    bigint          FK sources   which source this came from  │
+  │  metadata     jsonb                        {chunk:} or other tags       │
+  │  created_at   timestamptz                  auto                         │
+  └─────────────────────────────────────────────────────────────────────────┘
+       ▲  recalled per turn (cosine similarity search via pgvector)
+       │  content = source summaries + document chunks  (not raw messages)
+```
 
 ## Design principles
 

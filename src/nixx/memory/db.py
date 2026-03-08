@@ -2,18 +2,19 @@
 
 Tables
 ------
-conversations
-    A session container. One row per conversation thread.
+buffer
+    Persistent append-only tape of all messages across all frontends.
 
-messages
-    Individual turns within a conversation. Stores role + content verbatim.
+sources
+    Meaningful units extracted explicitly from the buffer (or ingested from
+    documents, repos, web pages). These feed the recall index.
 
 memories
-    Semantic memory store. Each row is a piece of text with a 1024-d embedding
-    vector, enabling cosine similarity search via pgvector.
+    Semantic memory store. Each row is an embedded source summary or document
+    chunk, enabling cosine similarity search via pgvector.
 
-All tables are created with CREATE TABLE IF NOT EXISTS on server startup —
-no migration tool required for initial setup.
+All tables are created with CREATE TABLE IF NOT EXISTS on server startup.
+Migrations for existing tables are applied inline via ALTER TABLE.
 """
 
 from __future__ import annotations
@@ -53,28 +54,32 @@ async def _init_connection(conn: asyncpg.Connection) -> None:  # type: ignore[ty
 
 
 async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # type: ignore[type-arg]
-    """Create all tables if they don't exist yet."""
+    """Create tables if they don't exist and apply any pending migrations."""
     async with pool.acquire() as conn:
         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
         await conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS conversations (
+            CREATE TABLE IF NOT EXISTS buffer (
                 id          BIGSERIAL PRIMARY KEY,
-                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                metadata    JSONB       NOT NULL DEFAULT '{}'
+                role        TEXT        NOT NULL,
+                content     TEXT        NOT NULL,
+                origin      TEXT        NOT NULL DEFAULT 'api',
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
         """
         )
 
         await conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS messages (
-                id              BIGSERIAL PRIMARY KEY,
-                conversation_id BIGINT      NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-                role            TEXT        NOT NULL,
-                content         TEXT        NOT NULL,
-                created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            CREATE TABLE IF NOT EXISTS sources (
+                id          BIGSERIAL PRIMARY KEY,
+                name        TEXT        NOT NULL,
+                type        TEXT        NOT NULL DEFAULT 'buffer',
+                summary     TEXT        NOT NULL,
+                start_id    BIGINT      REFERENCES buffer(id) ON DELETE SET NULL,
+                end_id      BIGINT      REFERENCES buffer(id) ON DELETE SET NULL,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
         """
         )
@@ -85,14 +90,34 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
                 id          BIGSERIAL PRIMARY KEY,
                 content     TEXT        NOT NULL,
                 embedding   vector({dimensions})  NOT NULL,
-                source      TEXT        NOT NULL DEFAULT 'conversation',
+                source_id   BIGINT      REFERENCES sources(id) ON DELETE SET NULL,
                 metadata    JSONB       NOT NULL DEFAULT '{{}}',
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
         """
         )
 
-        # HNSW index for fast approximate nearest-neighbour search
+        # Migrate existing memories table: add source_id, drop legacy source column.
+        await conn.execute(
+            """
+            ALTER TABLE memories
+            ADD COLUMN IF NOT EXISTS source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL;
+        """
+        )
+        await conn.execute(
+            """
+            DO $$ BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'memories' AND column_name = 'source'
+                ) THEN
+                    ALTER TABLE memories DROP COLUMN source;
+                END IF;
+            END $$;
+        """
+        )
+
+        # HNSW index for fast approximate nearest-neighbour search.
         await conn.execute(
             """
             CREATE INDEX IF NOT EXISTS memories_embedding_hnsw
@@ -104,50 +129,81 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
     logger.info("Database schema initialised")
 
 
-# ── Conversation helpers ──────────────────────────────────────────────────────
+# ── Buffer helpers ────────────────────────────────────────────────────────────
 
 
-async def create_conversation(
+async def save_buffer_entry(
     pool: asyncpg.Pool,  # type: ignore[type-arg]
-    metadata: dict | None = None,
+    role: str,
+    content: str,
+    origin: str = "api",
 ) -> int:
-    """Insert a new conversation row and return its id."""
+    """Append a message to the buffer. Returns the new id."""
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "INSERT INTO conversations (metadata) VALUES ($1) RETURNING id",
-            json.dumps(metadata or {}),
+            "INSERT INTO buffer (role, content, origin) VALUES ($1, $2, $3) RETURNING id",
+            role,
+            content,
+            origin,
         )
         return int(row["id"])
 
 
-async def save_message(
+async def get_buffer_entries(
     pool: asyncpg.Pool,  # type: ignore[type-arg]
-    conversation_id: int,
-    role: str,
-    content: str,
-) -> None:
-    """Append a message to a conversation."""
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)",
-            conversation_id,
-            role,
-            content,
-        )
-
-
-async def get_messages(
-    pool: asyncpg.Pool,  # type: ignore[type-arg]
-    conversation_id: int,
+    start_id: int,
+    end_id: int,
 ) -> list[dict]:
-    """Return all messages for a conversation, oldest first."""
+    """Return buffer rows with id between start_id and end_id inclusive, oldest first."""
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT role, content, created_at FROM messages "
-            "WHERE conversation_id = $1 ORDER BY created_at ASC",
-            conversation_id,
+            "SELECT id, role, content, origin, created_at FROM buffer "
+            "WHERE id >= $1 AND id <= $2 ORDER BY id ASC",
+            start_id,
+            end_id,
         )
         return [dict(r) for r in rows]
+
+
+async def get_max_buffer_id(pool: asyncpg.Pool) -> int | None:  # type: ignore[type-arg]
+    """Return the highest id in the buffer, or None if the buffer is empty."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT MAX(id) AS max_id FROM buffer")
+        return int(row["max_id"]) if row and row["max_id"] is not None else None
+
+
+# ── Source helpers ────────────────────────────────────────────────────────────
+
+
+async def save_source(
+    pool: asyncpg.Pool,  # type: ignore[type-arg]
+    name: str,
+    summary: str,
+    type_: str = "buffer",
+    start_id: int | None = None,
+    end_id: int | None = None,
+) -> int:
+    """Insert a new source row. Returns the new id."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "INSERT INTO sources (name, type, summary, start_id, end_id) "
+            "VALUES ($1, $2, $3, $4, $5) RETURNING id",
+            name,
+            type_,
+            summary,
+            start_id,
+            end_id,
+        )
+        return int(row["id"])
+
+
+async def get_last_source_end_id(pool: asyncpg.Pool) -> int | None:  # type: ignore[type-arg]
+    """Return the end_id of the most recently created source, or None."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT end_id FROM sources WHERE end_id IS NOT NULL ORDER BY id DESC LIMIT 1"
+        )
+        return int(row["end_id"]) if row else None
 
 
 # ── Memory helpers ────────────────────────────────────────────────────────────
@@ -157,17 +213,17 @@ async def save_memory(
     pool: asyncpg.Pool,  # type: ignore[type-arg]
     content: str,
     embedding: list[float],
-    source: str = "conversation",
+    source_id: int | None = None,
     metadata: dict | None = None,
 ) -> int:
     """Store a piece of text with its embedding vector. Returns the new id."""
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "INSERT INTO memories (content, embedding, source, metadata) "
+            "INSERT INTO memories (content, embedding, source_id, metadata) "
             "VALUES ($1, $2, $3, $4) RETURNING id",
             content,
             embedding,
-            source,
+            source_id,
             json.dumps(metadata or {}),
         )
         return int(row["id"])
@@ -177,36 +233,18 @@ async def search_memories(
     pool: asyncpg.Pool,  # type: ignore[type-arg]
     query_embedding: list[float],
     top_k: int = 5,
-    source: str | None = None,
 ) -> list[dict]:
-    """Return the top-k most similar memories by cosine distance.
-
-    Lower cosine distance = more similar. Results are ordered closest first.
-    Optionally filter by source (e.g. 'conversation', 'document').
-    """
+    """Return the top-k most similar memories by cosine distance, closest first."""
     async with pool.acquire() as conn:
-        if source:
-            rows = await conn.fetch(
-                "SELECT id, content, source, metadata, created_at, "
-                "       1 - (embedding <=> $1) AS similarity "
-                "FROM memories "
-                "WHERE source = $3 "
-                "ORDER BY embedding <=> $1 "
-                "LIMIT $2",
-                query_embedding,
-                top_k,
-                source,
-            )
-        else:
-            rows = await conn.fetch(
-                "SELECT id, content, source, metadata, created_at, "
-                "       1 - (embedding <=> $1) AS similarity "
-                "FROM memories "
-                "ORDER BY embedding <=> $1 "
-                "LIMIT $2",
-                query_embedding,
-                top_k,
-            )
+        rows = await conn.fetch(
+            "SELECT id, content, source_id, metadata, created_at, "
+            "       1 - (embedding <=> $1) AS similarity "
+            "FROM memories "
+            "ORDER BY embedding <=> $1 "
+            "LIMIT $2",
+            query_embedding,
+            top_k,
+        )
         return [dict(r) for r in rows]
 
 

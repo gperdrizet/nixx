@@ -30,11 +30,9 @@ The goal is to eliminate context fragmentation - no more isolated conversations 
 
 ## Tech stack
 
-- **Backend**: Python, FastAPI, SQLAlchemy
-- **LLM**: Ollama/vLLM (local inference on P100 GPU)
-- **Memory**: pgvector (vector search) + PostgreSQL
-- **TUI**: Textual + Rich
-- **API**: OpenAI-compatible for editor integration
+Python · FastAPI · Uvicorn · asyncpg · PostgreSQL + pgvector · Ollama · Textual · Rich
+
+See [docs/stack.md](stack.md) for a full breakdown of every library with links to documentation.
 
 ---
 

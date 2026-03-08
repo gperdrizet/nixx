@@ -52,6 +52,16 @@ def _mock_memory_store() -> MagicMock:
     store = MagicMock()
     store.recall = AsyncMock(return_value=[])
     store.remember = AsyncMock(return_value=1)
+    store.save_to_buffer = AsyncMock(return_value=1)
+    store.create_source = AsyncMock(
+        return_value={
+            "id": 1,
+            "name": "test",
+            "start_id": 1,
+            "end_id": 10,
+            "summary": "test summary",
+        }
+    )
     store.format_context = MagicMock(return_value="")
     return store
 

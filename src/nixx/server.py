@@ -18,6 +18,7 @@ from nixx.config import NixxConfig
 from nixx.llm.client import OllamaClient
 from nixx.memory.db import create_pool, init_schema
 from nixx.memory.store import MemoryStore
+from nixx.prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,12 @@ class CompletionRequest(BaseModel):
     max_tokens: int | None = None
 
 
+class CreateSourceRequest(BaseModel):
+    name: str
+    start_id: int | None = None
+    end_id: int | None = None
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 
@@ -68,6 +75,14 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok", "model": config.llm_model, "llm": config.llm_provider}
 
+    @app.get("/v1/debug/context")
+    async def debug_context() -> dict[str, str | None]:
+        """Return the last assembled system context sent to the LLM."""
+        ctx: dict[str, str | None] = getattr(
+            app.state, "last_context", {"base": SYSTEM_PROMPT, "memory": None}
+        )
+        return ctx
+
     @app.post("/v1/chat/completions", response_model=None)
     async def chat_completions(
         request: ChatCompletionRequest,
@@ -80,22 +95,44 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         completion_id = f"chatcmpl-{uuid.uuid4().hex}"
         created = int(time.time())
 
-        # Retrieve relevant memory context and prepend to messages
+        # Build system message: base identity prompt + recalled memory context
         memory: MemoryStore = app.state.memory
         user_text = " ".join(m["content"] for m in messages if m["role"] == "user")
+        context_block = ""
+        recalled: list[dict] = []
         if user_text:
             try:
                 recalled = await memory.recall(user_text)
                 context_block = memory.format_context(recalled)
-                if context_block:
-                    messages = [{"role": "system", "content": context_block}] + messages
             except Exception as exc:
                 logger.warning("Memory recall failed (continuing without context): %s", exc)
+        system_content = SYSTEM_PROMPT + (f"\n\n{context_block}" if context_block else "")
+        messages = [{"role": "system", "content": system_content}] + messages
+        app.state.last_context = {
+            "base": SYSTEM_PROMPT,
+            "memory": context_block or None,
+            "hits": [
+                {
+                    "content": r["content"],
+                    "similarity": round(float(r["similarity"]), 3),
+                    "source_id": r["source_id"],
+                }
+                for r in recalled
+            ],
+        }
 
         if request.stream:
             return StreamingResponse(
                 _chat_event_stream(
-                    llm, model, messages, temperature, request.max_tokens, completion_id, created
+                    llm,
+                    model,
+                    messages,
+                    temperature,
+                    request.max_tokens,
+                    completion_id,
+                    created,
+                    memory=memory,
+                    user_text=user_text,
                 ),
                 media_type="text/event-stream",
             )
@@ -107,14 +144,14 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
 
         content = result.get("message", {}).get("content", "")
 
-        # Persist the exchange to memory
+        # Persist the exchange to the buffer.
         if user_text:
             try:
-                await memory.remember(user_text, source="conversation")
+                await memory.save_to_buffer("user", user_text)
                 if content:
-                    await memory.remember(content, source="conversation")
+                    await memory.save_to_buffer("assistant", content)
             except Exception as exc:
-                logger.warning("Memory save failed: %s", exc)
+                logger.warning("Buffer write failed: %s", exc)
 
         return {
             "id": completion_id,
@@ -130,6 +167,19 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             ],
             "usage": _usage(result),
         }
+
+    @app.post("/v1/sources")
+    async def create_source(request: CreateSourceRequest) -> dict:
+        """Mark a buffer range as a source, generate a summary, and index it in memories."""
+        mem: MemoryStore = app.state.memory
+        try:
+            return await mem.create_source(
+                name=request.name,
+                start_id=request.start_id,
+                end_id=request.end_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/v1/completions", response_model=None)
     async def completions(
@@ -185,11 +235,16 @@ async def _chat_event_stream(
     max_tokens: int | None,
     completion_id: str,
     created: int,
+    memory: MemoryStore | None = None,
+    user_text: str = "",
 ) -> AsyncGenerator[str, None]:
+    accumulated = ""
     try:
         async for chunk in llm.chat_stream(model, messages, temperature, max_tokens):
             content = chunk.get("message", {}).get("content", "")
             done = chunk.get("done", False)
+            if content:
+                accumulated += content
             data = {
                 "id": completion_id,
                 "object": "chat.completion.chunk",
@@ -206,11 +261,22 @@ async def _chat_event_stream(
             yield f"data: {json.dumps(data)}\n\n"
             if done:
                 break
+        yield "data: [DONE]\n\n"
     except Exception as exc:
         error = {"error": {"message": str(exc), "type": "server_error"}}
         yield f"data: {json.dumps(error)}\n\n"
-    finally:
         yield "data: [DONE]\n\n"
+        return
+
+    # Write to buffer after the stream completes cleanly.
+    if memory is not None:
+        try:
+            if user_text:
+                await memory.save_to_buffer("user", user_text)
+            if accumulated:
+                await memory.save_to_buffer("assistant", accumulated)
+        except Exception as exc:
+            logger.warning("Buffer write failed: %s", exc)
 
 
 async def _completion_event_stream(
