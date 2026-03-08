@@ -8,9 +8,39 @@ import pytest
 import respx
 
 from nixx.ingest.chunker import chunk
+from nixx.ingest.handlers import HandlerRegistry
 from nixx.ingest.pipeline import IngestPipeline
 from nixx.ingest.reader import read
 from nixx.config import NixxConfig
+
+# ── handler registry ──────────────────────────────────────────────────────────
+
+
+def test_registry_routes_url() -> None:
+    registry = HandlerRegistry()
+    handler = registry.get_handler("https://example.com")
+    assert handler.name == "web"
+
+
+def test_registry_routes_file() -> None:
+    registry = HandlerRegistry()
+    handler = registry.get_handler("/some/file.md")
+    assert handler.name == "file"
+
+
+def test_registry_plugin_loaded(tmp_path: Path) -> None:
+    plugin = tmp_path / "custom.py"
+    plugin.write_text(
+        "from nixx.ingest.handlers.base import IngestHandler\n"
+        "class CustomHandler(IngestHandler):\n"
+        "    name = 'custom'\n"
+        "    def can_handle(self, source: str) -> bool: return source.startswith('custom://')\n"
+        "    async def read(self, source: str) -> tuple[str, str]: return ('text', 'custom')\n"
+    )
+    registry = HandlerRegistry(handlers_dir=tmp_path)
+    handler = registry.get_handler("custom://foo")
+    assert handler.name == "custom"
+
 
 # ── chunker ───────────────────────────────────────────────────────────────────
 

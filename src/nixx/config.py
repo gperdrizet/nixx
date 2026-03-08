@@ -53,6 +53,12 @@ class NixxConfig(BaseSettings):
         default=Path("./config/user.yaml"), description="Path to user profile configuration"
     )
 
+    # Ingest handler plugins
+    handlers_dir: Path = Field(
+        default=Path("~/.config/nixx/handlers").expanduser(),
+        description="Directory for user-defined ingest handler plugins",
+    )
+
     # Hardware monitoring (optional)
     enable_hardware_monitoring: bool = Field(
         default=False, description="Enable hardware monitoring"

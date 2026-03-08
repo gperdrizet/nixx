@@ -7,8 +7,7 @@ import logging
 import asyncpg
 
 from nixx.config import NixxConfig
-from nixx.ingest.chunker import chunk
-from nixx.ingest.reader import read
+from nixx.ingest.handlers import HandlerRegistry
 from nixx.llm.client import OllamaClient
 from nixx.memory.db import save_memory, save_source
 
@@ -28,6 +27,7 @@ class IngestPipeline:
         self._config = config
         self._pool = pool
         self._client = OllamaClient(base_url=config.llm_base_url)
+        self._registry = HandlerRegistry(handlers_dir=config.handlers_dir)
 
     async def ingest(self, source: str, name: str | None = None) -> dict:
         """Ingest a file path or URL.
@@ -35,12 +35,14 @@ class IngestPipeline:
         Returns a summary dict: source_id, name, kind, chunks, characters.
         """
         logger.info("Ingesting: %s", source)
-        text, kind = await read(source)
+        handler = self._registry.get_handler(source)
+        logger.info("  using handler: %s", handler.name)
+        text, kind = await handler.read(source)
         if not text.strip():
             raise ValueError(f"No content extracted from: {source}")
 
         label = name or source
-        chunks = chunk(text)
+        chunks = handler.chunk(text)
         if not chunks:
             raise ValueError(f"No chunks produced from: {source}")
 
