@@ -15,6 +15,7 @@ from httpx import HTTPError as HttpError
 from pydantic import BaseModel
 
 from nixx.config import NixxConfig
+from nixx.ingest.pipeline import IngestPipeline
 from nixx.llm.client import OllamaClient
 from nixx.memory.db import create_pool, init_schema
 from nixx.memory.store import MemoryStore
@@ -52,6 +53,11 @@ class CreateSourceRequest(BaseModel):
     end_id: int | None = None
 
 
+class IngestRequest(BaseModel):
+    source: str
+    name: str | None = None
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 
@@ -64,6 +70,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         pool = await create_pool(config)
         await init_schema(pool, dimensions=config.embedding_dimensions)
         app.state.memory = MemoryStore(config, pool)
+        app.state.ingest = IngestPipeline(config, pool)
         logger.info("Memory store ready")
         yield
         await pool.close()
@@ -167,6 +174,17 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             ],
             "usage": _usage(result),
         }
+
+    @app.post("/v1/ingest")
+    async def ingest(request: IngestRequest) -> dict:
+        """Ingest a file path or URL into sources + memories."""
+        pipeline: IngestPipeline = app.state.ingest
+        try:
+            return await pipeline.ingest(request.source, name=request.name)
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @app.post("/v1/sources")
     async def create_source(request: CreateSourceRequest) -> dict:

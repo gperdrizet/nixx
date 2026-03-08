@@ -66,6 +66,41 @@ def _chat(config: NixxConfig, args: argparse.Namespace) -> None:
     NixxApp(config).run()
 
 
+def _ingest(config: NixxConfig, args: argparse.Namespace) -> None:
+    """Ingest a file or URL into the memory system."""
+    host = args.host or config.host
+    port = args.port or config.port
+    url = f"http://{host}:{port}/v1/ingest"
+
+    payload: dict = {"source": args.source}
+    if args.name:
+        payload["name"] = args.name
+
+    console.print(f"Ingesting [cyan]{args.source}[/]...")
+    try:
+        response = httpx.post(url, json=payload, timeout=300.0)
+        response.raise_for_status()
+        data = response.json()
+    except httpx.ConnectError:
+        console.print(f"[bold red]unreachable[/] — is `nixx serve` running on {host}:{port}?")
+        sys.exit(1)
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.json().get("detail", exc.response.text)
+        console.print(f"[bold red]error[/] — {detail}")
+        sys.exit(1)
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column(style="dim")
+    table.add_column()
+    table.add_row("name", data.get("name", "?"))
+    table.add_row("kind", data.get("kind", "?"))
+    table.add_row("source id", str(data.get("source_id", "?")))
+    table.add_row("chunks", str(data.get("chunks", "?")))
+    table.add_row("characters", str(data.get("characters", "?")))
+    table.add_row("summary", data.get("summary", "")[:120])
+    console.print(table)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nixx",
@@ -88,6 +123,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("chat", parents=[shared], help="Launch the chat TUI")
 
+    ingest_p = sub.add_parser("ingest", parents=[shared], help="Ingest a file or URL into memory")
+    ingest_p.add_argument("source", help="File path or URL to ingest")
+    ingest_p.add_argument("--name", default=None, help="Label for this source (default: path/URL)")
+
     return parser
 
 
@@ -102,3 +141,5 @@ def main() -> None:
         _status(config, args)
     elif args.command == "chat":
         _chat(config, args)
+    elif args.command == "ingest":
+        _ingest(config, args)
