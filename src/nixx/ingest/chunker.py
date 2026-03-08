@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-# Target chunk size in characters. At ~4 chars/token this is roughly 375 tokens,
-# well within mxbai-embed-large's 512-token context window.
-_CHUNK_SIZE = 1500
-_OVERLAP = 200
+# Target chunk size in characters. Code-heavy pages often have 1-3 chars/token
+# (one token per short line), so keep well under mxbai-embed-large's 512-token
+# context limit. 800 chars → ~400 tokens in the worst case.
+_CHUNK_SIZE = 800
+_OVERLAP = 100
 
 
 def chunk(text: str, chunk_size: int = _CHUNK_SIZE, overlap: int = _OVERLAP) -> list[str]:
