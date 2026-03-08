@@ -109,3 +109,76 @@ left in place (empty, harmless).
 - Live smoke test confirmed: buffer writes on both paths, `/v1/sources` full pipeline
   (buffer range → LLM summary → embed → index), recall working across fresh sessions
 - `ctrl+p` intercepted by VS Code - Textual command palette needs `ctrl+\` instead
+
+---
+
+## Part 2: knowledge ingestion and handler registry
+
+### What got built
+
+#### nixx ingest
+
+A full knowledge ingestion pipeline added as `src/nixx/ingest/`:
+
+- `nixx ingest <path|url> [--name "label"]` CLI subcommand
+- `POST /v1/ingest` endpoint
+- `reader.py` → read local files or fetch URLs, strip HTML via BeautifulSoup
+- `chunker.py` → split text into overlapping chunks at paragraph boundaries
+- `pipeline.py` → `IngestPipeline`: read → chunk → summarize → save source → embed each chunk → index
+
+Default chunk size set to 800 chars after hitting `mxbai-embed-large`'s 512-token context
+limit on code-heavy pages (HTML-stripped docs produce ~1 char/token, so 1500 chars failed).
+
+Live tested:
+- `nixx ingest README.md --name "nixx README"` → 6 chunks, source_id 3
+- `nixx ingest https://docs.pydantic.dev/latest/concepts/pydantic_settings/ --name "pydantic-settings docs"` → 119 chunks, source_id 6
+
+Ingested sources land in the same `memories` table as conversation summaries. Recall
+treats both identically.
+
+#### Handler registry
+
+Refactored ingest to use a handler registry (`src/nixx/ingest/handlers/`):
+
+- `IngestHandler` ABC: `name`, `can_handle(source)`, `read(source)`, `chunk(text)`
+- `WebHandler` - matches `http://`/`https://`, strips HTML
+- `FileHandler` - fallback, matches anything without `://`
+- `HandlerRegistry` - ordered list, first match wins; plugin auto-discovery via `importlib`
+
+To add a new ingest type, drop a `.py` file in `~/.config/nixx/handlers/` (configurable
+as `NIXX_HANDLERS_DIR`). Any `IngestHandler` subclass found there is loaded at server
+startup and takes priority over built-ins. No config changes or code edits required.
+
+`reader.py` kept as a backward-compat shim that delegates to the default registry.
+
+#### Commits
+
+- `428c14d` - Add knowledge ingestion: nixx ingest <file|url>
+- `de3904c` - Fix chunk size: 1500→800 chars
+- `6a3c496` - Refactor ingest: handler registry with plugin auto-discovery
+
+53 tests passing, ruff/mypy clean.
+
+### What was discussed and planned
+
+**Next features, in order:**
+
+1. **Source editor** - `nixx sources` CLI: list all sources with id/name/type/date,
+   `nixx sources rm <id>` to delete a source and all its memory embeddings. Needed soon -
+   data already accumulating that we may want to clean up.
+
+2. **Phone access** - API is already OpenAI-compatible. Expose via Tailscale, pick a
+   mobile client that supports custom endpoints (Enchanted, Open WebUI mobile, etc.).
+   Voice needs Whisper (STT) + TTS step on response, both available via Ollama.
+
+3. **File creation/editing** - sandboxed to a `workspace_dir` (default `~/nixx-workspace/`).
+   Requires adding a `tools` block to the chat endpoint for structured tool calls.
+
+**Longer-horizon: self-modification**
+
+The plugin handler system built today is the right mental model - "drop a file in a
+directory, behavior changes." The full loop for nixx writing her own ingest handlers would
+be: workspace write → handler file → registry reload endpoint (trivial) → self-test.
+The hard constraint is model reasoning quality on novel Python at 7B scale.
+
+Path: workspace → tool-calling → handler reload → self-test. Each step builds on the last.
