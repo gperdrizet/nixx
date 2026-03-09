@@ -1,6 +1,13 @@
 {
     "cSpell.words": [
-        "frontends"
+        "frontends",
+        "mxbai",
+        "mypy",
+        "Ollama",
+        "pgvector",
+        "pgweb",
+        "pytest",
+        "tailscaled"
     ],
     "pylint.enabled": false,
     "python.linting.pylintEnabled": false,
@@ -12,5 +19,4 @@
             "source.fixAll.ruff": "explicit"
         }
     }
-}
 }
