@@ -124,6 +124,14 @@ class NixxApp(App[None]):
                     self.run_worker(self._create_source(name), exclusive=False, thread=False)
                 else:
                     self._add_message("system", 'Usage: /source "name"')
+            elif text == "/sources":
+                self.run_worker(self._list_sources(), exclusive=False, thread=False)
+            elif text.startswith("/lookup"):
+                arg = text[7:].strip().strip("\"'")
+                if arg:
+                    self.run_worker(self._lookup_source(arg), exclusive=False, thread=False)
+                else:
+                    self._add_message("system", 'Usage: /lookup "name" or /lookup <id>')
             else:
                 self._add_message("system", f"Unknown command: {text}")
             event.input.focus()
@@ -157,9 +165,103 @@ class NixxApp(App[None]):
         self._add_message(
             "system",
             f"Source [b]{data['name']}[/b] created "
-            f"(buffer {data['start_id']}\u2013{data['end_id']})\n"
+            f"(buffer {data['start_id']}\u2013{data['end_id']}, {data.get('chunks', '?')} chunks)\n"
             f"[dim]{data['summary']}[/dim]",
         )
+
+    async def _list_sources(self) -> None:
+        """List all sources."""
+        self._add_message("system", "Fetching sources…")
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{self._base_url}/v1/sources")
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.ConnectError:
+            self._add_message("system", "[red]Cannot reach server.[/red]")
+            return
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+
+        sources = data.get("sources", [])
+        if not sources:
+            self._add_message("system", "[dim]No sources yet.[/dim]")
+            return
+
+        text = f"[b]{data['count']} sources:[/b]\n\n"
+        for s in sources:
+            source_id = s["id"]
+            name = s["name"]
+            type_ = s["type"]
+            summary = s["summary"][:80] + "…" if len(s["summary"]) > 80 else s["summary"]
+            text += f"[cyan]{source_id}[/] [b]{name}[/] [dim]({type_})[/]\n"
+            text += f"  [dim]{summary}[/dim]\n\n"
+        self._add_message("system", text.strip())
+
+    async def _lookup_source(self, arg: str) -> None:
+        """Look up a source by ID or name and display its full content."""
+        # Try to parse as integer ID first
+        try:
+            source_id = int(arg)
+        except ValueError:
+            # Not an ID, try name search
+            self._add_message("system", f"Searching for source: [b]{arg}[/b]…")
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(f"{self._base_url}/v1/sources", params={"name": arg})
+                    resp.raise_for_status()
+                    data = resp.json()
+            except httpx.ConnectError:
+                self._add_message("system", "[red]Cannot reach server.[/red]")
+                return
+            except Exception as exc:
+                self._add_message("system", f"[red]Error: {exc}[/red]")
+                return
+
+            sources = data.get("sources", [])
+            if not sources:
+                self._add_message("system", f"[red]No source found matching: {arg}[/red]")
+                return
+            elif len(sources) > 1:
+                text = f"[yellow]Multiple matches found ({len(sources)}). Use ID instead:[/]\n\n"
+                for s in sources:
+                    text += f"[cyan]{s['id']}[/] [b]{s['name']}[/] [dim]({s['type']})[/]\n"
+                self._add_message("system", text.strip())
+                return
+            source_id = sources[0]["id"]
+
+        # Fetch full source content
+        self._add_message("system", f"Loading source {source_id}…")
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(f"{self._base_url}/v1/sources/{source_id}/content")
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.ConnectError:
+            self._add_message("system", "[red]Cannot reach server.[/red]")
+            return
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                self._add_message("system", f"[red]Source {source_id} not found.[/red]")
+            else:
+                self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+
+        # Display source content
+        name = data["source_name"]
+        type_ = data["source_type"]
+        chunks = data["chunks"]
+        total = data["total_chunks"]
+
+        text = f"[b]Source #{source_id}: {name}[/] [dim]({type_}, {total} chunks)[/]\n\n"
+        for chunk in chunks:
+            content = chunk["content"]
+            text += f"{content}\n\n"
+        self._add_message("system", text.strip())
 
     async def _show_context(self) -> None:
         try:

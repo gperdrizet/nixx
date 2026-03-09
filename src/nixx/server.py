@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from nixx.config import NixxConfig
 from nixx.ingest.pipeline import IngestPipeline
 from nixx.llm.client import OllamaClient
-from nixx.memory.db import create_pool, init_schema
+from nixx.memory.db import create_pool, get_source, get_source_content, init_schema, list_sources
 from nixx.memory.store import MemoryStore
 from nixx.prompts import SYSTEM_PROMPT
 
@@ -198,6 +198,39 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/v1/sources")
+    async def get_sources(name: str | None = None) -> dict:
+        """List all sources, optionally filtered by name."""
+        pool = app.state.memory._pool
+        sources = await list_sources(pool, name_filter=name)
+        return {"sources": sources, "count": len(sources)}
+
+    @app.get("/v1/sources/{source_id}")
+    async def get_source_by_id(source_id: int) -> dict:
+        """Get a single source by ID."""
+        pool = app.state.memory._pool
+        source = await get_source(pool, source_id)
+        if not source:
+            raise HTTPException(status_code=404, detail=f"Source {source_id} not found")
+        return source
+
+    @app.get("/v1/sources/{source_id}/content")
+    async def get_source_content_by_id(source_id: int) -> dict:
+        """Get all memory chunks for a source, ordered by chunk index."""
+        pool = app.state.memory._pool
+        # First verify source exists
+        source = await get_source(pool, source_id)
+        if not source:
+            raise HTTPException(status_code=404, detail=f"Source {source_id} not found")
+        chunks = await get_source_content(pool, source_id)
+        return {
+            "source_id": source_id,
+            "source_name": source["name"],
+            "source_type": source["type"],
+            "chunks": chunks,
+            "total_chunks": len(chunks),
+        }
 
     @app.post("/v1/completions", response_model=None)
     async def completions(

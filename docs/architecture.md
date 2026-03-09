@@ -14,18 +14,28 @@ Processes, modules, and communication paths as they exist today.
                 └───────────────────┬─────────────────────┘
                                     │  POST /v1/chat/completions  (HTTP + SSE)
                                     │  GET  /v1/debug/context
+                                    │  GET  /v1/sources
+                                    │  GET  /v1/sources/{id}
+                                    │  GET  /v1/sources/{id}/content
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  nixx serve · Python · Uvicorn + FastAPI                          │
 │                                                                     │
 │  ┌───────────────────────────┐    ┌──────────────────────────────┐  │
 │  │ POST /v1/chat/completions │    │ prompts.py                   │  │
-│  │ GET  /v1/debug/context    │───▶│ SYSTEM_PROMPT                │  │
-│  │ GET  /health              │    └──────────────────────────────┘  │
+│  │ POST /v1/completions      │    │ SYSTEM_PROMPT                │  │
+│  │ POST /v1/sources          │───▶│                              │  │
+│  │ POST /v1/ingest           │    └──────────────────────────────┘  │
+│  │ GET  /v1/sources          │                                      │
+│  │ GET  /v1/sources/{id}     │                                      │
+│  │ GET  /v1/sources/{id}/... │                                      │
+│  │ GET  /v1/debug/context    │                                      │
+│  │ GET  /health              │                                      │
 │  └─────────────┬─────────────┘                                      │
 │                │              ┌──────────────────────────────────┐  │
 │                └─────────────▶│ MemoryStore                      │  │
 │                               │ remember · recall · format_ctx   │  │
+│                               │ create_source · ingest           │  │
 │                               └──────────┬───────────────────┬───┘  │
 │  ┌──────────────────────────┐            │ embed             │ SQL  │
 │  │ OllamaClient             │◀───────────┘           asyncpg │      │
@@ -37,13 +47,11 @@ Processes, modules, and communication paths as they exist today.
   ┌───────────────────────────────┐   ┌────────────────────────────────────────┐
   │  Ollama · port 11434          │   │  PostgreSQL + pgvector · port 5432     │
   │                               │   │                                        │
-  │  qwen2.5-coder:7b             │   │  memories                              │
-  │    inference                  │   │    id · content · embedding(1024d)     │
-  │  mxbai-embed-large            │   │    source · metadata · created_at      │
+  │  qwen2.5-coder:7b             │   │  buffer   (append-only message tape)   │
+  │    inference                  │   │  sources  (meaningful named units)     │
+  │  mxbai-embed-large            │   │  memories (embedded recall index)      │
   │    1024-d embeddings          │   │                                        │
-  └───────────────────────────────┘   │  conversations  ┐ schema exists,       │
-                                      │  messages       ┘ not yet written to   │
-                                      └────────────────────────────────────────┘
+  └───────────────────────────────┘   └────────────────────────────────────────┘
 ```
 
 ---
@@ -62,80 +70,12 @@ Where data lives, what it contains, and how it flows between structures.
   │    {role: assistant, content: nixx is a personal...},            │
   │    {role: user,      content: <current turn>}  ]                 │
   │                                                                  │
-  │  lives for one nixx chat session only · lost on exit             │
-  └────────────────────────────┬─────────────────────────────────────┘
-                               │  sent in full every turn
-                               ▼
-  assembled by server per turn
-  ┌──────────────────────────────────────────────────────────────────┐
-  │                                                                  │
-  │  system ── SYSTEM_PROMPT  (from prompts.py)                      │
-  │            + recalled memory bullets  if similarity >= 0.5       │
-  │              ↑                                                   │
-  │              └── top-5 rows from memories, queried by            │
-  │                  cosine similarity to all user turns             │
-  │                                                                  │
-  │  user    ── turn 1                                               │
-  │  asst.   ── turn 1 response                                      │
-  │  ...                                                             │
-  │  user    ── current turn  ◀── also used as the recall query      │
-  │                                                                  │
-  └────────────────────────────┬─────────────────────────────────────┘
-                               │  sent to Ollama · qwen2.5-coder:7b
-                               ▼  response streamed back token by token
-
-
-  PERSISTENT · PostgreSQL
-  ──────────────────────────────────────────────────────────────────────
-  memories
-
-  ┌─────────────────────────────────────────────────────────────────────────┐
-  │  column       type            constraint   notes                        │
-  │  ──────────── ─────────────── ──────────── ──────────────────────────── │
-  │  id           bigint          PK           auto-increment               │
-  │  content      text                         verbatim message text        │
-  │  embedding    vector(1024)                 from mxbai-embed-large       │
-  │  source       text                         conversation | document      │
-  │  metadata     jsonb                        {}  arbitrary tags           │
-  │  created_at   timestamptz                  auto                         │
-  └─────────────────────────────────────────────────────────────────────────┘
-       ▲  recalled per turn (cosine similarity search via pgvector)
-       │
-       │  stored after each turn
-       │  NOTE: non-streaming path only · TUI turns not saved yet
-       │
-
-  conversations  ┐
-  messages       ┘  schema exists · not yet written to
-```
-
----
-
-## Planned architecture
-
-Buffer + sources redesign. The "tape recorder" is the buffer - everything goes in. A source is a
-meaningful unit marked explicitly from the buffer by the user (or proposed by nixx). Not every
-buffer entry becomes a source. Documents, web pages, repos, and buffer sections are all sources.
-Only sources feed into the recall index.
-
-Three tiers: buffer → sources → memories.
-
-```text
-  IN-PROCESS · nixx chat  (unchanged)
-  ──────────────────────────────────────────────────────────────────────
-  NixxApp._history
-
-  ┌──────────────────────────────────────────────────────────────────┐
-  │  [ {role: user,      content: what are we building?},            │
-  │    {role: assistant, content: nixx is a personal...},            │
-  │    {role: user,      content: <current turn>}  ]                 │
-  │                                                                  │
   │  ephemeral · lost on exit · NOT the source of truth              │
   └────────────────────────────┬─────────────────────────────────────┘
                                │  sent in full every turn
                                │  each new message also written to buffer
                                ▼
-  assembled by server per turn (unchanged)
+  assembled by server per turn
   ┌──────────────────────────────────────────────────────────────────┐
   │  system ── SYSTEM_PROMPT + recalled memory bullets               │
   │  user    ── turn 1                                               │
@@ -148,6 +88,14 @@ Three tiers: buffer → sources → memories.
 
   PERSISTENT · PostgreSQL
   ──────────────────────────────────────────────────────────────────────
+
+  Three tiers: buffer → sources → memories.
+
+  The "tape recorder" is the buffer - everything goes in. A source is a meaningful unit
+  marked explicitly from the buffer by the user (or proposed by nixx). Not every buffer
+  entry becomes a source. Documents, web pages, repos, and buffer sections are all sources.
+  Only sources feed into the recall index.
+
   buffer · persistent append-only tape
 
   ┌─────────────────────────────────────────────────────────────────────────┐
@@ -174,13 +122,14 @@ Three tiers: buffer → sources → memories.
   │  id           bigint          PK           auto-increment               │
   │  name         text                         user-provided label          │
   │  type         text                         buffer | document | repo | web│
-  │  summary      text                         nixx-generated summary       │
+  │  summary      text                         LLM-generated summary        │
   │  start_id     bigint          FK buffer    first buffer row (if buffer) │
   │  end_id       bigint          FK buffer    last buffer row  (if buffer) │
   │  created_at   timestamptz                  auto                         │
   └────────────────────────────────────┬────────────────────────────────────┘
-                                       │  embed summary → store in memories
-                                       │  raw buffer rows stay in buffer
+                                       │  chunk verbatim transcript → embed
+                                       │  each chunk → store in memories
+                                       │  summary is for display only
                                        ▼
   memories · embedded recall index
 
@@ -188,14 +137,14 @@ Three tiers: buffer → sources → memories.
   │  column       type            constraint   notes                        │
   │  ──────────── ─────────────── ──────────── ──────────────────────────── │
   │  id           bigint          PK           auto-increment               │
-  │  content      text                         source summary or doc chunk  │
+  │  content      text                         verbatim chunk or doc chunk  │
   │  embedding    vector(1024)                 from mxbai-embed-large       │
   │  source_id    bigint          FK sources   which source this came from  │
-  │  metadata     jsonb                        {chunk:} or other tags       │
+  │  metadata     jsonb                        {chunk: i, total_chunks: N}  │
   │  created_at   timestamptz                  auto                         │
   └─────────────────────────────────────────────────────────────────────────┘
-       ▲  recalled per turn (cosine similarity search via pgvector)
-       │  content = source summaries + document chunks  (not raw messages)
+       ▲  recalled per turn (cosine similarity search via pgvector HNSW index)
+       │  content = verbatim transcript chunks + document chunks
 ```
 
 ## Design principles

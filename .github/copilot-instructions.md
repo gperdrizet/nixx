@@ -2,7 +2,7 @@
 
 Self-hosted personal knowledge base and memory system. Maintains persistent, unified context across all workspaces and conversations for a single user. Local-first, MIT licensed.
 
-See [docs/architecture/README.md](../docs/architecture/README.md) and [docs/index.md](../docs/index.md) for full design context.
+See [docs/architecture.md](../docs/architecture.md) and [docs/index.md](../docs/index.md) for full design context.
 
 ## Architecture
 
@@ -41,7 +41,7 @@ Tool config lives in [pyproject.toml](../pyproject.toml) (line length 100, `py31
 
 **Language**: Never use "AI" or "agent" - use precise, context-specific terms or "nixx" directly. Be technical and direct; no buzzwords or jargon.
 
-**Config**: `NixxConfig` (pydantic-settings) reads from `.env` with `NIXX_` prefix. User profile is `./config/user.yaml` - see [config/user.yaml.example](../config/user.yaml.example).
+**Config**: `NixxConfig` (pydantic-settings) reads from `.env` with `NIXX_` prefix.
 
 **Behavior model**: Nixx is suggestion-only - it never acts autonomously. Always ask before making changes to user data or system state.
 

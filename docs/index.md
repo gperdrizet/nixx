@@ -2,13 +2,9 @@
 
 **Building a self-hosted personal knowledge base and memory system using vector search and semantic networks**
 
-## Latest posts
+## About
 
-- [Week 1: Project Kickoff](blog/week-01.md) *(coming soon)*
-
-## About this blog
-
-This blog documents the development of Nixx, a local-first AI agent system with persistent memory across all conversations and workspaces. Posts are published weekly with a 1-week delay, capturing both successes and wrong turns.
+Nixx is a local-first personal knowledge base and memory system with persistent context across all conversations and workspaces.
 
 ## What is Nixx?
 
@@ -24,9 +20,18 @@ The goal is to eliminate context fragmentation - no more isolated conversations 
 
 ## Follow along
 
-- [GitHub Repository](https://github.com/yourusername/nixx)
-- [Build Logs](build-log/) (daily development notes)
-- [Architecture Docs](architecture/)
+- [Build logs](build-log/) (development notes)
+- [Architecture docs](architecture.md)
+
+## Documentation
+
+**Technical guides:**
+- [Architecture](architecture.md) - system design, data flow, three-tier memory model
+- [Tech stack](stack.md) - every library and tool with documentation links
+- [Knowledge graph](knowledge-graph.md) - planned knowledge graph architecture and roadmap
+- [pgweb guide](pgweb-guide.md) - web interface for database management
+- [SQL queries](queries.md) - common database operations
+- [Phone access](phone-access.md) - remote access via Tailscale + SSH
 
 ## Tech stack
 
@@ -36,4 +41,4 @@ See [docs/stack.md](stack.md) for a full breakdown of every library with links t
 
 ---
 
-*Built with curiosity, coffee, and a datacenter GPU.*
+*Built with curiosity, coffee, and an EBay GPU.*

@@ -1,0 +1,20 @@
+[Unit]
+Description=pgweb database browser for nixx
+Documentation=https://github.com/sosedoff/pgweb
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=siderealyear
+WorkingDirectory=/home/siderealyear/nixx
+EnvironmentFile=/home/siderealyear/nixx/.env
+ExecStart=/usr/local/bin/pgweb --url=${NIXX_DATABASE_URL} --bind=0.0.0.0 --listen=8081
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=nixx.target

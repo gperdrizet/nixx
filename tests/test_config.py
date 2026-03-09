@@ -12,7 +12,7 @@ def test_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     for key in ["NIXX_DATABASE_URL", "NIXX_POSTGRES_PASSWORD", "NIXX_ENCRYPTION_KEY"]:
         monkeypatch.delenv(key, raising=False)
 
-    cfg = NixxConfig()
+    cfg = NixxConfig(_env_file=tmp_path / ".env")
 
     assert cfg.host == "127.0.0.1"
     assert cfg.port == 8000
@@ -34,7 +34,7 @@ def test_env_var_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     for key in ["NIXX_DATABASE_URL", "NIXX_POSTGRES_PASSWORD", "NIXX_ENCRYPTION_KEY"]:
         monkeypatch.delenv(key, raising=False)
 
-    cfg = NixxConfig()
+    cfg = NixxConfig(_env_file=tmp_path / ".env")
 
     assert cfg.port == 9000
     assert cfg.llm_model == "llama3:8b"
@@ -44,7 +44,6 @@ def test_env_var_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
 def test_creates_data_directories(config: NixxConfig, tmp_path: Path) -> None:
     assert (tmp_path / "data" / "memory").is_dir()
     assert (tmp_path / "data").is_dir()
-    assert (tmp_path / "config").is_dir()
 
 
 def test_memory_path_is_absolute_after_mkdir(config: NixxConfig, tmp_path: Path) -> None:

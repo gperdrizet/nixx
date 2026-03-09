@@ -1,0 +1,12 @@
+[Unit]
+Description=nixx personal memory system (all services)
+Documentation=https://github.com/gperdrizet/nixx
+After=network.target
+
+# Core dependencies
+Requires=postgresql.service
+Wants=ollama.service nixx-server.service nixx-pgweb.service tailscaled.service
+
+[Install]
+# Manually managed: sudo systemctl start nixx.target
+# To enable on boot: sudo systemctl enable nixx.target

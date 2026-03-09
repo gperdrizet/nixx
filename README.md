@@ -54,9 +54,9 @@ The knowledge graph and memory system maintains a holistic view of who you are a
 
 ## Getting started
 
-**Status**: Early development - not yet functional
+**Status**: Early development - functional core with TUI, memory system, and remote access.
 
-Follow the build journey in [docs/blog/](docs/blog/) where we document the development process weekly.
+Follow the build journey in [docs/build-log/](docs/build-log/).
 
 ## Development
 
@@ -80,11 +80,7 @@ ollama pull qwen2.5-coder:7b      # inference
 ollama pull mxbai-embed-large     # embeddings
 
 # 3. Install pgvector on your PostgreSQL instance
-#    If using Docker:
-docker exec -it <your-postgres-container> bash -c \
-  'apt-get install -y postgresql-$PG_MAJOR-pgvector'
-#    If using a native install:
-#    sudo apt install postgresql-16-pgvector  (adjust version)
+sudo apt install postgresql-16-pgvector  # adjust version as needed
 
 # 4. Create the nixx database role and enable the extension
 bash scripts/init-db.sh   # reads NIXX_POSTGRES_PASSWORD from .env
@@ -116,7 +112,71 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   -d '{"messages": [{"role": "user", "content": "hello"}]}'
 ```
 
-See [docs/architecture/README.md](docs/architecture/README.md) for the full setup options including PostgreSQL.
+### Services
+
+Nixx runs as a set of systemd services orchestrated by a single target:
+
+| Service | Unit | Purpose |
+|---|---|---|
+| PostgreSQL | `postgresql@16-main` | Database (buffer, sources, memories) |
+| Ollama | `ollama.service` | LLM inference + embeddings |
+| nixx server | `nixx-server.service` | FastAPI API on port 8000 |
+| pgweb | `nixx-pgweb.service` | Database web UI on port 8081 (optional) |
+| Tailscale | `tailscaled.service` | VPN for remote access |
+
+All unit files live in `scripts/` and are symlinked into `/etc/systemd/system/`.
+
+```bash
+# Install / update service files (symlinks into /etc/systemd/system/)
+sudo bash scripts/install-services.sh
+
+# Start everything
+sudo systemctl start nixx.target
+
+# Stop everything
+sudo systemctl stop nixx.target
+
+# Check status
+sudo systemctl status nixx.target
+```
+
+Services are manually started by default - they won't auto-start on reboot. To enable auto-start: `sudo systemctl enable nixx.target`.
+
+See [docs/architecture.md](docs/architecture.md) for the full system design.
+
+### Database management
+
+Nixx uses PostgreSQL for persistent storage (buffer, sources, memories). To view and manage the data directly:
+
+**pgweb** - lightweight web-based PostgreSQL browser:
+```bash
+# One-off: Start pgweb manually (installs automatically if needed)
+bash scripts/pgweb.sh          # default: http://localhost:8081
+bash scripts/pgweb.sh 9000     # custom port
+
+# Persistent: pgweb is included in nixx.target (see Services above)
+```
+
+Browse to http://localhost:8081 to explore tables, run queries, and manage data. See [docs/pgweb-guide.md](docs/pgweb-guide.md) for a full interface guide.
+
+Common operations:
+- View all sources and their summaries
+- Inspect buffer entries (conversation history)
+- Find orphaned memories
+- Manual cleanup and data export
+
+**psql** - command-line PostgreSQL client:
+```bash
+source .env
+psql "$NIXX_DATABASE_URL"
+
+# Quick queries
+psql "$NIXX_DATABASE_URL" -c "SELECT id, name, type, created_at FROM sources;"
+psql "$NIXX_DATABASE_URL" -c "SELECT COUNT(*) FROM memories WHERE source_id = 5;"
+
+# Delete a source and its memories
+psql "$NIXX_DATABASE_URL" -c "BEGIN; DELETE FROM memories WHERE source_id = 5; DELETE FROM sources WHERE id = 5; COMMIT;"
+```
 
 ## Code quality
 
@@ -151,16 +211,23 @@ pytest -v                     # run tests
 - [x] CLI (`nixx serve`, `nixx status`)
 - [x] Test suite and CI
 - [x] Memory system (pgvector + Ollama embeddings)
-- [ ] Terminal UI
+- [x] Terminal UI (Textual-based TUI with slash commands)
+- [x] Source lookup and management (`/sources`, `/lookup`, `/source`)
+- [x] Phone access via SSH over Tailscale
+- [x] systemd service orchestration (`nixx.target`)
+- [ ] Knowledge graph implementation
+- [ ] Paper ingestion
 - [ ] Zed integration testing
-- [ ] Knowledge ingestion tools
-- [ ] Hardware monitoring integration
 
 ## Documentation
 
-- [Build Log](docs/build-log/) - Daily development notes
-- [Blog](docs/blog/) - Weekly development posts (1-week delay)
-- [Architecture](docs/architecture/) - Technical design documents
+- [Architecture](docs/architecture.md) - system design, data flow, three-tier memory model
+- [Tech stack](docs/stack.md) - every library and tool with documentation links
+- [Knowledge graph](docs/knowledge-graph.md) - vision for integrating papers, notes, code, and docs
+- [Phone access](docs/phone-access.md) - SSH + TUI via Tailscale
+- [pgweb guide](docs/pgweb-guide.md) - web interface for database management
+- [SQL queries](docs/queries.md) - common database operations
+- [Build log](docs/build-log/) - daily development notes
 
 ## License
 
@@ -172,4 +239,4 @@ This is a personal project under active development, but issues and PRs are welc
 
 ---
 
-Built with curiosity, coffee, and a P100 GPU.
+Built with curiosity, coffee, and a EBay GPU.

@@ -58,7 +58,8 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
     async with pool.acquire() as conn:
         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
-        await conn.execute("""
+        await conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS buffer (
                 id          BIGSERIAL PRIMARY KEY,
                 role        TEXT        NOT NULL,
@@ -66,9 +67,11 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
                 origin      TEXT        NOT NULL DEFAULT 'api',
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-        """)
+        """
+        )
 
-        await conn.execute("""
+        await conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS sources (
                 id          BIGSERIAL PRIMARY KEY,
                 name        TEXT        NOT NULL,
@@ -78,9 +81,11 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
                 end_id      BIGINT      REFERENCES buffer(id) ON DELETE SET NULL,
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-        """)
+        """
+        )
 
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
             CREATE TABLE IF NOT EXISTS memories (
                 id          BIGSERIAL PRIMARY KEY,
                 content     TEXT        NOT NULL,
@@ -89,14 +94,18 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
                 metadata    JSONB       NOT NULL DEFAULT '{{}}',
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-        """)
+        """
+        )
 
         # Migrate existing memories table: add source_id, drop legacy source column.
-        await conn.execute("""
+        await conn.execute(
+            """
             ALTER TABLE memories
             ADD COLUMN IF NOT EXISTS source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL;
-        """)
-        await conn.execute("""
+        """
+        )
+        await conn.execute(
+            """
             DO $$ BEGIN
                 IF EXISTS (
                     SELECT 1 FROM information_schema.columns
@@ -105,14 +114,17 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
                     ALTER TABLE memories DROP COLUMN source;
                 END IF;
             END $$;
-        """)
+        """
+        )
 
         # HNSW index for fast approximate nearest-neighbour search.
-        await conn.execute("""
+        await conn.execute(
+            """
             CREATE INDEX IF NOT EXISTS memories_embedding_hnsw
             ON memories
             USING hnsw (embedding vector_cosine_ops);
-        """)
+        """
+        )
 
     logger.info("Database schema initialised")
 
@@ -192,6 +204,52 @@ async def get_last_source_end_id(pool: asyncpg.Pool) -> int | None:  # type: ign
             "SELECT end_id FROM sources WHERE end_id IS NOT NULL ORDER BY id DESC LIMIT 1"
         )
         return int(row["end_id"]) if row else None
+
+
+async def list_sources(
+    pool: asyncpg.Pool,  # type: ignore[type-arg]
+    name_filter: str | None = None,
+) -> list[dict]:
+    """List all sources, optionally filtered by name (case-insensitive pattern match)."""
+    async with pool.acquire() as conn:
+        if name_filter:
+            rows = await conn.fetch(
+                "SELECT id, name, type, summary, start_id, end_id, created_at "
+                "FROM sources WHERE LOWER(name) LIKE LOWER($1) ORDER BY created_at DESC",
+                f"%{name_filter}%",
+            )
+        else:
+            rows = await conn.fetch(
+                "SELECT id, name, type, summary, start_id, end_id, created_at "
+                "FROM sources ORDER BY created_at DESC"
+            )
+        return [dict(r) for r in rows]
+
+
+async def get_source(pool: asyncpg.Pool, source_id: int) -> dict | None:  # type: ignore[type-arg]
+    """Get a single source by ID. Returns None if not found."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, name, type, summary, start_id, end_id, created_at "
+            "FROM sources WHERE id = $1",
+            source_id,
+        )
+        return dict(row) if row else None
+
+
+async def get_source_content(pool: asyncpg.Pool, source_id: int) -> list[dict]:  # type: ignore[type-arg]
+    """Get all memory chunks for a source, ordered by chunk index.
+
+    Returns a list of dicts with: id, content, metadata, created_at.
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, content, metadata, created_at "
+            "FROM memories WHERE source_id = $1 "
+            "ORDER BY (metadata->>'chunk')::int",
+            source_id,
+        )
+        return [dict(r) for r in rows]
 
 
 # ── Memory helpers ────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncpg
 
 from nixx.config import NixxConfig
+from nixx.ingest.chunker import chunk as chunk_text
 from nixx.llm.client import OllamaClient
 from nixx.memory.db import (
     get_buffer_entries,
@@ -53,10 +54,13 @@ class MemoryStore:
         start_id: int | None = None,
         end_id: int | None = None,
     ) -> dict:
-        """Mark a range of buffer entries as a source, summarise them, and index the summary.
+        """Mark a range of buffer entries as a source and index the verbatim transcript.
+
+        Generates a summary for the sources.summary field (display only), but stores
+        the verbatim transcript text (chunked) in memories for precise recall.
 
         If start_id/end_id are not given, the range defaults to everything since the last source.
-        Returns a dict with id, name, start_id, end_id, and summary.
+        Returns a dict with id, name, start_id, end_id, summary, and chunks count.
         """
         if start_id is None or end_id is None:
             auto_start, auto_end = await self.get_source_range()
@@ -70,6 +74,8 @@ class MemoryStore:
             raise ValueError(f"No buffer entries found in range {start_id}–{end_id}")
 
         transcript = "\n".join(f"{e['role'].upper()}: {e['content']}" for e in entries)
+
+        # Generate summary for display in sources table only
         summary = await self._summarize(transcript)
 
         source_id = await save_source(
@@ -80,13 +86,26 @@ class MemoryStore:
             start_id=start_id,
             end_id=end_id,
         )
-        await self.remember(summary, source_id=source_id)
+
+        # Chunk and embed the verbatim transcript (not the summary)
+        chunks = chunk_text(transcript)
+        for i, chunk in enumerate(chunks):
+            embedding = await self._client.embed(self._config.embedding_model, chunk)
+            await save_memory(
+                self._pool,
+                content=chunk,
+                embedding=embedding,
+                source_id=source_id,
+                metadata={"chunk": i, "total_chunks": len(chunks)},
+            )
+
         return {
             "id": source_id,
             "name": name,
             "start_id": start_id,
             "end_id": end_id,
             "summary": summary,
+            "chunks": len(chunks),
         }
 
     async def _summarize(self, transcript: str) -> str:

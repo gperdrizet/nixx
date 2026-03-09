@@ -158,3 +158,34 @@ mock HTTP clients, and mock memory stores. Run with `pytest`.
 
 - [pytest docs](https://docs.pytest.org/)
 - [pytest-asyncio docs](https://pytest-asyncio.readthedocs.io/)
+
+---
+
+## pgweb
+
+Lightweight web-based PostgreSQL browser. Single Go binary, runs as a local web server
+on port 8081. Provides a graphical interface for browsing tables, running queries, and
+exporting data without heavy IDE tooling. Managed via systemd (`nixx-pgweb.service`).
+
+- [pgweb GitHub](https://github.com/sosedoff/pgweb)
+
+---
+
+## Tailscale
+
+WireGuard-based mesh VPN for secure remote access. Enables SSH into the dev machine from
+a phone (Termius) or any other device on the tailnet without exposing ports to the public
+internet. Runs as a systemd service (`tailscaled`).
+
+- [Tailscale docs](https://tailscale.com/kb)
+
+---
+
+## systemd
+
+Service orchestration for all nixx components. A `nixx.target` groups the stack:
+Ollama, nixx-server, pgweb, and Tailscale. Services are manually started
+(`sudo systemctl start nixx.target`), not enabled for auto-boot. Unit files live in
+`scripts/` and are symlinked into `/etc/systemd/system/`.
+
+- [systemd docs](https://www.freedesktop.org/software/systemd/man/)

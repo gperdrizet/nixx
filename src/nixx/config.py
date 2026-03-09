@@ -6,12 +6,16 @@ from typing import Any, Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Absolute path to nixx project .env file
+_NIXX_ROOT = Path(__file__).parent.parent.parent
+_ENV_FILE = _NIXX_ROOT / ".env"
+
 
 class NixxConfig(BaseSettings):
     """Main configuration for Nixx."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         env_prefix="NIXX_",
         case_sensitive=False,
@@ -48,11 +52,6 @@ class NixxConfig(BaseSettings):
         default=None, description="Encryption key for sensitive data"
     )
 
-    # User profile
-    user_profile_path: Path = Field(
-        default=Path("./config/user.yaml"), description="Path to user profile configuration"
-    )
-
     # Ingest handler plugins
     handlers_dir: Path = Field(
         default=Path("~/.config/nixx/handlers").expanduser(),
@@ -69,4 +68,3 @@ class NixxConfig(BaseSettings):
         super().__init__(**data)
         self.memory_path.mkdir(parents=True, exist_ok=True)
         Path("./data").mkdir(parents=True, exist_ok=True)
-        Path("./config").mkdir(parents=True, exist_ok=True)

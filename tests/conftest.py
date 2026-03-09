@@ -41,7 +41,7 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> NixxConfig:
     monkeypatch.chdir(tmp_path)
     for key in ["NIXX_DATABASE_URL", "NIXX_POSTGRES_PASSWORD", "NIXX_ENCRYPTION_KEY"]:
         monkeypatch.delenv(key, raising=False)
-    return NixxConfig()
+    return NixxConfig(_env_file=tmp_path / ".env")
 
 
 # ── Memory mock helper ────────────────────────────────────────────────────────
