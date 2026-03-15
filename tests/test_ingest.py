@@ -148,14 +148,14 @@ async def test_pipeline_ingest_file(tmp_path: Path, config: NixxConfig) -> None:
     mock_pool = MagicMock()
 
     with (
-        patch("nixx.ingest.pipeline.OllamaClient") as MockClient,
+        patch("nixx.ingest.pipeline.create_llm_client") as mock_factory,
         patch("nixx.ingest.pipeline.save_source", new_callable=AsyncMock) as mock_save_source,
         patch("nixx.ingest.pipeline.save_memory", new_callable=AsyncMock) as mock_save_memory,
     ):
-        MockClient.return_value.embed = AsyncMock(return_value=[0.1] * 1024)
-        MockClient.return_value.chat = AsyncMock(
-            return_value={"message": {"content": "A test summary."}}
-        )
+        mock_client = MagicMock()
+        mock_client.embed = AsyncMock(return_value=[0.1] * 1024)
+        mock_client.chat = AsyncMock(return_value={"message": {"content": "A test summary."}})
+        mock_factory.return_value = mock_client
         mock_save_source.return_value = 42
 
         pipeline = IngestPipeline(config, mock_pool)
@@ -175,7 +175,7 @@ async def test_pipeline_ingest_empty_file(tmp_path: Path, config: NixxConfig) ->
     f.write_text("   ")
     mock_pool = MagicMock()
 
-    with patch("nixx.ingest.pipeline.OllamaClient"):
+    with patch("nixx.ingest.pipeline.create_llm_client"):
         pipeline = IngestPipeline(config, mock_pool)
         with pytest.raises(ValueError, match="No content extracted"):
             await pipeline.ingest(str(f))
@@ -190,16 +190,18 @@ async def test_ingest_endpoint(mocked_app_client: httpx.AsyncClient, tmp_path: P
     f.write_text("# Nixx\n\nSelf-hosted memory system.")
 
     with (
-        patch("nixx.ingest.pipeline.OllamaClient") as MockClient,
+        patch("nixx.ingest.pipeline.create_llm_client") as mock_factory,
         patch("nixx.ingest.pipeline.save_source", new_callable=AsyncMock) as mock_save_source,
         patch("nixx.ingest.pipeline.save_memory", new_callable=AsyncMock),
-        patch("nixx.server.OllamaClient") as MockServerClient,
+        patch("nixx.server.create_llm_client") as mock_server_factory,
     ):
-        MockClient.return_value.embed = AsyncMock(return_value=[0.1] * 1024)
-        MockClient.return_value.chat = AsyncMock(
-            return_value={"message": {"content": "A summary."}}
-        )
-        MockServerClient.return_value.chat = AsyncMock(return_value={})
+        mock_client = MagicMock()
+        mock_client.embed = AsyncMock(return_value=[0.1] * 1024)
+        mock_client.chat = AsyncMock(return_value={"message": {"content": "A summary."}})
+        mock_factory.return_value = mock_client
+        mock_server_client = MagicMock()
+        mock_server_client.chat = AsyncMock(return_value={})
+        mock_server_factory.return_value = mock_server_client
         mock_save_source.return_value = 1
 
         cfg = NixxConfig()

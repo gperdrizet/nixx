@@ -27,29 +27,26 @@ class NixxConfig(BaseSettings):
     reload: bool = Field(default=False, description="Enable auto-reload for development")
 
     # LLM settings
-    llm_provider: str = Field(default="ollama", description="LLM provider (ollama, vllm)")
-    llm_base_url: str = Field(default="http://localhost:11434", description="Base URL for LLM API")
-    llm_model: str = Field(default="qwen2.5-coder:7b", description="Default LLM model")
+    llm_provider: str = Field(default="llamacpp", description="LLM provider (llamacpp, ollama)")
+    llm_base_url: str = Field(default="http://localhost:8080", description="Base URL for LLM API")
+    llm_model: str = Field(default="gpt-oss-20b", description="Default LLM model")
     llm_temperature: float = Field(default=0.7, description="LLM temperature")
+    llm_api_key: Optional[str] = Field(
+        default=None, description="API key for the LLM backend (used by llamacpp provider)"
+    )
 
     # Memory settings
     memory_provider: str = Field(default="pgvector", description="Vector DB provider")
     memory_path: Path = Field(default=Path("./data/memory"), description="Path to memory storage")
-    embedding_model: str = Field(default="mxbai-embed-large", description="Ollama embedding model")
+    embedding_model: str = Field(default="mxbai-embed-large", description="Embedding model name")
     embedding_dimensions: int = Field(default=1024, description="Embedding vector dimensions")
 
     # Database settings
     database_url: str = Field(
         default="sqlite:///./data/nixx.db", description="Database connection URL"
     )
-    db_echo: bool = Field(default=False, description="Enable SQL query logging")
     postgres_password: Optional[str] = Field(
         default=None, description="Password for the nixx PostgreSQL role (used by init-db.sh)"
-    )
-
-    # Security settings
-    encryption_key: Optional[str] = Field(
-        default=None, description="Encryption key for sensitive data"
     )
 
     # Ingest handler plugins

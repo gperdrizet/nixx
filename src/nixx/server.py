@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from nixx.config import NixxConfig
 from nixx.ingest.pipeline import IngestPipeline
-from nixx.llm.client import OllamaClient
+from nixx.llm import LLMClient, create_llm_client
 from nixx.memory.db import create_pool, get_source, get_source_content, init_schema, list_sources
 from nixx.memory.store import MemoryStore
 from nixx.prompts import SYSTEM_PROMPT
@@ -76,7 +76,11 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         await pool.close()
 
     app = FastAPI(title="nixx", version="0.1.0", lifespan=lifespan)
-    llm = OllamaClient(base_url=config.llm_base_url)
+    llm = create_llm_client(
+        provider=config.llm_provider,
+        base_url=config.llm_base_url,
+        api_key=config.llm_api_key,
+    )
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -279,7 +283,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
 
 
 async def _chat_event_stream(
-    llm: OllamaClient,
+    llm: LLMClient,
     model: str,
     messages: list[dict[str, str]],
     temperature: float,
@@ -331,7 +335,7 @@ async def _chat_event_stream(
 
 
 async def _completion_event_stream(
-    llm: OllamaClient,
+    llm: LLMClient,
     model: str,
     prompt: str,
     temperature: float,

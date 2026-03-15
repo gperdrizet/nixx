@@ -75,25 +75,36 @@ search fast at scale. All three tiers of the memory system live here: `buffer`,
 
 ---
 
-## Ollama
+## llama.cpp
 
-Local LLM runtime. Manages model weights on disk, handles GPU routing, and exposes an
-HTTP API. Nixx talks to it via `/api/chat` (streaming and non-streaming) and `/api/embed`
-(embeddings). The default models are `qwen2.5-coder:7b` for inference and
-`mxbai-embed-large` for 1024-d embeddings.
+Default LLM backend. Runs a local HTTP server with an OpenAI-compatible API on port
+8080. Handles both chat completions (`/v1/chat/completions`) and embeddings
+(`/v1/embeddings`). The default model is `gpt-oss-20b`. Supports API key
+authentication via Bearer token.
+
+- [llama.cpp GitHub](https://github.com/ggerganov/llama.cpp)
+- [llama.cpp server docs](https://github.com/ggerganov/llama.cpp/tree/master/examples/server)
+
+---
+
+## Ollama (fallback)
+
+Alternative LLM runtime. Set `NIXX_LLM_PROVIDER=ollama` and
+`NIXX_LLM_BASE_URL=http://localhost:11434` in `.env` to use it. Manages model weights
+on disk, handles GPU routing, and exposes a proprietary HTTP API (`/api/chat`,
+`/api/embed`). Useful for quick model switching and experimentation.
 
 - [Ollama docs](https://ollama.com/docs)
 - [Ollama GitHub](https://github.com/ollama/ollama)
-- [mxbai-embed-large model card](https://ollama.com/library/mxbai-embed-large)
-- [qwen2.5-coder model card](https://ollama.com/library/qwen2.5-coder)
 
 ---
 
 ## httpx
 
-Async HTTP client used by `OllamaClient` to talk to Ollama, and by the TUI to call the
-nixx server. Supports streaming responses via `client.stream()`, which is how token-by-token
-SSE streaming is consumed. Drop-in replacement for `requests` with async support.
+Async HTTP client used by the LLM clients to talk to llama.cpp/Ollama, and by the TUI
+to call the nixx server. Supports streaming responses via `client.stream()`, which is
+how token-by-token SSE streaming is consumed. Drop-in replacement for `requests` with
+async support.
 
 - [httpx docs](https://www.python-httpx.org/)
 

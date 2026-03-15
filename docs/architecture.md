@@ -6,7 +6,7 @@ Processes, modules, and communication paths as they exist today.
 
 ```text
                 ┌─────────────────────────────────────────┐
-                │  nixx chat · Python · Textual         │
+                │  nixx chat · Python · Textual           │
                 │                                         │
                 │  NixxApp                                │
                 │    _history  list[dict]  (ephemeral)    │
@@ -19,7 +19,7 @@ Processes, modules, and communication paths as they exist today.
                                     │  GET  /v1/sources/{id}/content
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  nixx serve · Python · Uvicorn + FastAPI                          │
+│  nixx serve · Python · Uvicorn + FastAPI                            │
 │                                                                     │
 │  ┌───────────────────────────┐    ┌──────────────────────────────┐  │
 │  │ POST /v1/chat/completions │    │ prompts.py                   │  │
@@ -38,20 +38,23 @@ Processes, modules, and communication paths as they exist today.
 │                               │ create_source · ingest           │  │
 │                               └──────────┬───────────────────┬───┘  │
 │  ┌──────────────────────────┐            │ embed             │ SQL  │
-│  │ OllamaClient             │◀───────────┘           asyncpg │      │
+│  │ LLMClient (factory)      │◀───────────┘           asyncpg │      │
 │  │ chat_stream · embed      │                       pgvector │      │
 │  └──────────────┬───────────┘                                │      │
 └─────────────────│────────────────────────────────────────────┬─│────┘
-                  │  HTTP /api/chat + /api/embed               │ │
+                  │ HTTP /v1/chat/completions + /v1/embeddings │ │
+                  │ (OpenAI-compatible protocol)               │ │
                   ▼                                            ▼ ▼
   ┌───────────────────────────────┐   ┌────────────────────────────────────────┐
-  │  Ollama · port 11434          │   │  PostgreSQL + pgvector · port 5432     │
-  │                               │   │                                        │
-  │  qwen2.5-coder:7b             │   │  buffer   (append-only message tape)   │
-  │    inference                  │   │  sources  (meaningful named units)     │
-  │  mxbai-embed-large            │   │  memories (embedded recall index)      │
-  │    1024-d embeddings          │   │                                        │
-  └───────────────────────────────┘   └────────────────────────────────────────┘
+  │  llama.cpp · port 8080        │   │  PostgreSQL + pgvector · port 5432     │
+  │  (default)                    │   │                                        │
+  │  gpt-oss-20b                  │   │  buffer   (append-only message tape)   │
+  │    inference + embeddings     │   │  sources  (meaningful named units)     │
+  │                               │   │  memories (embedded recall index)      │
+  │  Ollama · port 11434          │   └────────────────────────────────────────┘
+  │  (fallback, set provider to   │
+  │   "ollama" in .env)           │
+  └───────────────────────────────┘
 ```
 
 ---
@@ -77,13 +80,13 @@ Where data lives, what it contains, and how it flows between structures.
                                ▼
   assembled by server per turn
   ┌──────────────────────────────────────────────────────────────────┐
-  │  system ── SYSTEM_PROMPT + recalled memory bullets               │
+  │  system  ── SYSTEM_PROMPT + recalled memory bullets              │
   │  user    ── turn 1                                               │
   │  asst.   ── turn 1 response                                      │
   │  ...                                                             │
   │  user    ── current turn                                         │
   └────────────────────────────┬─────────────────────────────────────┘
-                               │  sent to Ollama · response written to buffer
+                               │  sent to LLM backend · response written to buffer
                                ▼
 
   PERSISTENT · PostgreSQL

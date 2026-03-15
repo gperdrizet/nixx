@@ -8,7 +8,7 @@ import asyncpg
 
 from nixx.config import NixxConfig
 from nixx.ingest.handlers import HandlerRegistry
-from nixx.llm.client import OllamaClient
+from nixx.llm import create_llm_client
 from nixx.memory.db import save_memory, save_source
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,11 @@ class IngestPipeline:
     def __init__(self, config: NixxConfig, pool: asyncpg.Pool) -> None:  # type: ignore[type-arg]
         self._config = config
         self._pool = pool
-        self._client = OllamaClient(base_url=config.llm_base_url)
+        self._client = create_llm_client(
+            provider=config.llm_provider,
+            base_url=config.llm_base_url,
+            api_key=config.llm_api_key,
+        )
         self._registry = HandlerRegistry(handlers_dir=config.handlers_dir)
 
     async def ingest(self, source: str, name: str | None = None) -> dict:

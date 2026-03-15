@@ -42,8 +42,9 @@ Nixx is an open-source, local-first system designed to provide unified context a
         ┌───────────────────┴──────────────────┐
         │                                      │
 ┌───────▼────────┐                   ┌─────────▼────────┐
-│  Orchestrator  │                   │  Memory System   │
-│  (Ollama/vLLM) │                   │  (Vector DB +    │
+│  LLM Backend   │                   │  Memory System   │
+│(llama.cpp/     │                   │  (Vector DB +    │
+│ Ollama/vLLM)   │                   │                  │
 │                │                   │   Graph)         │
 └────────────────┘                   └──────────────────┘
 ```
@@ -63,7 +64,7 @@ Follow the build journey in [docs/build-log/](docs/build-log/).
 ### Requirements
 
 - Python 3.12+
-- [Ollama](https://ollama.com) (LLM backend)
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) server (default LLM backend), or [Ollama](https://ollama.com) (fallback)
 - PostgreSQL 14+ with the [pgvector](https://github.com/pgvector/pgvector) extension
 - CUDA-capable GPU (12+ GB VRAM)
 - 64 GB+ system RAM
@@ -72,35 +73,39 @@ Follow the build journey in [docs/build-log/](docs/build-log/).
 ### Setup
 
 ```bash
-# 1. Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
+# 1. Start llama.cpp server (default backend)
+# See https://github.com/ggerganov/llama.cpp for build instructions.
+# llama.cpp should serve on port 8080 with your model loaded.
+#
+# Alternative: use Ollama as the LLM backend
+# curl -fsSL https://ollama.com/install.sh | sh
+# ollama pull qwen2.5-coder:7b && ollama pull mxbai-embed-large
+# Then set NIXX_LLM_PROVIDER=ollama and NIXX_LLM_BASE_URL=http://localhost:11434 in .env
 
-# 2. Pull the default models
-ollama pull qwen2.5-coder:7b      # inference
-ollama pull mxbai-embed-large     # embeddings
-
-# 3. Install pgvector on your PostgreSQL instance
+# 2. Install pgvector on your PostgreSQL instance
 sudo apt install postgresql-16-pgvector  # adjust version as needed
 
-# 4. Create the nixx database role and enable the extension
+# 3. Create the nixx database role and enable the extension
 bash scripts/init-db.sh   # reads NIXX_POSTGRES_PASSWORD from .env
 
-# 5. Clone repository
+# 4. Clone repository
 git clone https://github.com/yourusername/nixx.git
 cd nixx
 
-# 6. Create virtual environment
+# 5. Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
 
-# 7. Install dependencies
+# 6. Install dependencies
 pip install -e ".[dev]"
 
-# 8. Configure
+# 7. Configure
 cp .env.example .env
-# Edit .env - set NIXX_DATABASE_URL and NIXX_POSTGRES_PASSWORD
+# Edit .env - set NIXX_DATABASE_URL, NIXX_POSTGRES_PASSWORD
+# For llama.cpp: set NIXX_LLM_API_KEY if your server requires auth
+# For Ollama: set NIXX_LLM_PROVIDER=ollama, NIXX_LLM_BASE_URL=http://localhost:11434
 
-# 9. Start the server
+# 8. Start the server
 nixx serve
 ```
 
@@ -119,7 +124,8 @@ Nixx runs as a set of systemd services orchestrated by a single target:
 | Service | Unit | Purpose |
 |---|---|---|
 | PostgreSQL | `postgresql@16-main` | Database (buffer, sources, memories) |
-| Ollama | `ollama.service` | LLM inference + embeddings |
+| llama.cpp | `llama-server.service` | LLM inference + embeddings (default) |
+| Ollama | `ollama.service` | LLM fallback (optional) |
 | nixx server | `nixx-server.service` | FastAPI API on port 8000 |
 | pgweb | `nixx-pgweb.service` | Database web UI on port 8081 (optional) |
 | Tailscale | `tailscaled.service` | VPN for remote access |

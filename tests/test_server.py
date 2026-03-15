@@ -51,8 +51,9 @@ async def test_chat_completions_uses_default_model(
 
 
 async def test_chat_completions_model_override(config: NixxConfig) -> None:
-    with patch("nixx.server.OllamaClient") as MockClient:
-        MockClient.return_value.chat = AsyncMock(return_value=CHAT_RESPONSE)
+    mock_client = AsyncMock()
+    mock_client.chat = AsyncMock(return_value=CHAT_RESPONSE)
+    with patch("nixx.server.create_llm_client", return_value=mock_client):
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         async with httpx.AsyncClient(
@@ -66,10 +67,9 @@ async def test_chat_completions_model_override(config: NixxConfig) -> None:
 
 
 async def test_chat_completions_ollama_error(config: NixxConfig) -> None:
-    with patch("nixx.server.OllamaClient") as MockClient:
-        MockClient.return_value.chat = AsyncMock(
-            side_effect=httpx.ConnectError("All connection attempts failed")
-        )
+    mock_client = AsyncMock()
+    mock_client.chat = AsyncMock(side_effect=httpx.ConnectError("All connection attempts failed"))
+    with patch("nixx.server.create_llm_client", return_value=mock_client):
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         async with httpx.AsyncClient(
@@ -88,8 +88,9 @@ async def test_chat_completions_streaming(config: NixxConfig) -> None:
         yield {"message": {"role": "assistant", "content": "Hi"}, "done": False}
         yield {"message": {"role": "assistant", "content": ""}, "done": True}
 
-    with patch("nixx.server.OllamaClient") as MockClient:
-        MockClient.return_value.chat_stream = mock_chat_stream
+    mock_client = AsyncMock()
+    mock_client.chat_stream = mock_chat_stream
+    with patch("nixx.server.create_llm_client", return_value=mock_client):
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         async with httpx.AsyncClient(
@@ -128,10 +129,11 @@ async def test_completions_success(mocked_app_client: httpx.AsyncClient) -> None
 
 
 async def test_completions_ollama_error(config: NixxConfig) -> None:
-    with patch("nixx.server.OllamaClient") as MockClient:
-        MockClient.return_value.generate = AsyncMock(
-            side_effect=httpx.ConnectError("All connection attempts failed")
-        )
+    mock_client = AsyncMock()
+    mock_client.generate = AsyncMock(
+        side_effect=httpx.ConnectError("All connection attempts failed")
+    )
+    with patch("nixx.server.create_llm_client", return_value=mock_client):
         app = create_app(config)
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -148,8 +150,9 @@ async def test_completions_streaming(config: NixxConfig) -> None:
         yield {"response": "def foo", "done": False}
         yield {"response": "(): pass", "done": True}
 
-    with patch("nixx.server.OllamaClient") as MockClient:
-        MockClient.return_value.generate_stream = mock_generate_stream
+    mock_client = AsyncMock()
+    mock_client.generate_stream = mock_generate_stream
+    with patch("nixx.server.create_llm_client", return_value=mock_client):
         app = create_app(config)
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"

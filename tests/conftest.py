@@ -10,7 +10,8 @@ import pytest
 from nixx.config import NixxConfig
 from nixx.server import create_app
 
-# ── Reusable Ollama response shapes ──────────────────────────────────────────
+# ── Reusable LLM response shapes ─────────────────────────────────────────────
+# These match the internal format returned by both OllamaClient and OpenAIClient.
 
 CHAT_RESPONSE: dict = {
     "message": {"role": "assistant", "content": "Hello!"},
@@ -39,7 +40,7 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> NixxConfig:
     - NixxConfig.__init__ creates data/ and config/ inside tmp_path, not cwd
     """
     monkeypatch.chdir(tmp_path)
-    for key in ["NIXX_DATABASE_URL", "NIXX_POSTGRES_PASSWORD", "NIXX_ENCRYPTION_KEY"]:
+    for key in ["NIXX_DATABASE_URL", "NIXX_POSTGRES_PASSWORD"]:
         monkeypatch.delenv(key, raising=False)
     return NixxConfig(_env_file=tmp_path / ".env")
 
@@ -86,13 +87,14 @@ async def app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncClient, No
 
 @pytest.fixture
 async def mocked_app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncClient, None]:
-    """HTTP client against the app with OllamaClient and MemoryStore mocked out.
+    """HTTP client against the app with LLM client and MemoryStore mocked out.
 
-    Use for LLM endpoint tests that should not hit Ollama or Postgres.
+    Use for LLM endpoint tests that should not hit the backend or Postgres.
     """
-    with patch("nixx.server.OllamaClient") as MockClient:
-        MockClient.return_value.chat = AsyncMock(return_value=CHAT_RESPONSE)
-        MockClient.return_value.generate = AsyncMock(return_value=GENERATE_RESPONSE)
+    mock_client = MagicMock()
+    mock_client.chat = AsyncMock(return_value=CHAT_RESPONSE)
+    mock_client.generate = AsyncMock(return_value=GENERATE_RESPONSE)
+    with patch("nixx.server.create_llm_client", return_value=mock_client):
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         async with httpx.AsyncClient(

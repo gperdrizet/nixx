@@ -6,7 +6,7 @@ import asyncpg
 
 from nixx.config import NixxConfig
 from nixx.ingest.chunker import chunk as chunk_text
-from nixx.llm.client import OllamaClient
+from nixx.llm import create_llm_client
 from nixx.memory.db import (
     get_buffer_entries,
     get_last_source_end_id,
@@ -31,7 +31,11 @@ class MemoryStore:
     def __init__(self, config: NixxConfig, pool: asyncpg.Pool) -> None:  # type: ignore[type-arg]
         self._config = config
         self._pool = pool
-        self._client = OllamaClient(base_url=config.llm_base_url)
+        self._client = create_llm_client(
+            provider=config.llm_provider,
+            base_url=config.llm_base_url,
+            api_key=config.llm_api_key,
+        )
 
     async def save_to_buffer(self, role: str, content: str, origin: str = "api") -> int:
         """Append a message to the persistent buffer. Returns the new id."""
