@@ -128,30 +128,3 @@ async def test_base_url_trailing_slash_stripped() -> None:
     client = OpenAIClient(base_url=BASE_URL + "/")
     await client.chat("model", [])
     assert respx.calls.call_count == 1
-
-
-# ── Factory ───────────────────────────────────────────────────────────────────
-
-
-def test_factory_creates_ollama_client() -> None:
-    from nixx.llm import create_llm_client
-    from nixx.llm.client import OllamaClient
-
-    client = create_llm_client(provider="ollama", base_url="http://localhost:11434")
-    assert isinstance(client, OllamaClient)
-
-
-def test_factory_creates_openai_client() -> None:
-    from nixx.llm import create_llm_client
-
-    client = create_llm_client(
-        provider="llamacpp", base_url="http://localhost:8080", api_key="sk-test"
-    )
-    assert isinstance(client, OpenAIClient)
-
-
-def test_factory_defaults_to_openai_client() -> None:
-    from nixx.llm import create_llm_client
-
-    client = create_llm_client(provider="vllm", base_url="http://localhost:8080")
-    assert isinstance(client, OpenAIClient)

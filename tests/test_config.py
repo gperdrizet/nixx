@@ -17,10 +17,9 @@ def test_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert cfg.host == "127.0.0.1"
     assert cfg.port == 8000
     assert cfg.reload is False
-    assert cfg.llm_provider == "llamacpp"
     assert cfg.llm_model == "gpt-oss-20b"
     assert cfg.llm_temperature == 0.7
-    assert "sqlite" in cfg.database_url
+    assert "postgresql" in cfg.database_url
     assert cfg.postgres_password is None
     assert cfg.enable_hardware_monitoring is False
 

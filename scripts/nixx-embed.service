@@ -1,0 +1,22 @@
+[Unit]
+Description=nixx embedding server (llama.cpp)
+After=network.target
+
+[Service]
+Type=simple
+User=siderealyear
+ExecStart=/opt/llama.cpp/build/bin/llama-server \
+    --model /home/siderealyear/nixx/models/mxbai-embed-large-v1-f16.gguf \
+    --port 8082 \
+    --host 127.0.0.1 \
+    --embedding \
+    --ctx-size 512
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=nixx.target

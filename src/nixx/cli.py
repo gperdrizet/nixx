@@ -50,7 +50,6 @@ def _status(config: NixxConfig, args: argparse.Namespace) -> None:
     status_colour = "green" if data.get("status") == "ok" else "yellow"
     table.add_row("status", f"[{status_colour}]{data.get('status', '?')}[/]")
     table.add_row("model", data.get("model", "?"))
-    table.add_row("llm", data.get("llm", "?"))
 
     console.print(table)
 

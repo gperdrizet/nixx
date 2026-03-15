@@ -4,8 +4,8 @@ Documentation=https://github.com/gperdrizet/nixx
 After=network.target
 
 # Core dependencies
-Requires=postgresql.service
-Wants=ollama.service nixx-server.service nixx-pgweb.service tailscaled.service
+Requires=docker.service
+Wants=nixx-embed.service nixx-server.service nixx-pgweb.service tailscaled.service
 
 [Install]
 # Manually managed: sudo systemctl start nixx.target

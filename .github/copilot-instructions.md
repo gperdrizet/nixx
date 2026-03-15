@@ -12,10 +12,10 @@ Frontend Layer (TUI / Zed / VS Code / Neovim)
   OpenAI-compatible API (FastAPI + Uvicorn)
         ↓                       ↓
   LLM Backend               Memory System
-  (llama.cpp / Ollama)  (PostgreSQL + pgvector + Graph)
+  (llama.cpp)           (PostgreSQL + pgvector + Graph)
 ```
 
-All frontends communicate only through the OpenAI-compatible API - no direct backend imports from frontend code. Default LLM: `gpt-oss-20b` via llama.cpp server. Default embedding model: `mxbai-embed-large` (1024d). Ollama is a supported fallback (`NIXX_LLM_PROVIDER=ollama`). PostgreSQL + pgvector is the only supported database; SQLite is not used.
+All frontends communicate only through the OpenAI-compatible API - no direct backend imports from frontend code. Default LLM: `gpt-oss-20b` via llama.cpp server. Default embedding model: `mxbai-embed-large` (1024d). PostgreSQL + pgvector is the only database.
 
 Entry points: `nixx` → `nixx.cli:main` | `nixx-server` → `nixx.server:main`
 

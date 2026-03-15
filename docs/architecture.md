@@ -38,23 +38,27 @@ Processes, modules, and communication paths as they exist today.
 │                               │ create_source · ingest           │  │
 │                               └──────────┬───────────────────┬───┘  │
 │  ┌──────────────────────────┐            │ embed             │ SQL  │
-│  │ LLMClient (factory)      │◀───────────┘           asyncpg │      │
-│  │ chat_stream · embed      │                       pgvector │      │
+│  │ OpenAIClient (chat)      │◀───┐      │           asyncpg │      │
+│  │ chat_stream              │    │      │          pgvector │      │
+│  └──────────────┬───────────┘    │      │                   │      │
+│  ┌──────────────────────────┐    │      │                   │      │
+│  │ OpenAIClient (embed)     │◀───┴──────┘                   │      │
+│  │ embed                    │                                │      │
 │  └──────────────┬───────────┘                                │      │
 └─────────────────│────────────────────────────────────────────┬─│────┘
-                  │ HTTP /v1/chat/completions + /v1/embeddings │ │
+                  │ HTTP /v1/chat/completions                  │ │
+                  │      /v1/embeddings                        │ │
                   │ (OpenAI-compatible protocol)               │ │
-                  ▼                                            ▼ ▼
-  ┌───────────────────────────────┐   ┌────────────────────────────────────────┐
-  │  llama.cpp · port 8080        │   │  PostgreSQL + pgvector · port 5432     │
-  │  (default)                    │   │                                        │
-  │  gpt-oss-20b                  │   │  buffer   (append-only message tape)   │
-  │    inference + embeddings     │   │  sources  (meaningful named units)     │
-  │                               │   │  memories (embedded recall index)      │
-  │  Ollama · port 11434          │   └────────────────────────────────────────┘
-  │  (fallback, set provider to   │
-  │   "ollama" in .env)           │
-  └───────────────────────────────┘
+        ┌─────────┴──────────┐                                 │ │
+        ▼                    ▼                                 ▼ ▼
+  ┌────────────────────┐ ┌────────────────────┐ ┌────────────────────────────────┐
+  │ llama.cpp (remote) │ │ llama.cpp (local)  │ │ PostgreSQL + pgvector · 5432   │
+  │ gpt.perdrizet.org  │ │ localhost:8082     │ │ (student-postgres container)   │
+  │                    │ │                    │ │                                │
+  │ gpt-oss-20b        │ │ mxbai-embed-large  │ │ buffer  (message tape)         │
+  │ chat + completions │ │ embeddings         │ │ sources (named units)          │
+  └────────────────────┘ └────────────────────┘ │ memories (recall index)        │
+                                                └────────────────────────────────┘
 ```
 
 ---

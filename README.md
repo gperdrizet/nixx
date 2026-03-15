@@ -17,7 +17,6 @@ Nixx is an open-source, local-first system designed to provide unified context a
 - **Custom terminal UI** for terminal-native workflows
 - **OpenAI-compatible API** for editor integration (Zed, VS Code, Neovim, etc.)
 - **Knowledge graph** connecting conversations, code, and context
-- **Multi-model support** for easy LLM experimentation
 - **Encrypted storage** for conversation history and personal data
 
 ## Architecture
@@ -43,8 +42,8 @@ Nixx is an open-source, local-first system designed to provide unified context a
         │                                      │
 ┌───────▼────────┐                   ┌─────────▼────────┐
 │  LLM Backend   │                   │  Memory System   │
-│(llama.cpp/     │                   │  (Vector DB +    │
-│ Ollama/vLLM)   │                   │                  │
+│  (llama.cpp)   │                   │  (Vector DB +    │
+│                │                   │                  │
 │                │                   │   Graph)         │
 └────────────────┘                   └──────────────────┘
 ```
@@ -64,8 +63,8 @@ Follow the build journey in [docs/build-log/](docs/build-log/).
 ### Requirements
 
 - Python 3.12+
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) server (default LLM backend), or [Ollama](https://ollama.com) (fallback)
-- PostgreSQL 14+ with the [pgvector](https://github.com/pgvector/pgvector) extension
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) server (LLM backend)
+- Docker (PostgreSQL + pgvector runs as a container)
 - CUDA-capable GPU (12+ GB VRAM)
 - 64 GB+ system RAM
 - Linux
@@ -73,40 +72,32 @@ Follow the build journey in [docs/build-log/](docs/build-log/).
 ### Setup
 
 ```bash
-# 1. Start llama.cpp server (default backend)
-# See https://github.com/ggerganov/llama.cpp for build instructions.
-# llama.cpp should serve on port 8080 with your model loaded.
-#
-# Alternative: use Ollama as the LLM backend
-# curl -fsSL https://ollama.com/install.sh | sh
-# ollama pull qwen2.5-coder:7b && ollama pull mxbai-embed-large
-# Then set NIXX_LLM_PROVIDER=ollama and NIXX_LLM_BASE_URL=http://localhost:11434 in .env
+# 1. Start llama.cpp server
+# The production instance runs at gpt.perdrizet.org with API key auth.
+# For local development, see https://github.com/ggerganov/llama.cpp
 
-# 2. Install pgvector on your PostgreSQL instance
-sudo apt install postgresql-16-pgvector  # adjust version as needed
+# 2. Start PostgreSQL + pgvector container
+docker compose up -d
 
-# 3. Create the nixx database role and enable the extension
-bash scripts/init-db.sh   # reads NIXX_POSTGRES_PASSWORD from .env
-
-# 4. Clone repository
+# 3. Clone repository
 git clone https://github.com/yourusername/nixx.git
 cd nixx
 
-# 5. Create virtual environment
+# 4. Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
 
-# 6. Install dependencies
+# 5. Install dependencies
 pip install -e ".[dev]"
 
-# 7. Configure
+# 6. Configure
 cp .env.example .env
 # Edit .env - set NIXX_DATABASE_URL, NIXX_POSTGRES_PASSWORD
-# For llama.cpp: set NIXX_LLM_API_KEY if your server requires auth
-# For Ollama: set NIXX_LLM_PROVIDER=ollama, NIXX_LLM_BASE_URL=http://localhost:11434
+# Set NIXX_LLM_API_KEY if your server requires auth
 
-# 8. Start the server
-nixx serve
+# 7. Start the server
+sudo systemctl start nixx-server
+# Or run directly: nixx serve
 ```
 
 Verify it's working:
@@ -117,15 +108,26 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   -d '{"messages": [{"role": "user", "content": "hello"}]}'
 ```
 
+### Server management
+
+The nixx server is managed via systemctl:
+
+```bash
+sudo systemctl start nixx-server     # start
+sudo systemctl stop nixx-server      # stop
+sudo systemctl restart nixx-server   # restart
+sudo systemctl status nixx-server    # check status
+journalctl -u nixx-server -f         # follow logs
+```
+
 ### Services
 
 Nixx runs as a set of systemd services orchestrated by a single target:
 
 | Service | Unit | Purpose |
 |---|---|---|
-| PostgreSQL | `postgresql@16-main` | Database (buffer, sources, memories) |
-| llama.cpp | `llama-server.service` | LLM inference + embeddings (default) |
-| Ollama | `ollama.service` | LLM fallback (optional) |
+| PostgreSQL | Docker container (`student-postgres`) | Database (buffer, sources, memories) |
+| embedding server | `nixx-embed.service` | llama.cpp with mxbai-embed-large on port 8082 |
 | nixx server | `nixx-server.service` | FastAPI API on port 8000 |
 | pgweb | `nixx-pgweb.service` | Database web UI on port 8081 (optional) |
 | Tailscale | `tailscaled.service` | VPN for remote access |
@@ -152,7 +154,7 @@ See [docs/architecture.md](docs/architecture.md) for the full system design.
 
 ### Database management
 
-Nixx uses PostgreSQL for persistent storage (buffer, sources, memories). To view and manage the data directly:
+Nixx uses PostgreSQL (containerized via Docker with pgvector) for persistent storage (buffer, sources, memories). To view and manage the data directly:
 
 **pgweb** - lightweight web-based PostgreSQL browser:
 ```bash
@@ -216,7 +218,7 @@ pytest -v                     # run tests
 - [x] Backend API server (`/v1/chat/completions`, `/v1/completions`)
 - [x] CLI (`nixx serve`, `nixx status`)
 - [x] Test suite and CI
-- [x] Memory system (pgvector + Ollama embeddings)
+- [x] Memory system (pgvector embeddings)
 - [x] Terminal UI (Textual-based TUI with slash commands)
 - [x] Source lookup and management (`/sources`, `/lookup`, `/source`)
 - [x] Phone access via SSH over Tailscale

@@ -125,7 +125,7 @@ AND id NOT IN (
 
 ```sql
 -- Find memories similar to a query embedding
--- (You'd need to generate the embedding first via Ollama)
+-- (You'd need to generate the embedding first via the LLM API)
 -- This example shows the structure:
 SELECT 
     id,

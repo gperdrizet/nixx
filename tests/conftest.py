@@ -11,7 +11,7 @@ from nixx.config import NixxConfig
 from nixx.server import create_app
 
 # ── Reusable LLM response shapes ─────────────────────────────────────────────
-# These match the internal format returned by both OllamaClient and OpenAIClient.
+# These match the internal format returned by OpenAIClient.
 
 CHAT_RESPONSE: dict = {
     "message": {"role": "assistant", "content": "Hello!"},
@@ -94,7 +94,7 @@ async def mocked_app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncCli
     mock_client = MagicMock()
     mock_client.chat = AsyncMock(return_value=CHAT_RESPONSE)
     mock_client.generate = AsyncMock(return_value=GENERATE_RESPONSE)
-    with patch("nixx.server.create_llm_client", return_value=mock_client):
+    with patch("nixx.server.OpenAIClient", return_value=mock_client):
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         async with httpx.AsyncClient(

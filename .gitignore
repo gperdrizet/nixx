@@ -46,6 +46,7 @@ htmlcov/
 # Nixx specific
 data/
 logs/
+*.gguf
 *.log
 
 config/secrets.yaml

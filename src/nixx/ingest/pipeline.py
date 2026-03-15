@@ -8,7 +8,7 @@ import asyncpg
 
 from nixx.config import NixxConfig
 from nixx.ingest.handlers import HandlerRegistry
-from nixx.llm import create_llm_client
+from nixx.llm import OpenAIClient
 from nixx.memory.db import save_memory, save_source
 
 logger = logging.getLogger(__name__)
@@ -26,11 +26,8 @@ class IngestPipeline:
     def __init__(self, config: NixxConfig, pool: asyncpg.Pool) -> None:  # type: ignore[type-arg]
         self._config = config
         self._pool = pool
-        self._client = create_llm_client(
-            provider=config.llm_provider,
-            base_url=config.llm_base_url,
-            api_key=config.llm_api_key,
-        )
+        self._llm = OpenAIClient(base_url=config.llm_base_url, api_key=config.llm_api_key)
+        self._embedder = OpenAIClient(base_url=config.embedding_base_url)
         self._registry = HandlerRegistry(handlers_dir=config.handlers_dir)
 
     async def ingest(self, source: str, name: str | None = None) -> dict:
@@ -66,7 +63,7 @@ class IngestPipeline:
 
         # Embed and index each chunk individually.
         for i, chunk_text in enumerate(chunks):
-            embedding = await self._client.embed(self._config.embedding_model, chunk_text)
+            embedding = await self._embedder.embed(self._config.embedding_model, chunk_text)
             await save_memory(
                 self._pool,
                 content=chunk_text,
@@ -98,7 +95,7 @@ class IngestPipeline:
             {"role": "user", "content": f"Document: {name}\n\n{text}"},
         ]
         try:
-            result = await self._client.chat(self._config.llm_model, messages, temperature=0.3)
+            result = await self._llm.chat(self._config.llm_model, messages, temperature=0.3)
             return result.get("message", {}).get("content") or text[:500]
         except Exception:
             return text[:500]

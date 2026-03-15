@@ -63,8 +63,9 @@ are handled transparently as Python lists of floats.
 
 ## PostgreSQL + pgvector
 
-PostgreSQL is the only database. pgvector is a Postgres extension that adds a `vector`
-column type and vector similarity operators (`<=>` for cosine distance,
+PostgreSQL is the only database, running as a Docker container (`pgvector/pgvector:pg16`
+image, container name `student-postgres`). pgvector is a Postgres extension that adds a
+`vector` column type and vector similarity operators (`<=>` for cosine distance,
 `<->` for L2). The HNSW index on the `memories` table makes approximate nearest-neighbour
 search fast at scale. All three tiers of the memory system live here: `buffer`,
 `sources`, `memories`.
@@ -77,31 +78,20 @@ search fast at scale. All three tiers of the memory system live here: `buffer`,
 
 ## llama.cpp
 
-Default LLM backend. Runs a local HTTP server with an OpenAI-compatible API on port
-8080. Handles both chat completions (`/v1/chat/completions`) and embeddings
-(`/v1/embeddings`). The default model is `gpt-oss-20b`. Supports API key
-authentication via Bearer token.
+Default LLM backend. The production instance runs at `gpt.perdrizet.org` with API key
+authentication via Bearer token. For local development, llama.cpp can also run locally
+on port 8080. Exposes an OpenAI-compatible API for chat completions
+(`/v1/chat/completions`) and embeddings (`/v1/embeddings`). The default model is
+`gpt-oss-20b`.
 
 - [llama.cpp GitHub](https://github.com/ggerganov/llama.cpp)
 - [llama.cpp server docs](https://github.com/ggerganov/llama.cpp/tree/master/examples/server)
 
 ---
 
-## Ollama (fallback)
-
-Alternative LLM runtime. Set `NIXX_LLM_PROVIDER=ollama` and
-`NIXX_LLM_BASE_URL=http://localhost:11434` in `.env` to use it. Manages model weights
-on disk, handles GPU routing, and exposes a proprietary HTTP API (`/api/chat`,
-`/api/embed`). Useful for quick model switching and experimentation.
-
-- [Ollama docs](https://ollama.com/docs)
-- [Ollama GitHub](https://github.com/ollama/ollama)
-
----
-
 ## httpx
 
-Async HTTP client used by the LLM clients to talk to llama.cpp/Ollama, and by the TUI
+Async HTTP client used by the LLM client to talk to llama.cpp, and by the TUI
 to call the nixx server. Supports streaming responses via `client.stream()`, which is
 how token-by-token SSE streaming is consumed. Drop-in replacement for `requests` with
 async support.
@@ -195,7 +185,7 @@ internet. Runs as a systemd service (`tailscaled`).
 ## systemd
 
 Service orchestration for all nixx components. A `nixx.target` groups the stack:
-Ollama, nixx-server, pgweb, and Tailscale. Services are manually started
+nixx-server, pgweb, and Tailscale. Services are manually started
 (`sudo systemctl start nixx.target`), not enabled for auto-boot. Unit files live in
 `scripts/` and are symlinked into `/etc/systemd/system/`.
 

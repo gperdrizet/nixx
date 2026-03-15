@@ -1,4 +1,4 @@
-"""OpenAI-compatible HTTP client for LLM inference (llama.cpp, vLLM, etc.)."""
+"""HTTP client for llama.cpp server (OpenAI-compatible API)."""
 
 import json
 from collections.abc import AsyncGenerator
@@ -8,11 +8,7 @@ import httpx
 
 
 class OpenAIClient:
-    """Async client for OpenAI-compatible APIs (llama.cpp server, vLLM, etc.).
-
-    Returns responses in the same internal dict format as OllamaClient so the
-    nixx server layer doesn't need provider-specific branching.
-    """
+    """Async client for llama.cpp server."""
 
     def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 120.0) -> None:
         self._base_url = base_url.rstrip("/")
@@ -36,7 +32,7 @@ class OpenAIClient:
     ) -> dict[str, Any]:
         """Non-streaming chat completion.
 
-        Returns a dict matching OllamaClient's shape:
+        Returns a dict:
             {"message": {"role": ..., "content": ...}, "done": True,
              "prompt_eval_count": int, "eval_count": int}
         """
@@ -76,7 +72,7 @@ class OpenAIClient:
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Streaming chat completion.
 
-        Yields dicts matching OllamaClient's streaming shape:
+        Yields dicts:
             {"message": {"role": "assistant", "content": "token"}, "done": bool}
         """
         payload: dict[str, Any] = {
@@ -124,7 +120,7 @@ class OpenAIClient:
     ) -> dict[str, Any]:
         """Non-streaming text completion.
 
-        Returns a dict matching OllamaClient's shape:
+        Returns a dict:
             {"response": str, "done": True,
              "prompt_eval_count": int, "eval_count": int}
         """
@@ -164,7 +160,7 @@ class OpenAIClient:
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Streaming text completion.
 
-        Yields dicts matching OllamaClient's streaming shape:
+        Yields dicts:
             {"response": str, "done": bool}
         """
         payload: dict[str, Any] = {

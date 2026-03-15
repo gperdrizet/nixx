@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from nixx.config import NixxConfig
 from nixx.ingest.pipeline import IngestPipeline
-from nixx.llm import LLMClient, create_llm_client
+from nixx.llm import OpenAIClient
 from nixx.memory.db import create_pool, get_source, get_source_content, init_schema, list_sources
 from nixx.memory.store import MemoryStore
 from nixx.prompts import SYSTEM_PROMPT
@@ -76,15 +76,11 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         await pool.close()
 
     app = FastAPI(title="nixx", version="0.1.0", lifespan=lifespan)
-    llm = create_llm_client(
-        provider=config.llm_provider,
-        base_url=config.llm_base_url,
-        api_key=config.llm_api_key,
-    )
+    llm = OpenAIClient(base_url=config.llm_base_url, api_key=config.llm_api_key)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "model": config.llm_model, "llm": config.llm_provider}
+        return {"status": "ok", "model": config.llm_model}
 
     @app.get("/v1/debug/context")
     async def debug_context() -> dict[str, str | None]:
@@ -108,12 +104,12 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
 
         # Build system message: base identity prompt + recalled memory context
         memory: MemoryStore = app.state.memory
-        user_text = " ".join(m["content"] for m in messages if m["role"] == "user")
+        last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         context_block = ""
         recalled: list[dict] = []
-        if user_text:
+        if last_user:
             try:
-                recalled = await memory.recall(user_text)
+                recalled = await memory.recall(last_user)
                 context_block = memory.format_context(recalled)
             except Exception as exc:
                 logger.warning("Memory recall failed (continuing without context): %s", exc)
@@ -143,7 +139,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                     completion_id,
                     created,
                     memory=memory,
-                    user_text=user_text,
+                    user_text=last_user,
                 ),
                 media_type="text/event-stream",
             )
@@ -156,9 +152,9 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         content = result.get("message", {}).get("content", "")
 
         # Persist the exchange to the buffer.
-        if user_text:
+        if last_user:
             try:
-                await memory.save_to_buffer("user", user_text)
+                await memory.save_to_buffer("user", last_user)
                 if content:
                     await memory.save_to_buffer("assistant", content)
             except Exception as exc:
@@ -283,7 +279,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
 
 
 async def _chat_event_stream(
-    llm: LLMClient,
+    llm: OpenAIClient,
     model: str,
     messages: list[dict[str, str]],
     temperature: float,
@@ -335,7 +331,7 @@ async def _chat_event_stream(
 
 
 async def _completion_event_stream(
-    llm: LLMClient,
+    llm: OpenAIClient,
     model: str,
     prompt: str,
     temperature: float,

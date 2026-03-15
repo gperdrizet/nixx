@@ -6,7 +6,7 @@ import asyncpg
 
 from nixx.config import NixxConfig
 from nixx.ingest.chunker import chunk as chunk_text
-from nixx.llm import create_llm_client
+from nixx.llm import OpenAIClient
 from nixx.memory.db import (
     get_buffer_entries,
     get_last_source_end_id,
@@ -19,7 +19,7 @@ from nixx.memory.db import (
 
 
 class MemoryStore:
-    """Combines the Ollama embedder with the pgvector store.
+    """Combines the LLM embedder with the pgvector store.
 
     Typical lifecycle:
         store = MemoryStore(config, pool)
@@ -31,11 +31,8 @@ class MemoryStore:
     def __init__(self, config: NixxConfig, pool: asyncpg.Pool) -> None:  # type: ignore[type-arg]
         self._config = config
         self._pool = pool
-        self._client = create_llm_client(
-            provider=config.llm_provider,
-            base_url=config.llm_base_url,
-            api_key=config.llm_api_key,
-        )
+        self._llm = OpenAIClient(base_url=config.llm_base_url, api_key=config.llm_api_key)
+        self._embedder = OpenAIClient(base_url=config.embedding_base_url)
 
     async def save_to_buffer(self, role: str, content: str, origin: str = "api") -> int:
         """Append a message to the persistent buffer. Returns the new id."""
@@ -94,7 +91,7 @@ class MemoryStore:
         # Chunk and embed the verbatim transcript (not the summary)
         chunks = chunk_text(transcript)
         for i, chunk in enumerate(chunks):
-            embedding = await self._client.embed(self._config.embedding_model, chunk)
+            embedding = await self._embedder.embed(self._config.embedding_model, chunk)
             await save_memory(
                 self._pool,
                 content=chunk,
@@ -125,7 +122,7 @@ class MemoryStore:
             {"role": "user", "content": transcript},
         ]
         try:
-            result = await self._client.chat(self._config.llm_model, messages, temperature=0.3)
+            result = await self._llm.chat(self._config.llm_model, messages, temperature=0.3)
             return result.get("message", {}).get("content") or transcript[:500]
         except Exception:
             return transcript[:500]
@@ -137,7 +134,7 @@ class MemoryStore:
         metadata: dict | None = None,
     ) -> int:
         """Embed content and persist it to the memory store. Returns the new id."""
-        embedding = await self._client.embed(self._config.embedding_model, content)
+        embedding = await self._embedder.embed(self._config.embedding_model, content)
         return await save_memory(
             self._pool,
             content=content,
@@ -151,7 +148,7 @@ class MemoryStore:
 
         Each result dict has: id, content, source_id, metadata, created_at, similarity (0-1).
         """
-        embedding = await self._client.embed(self._config.embedding_model, query)
+        embedding = await self._embedder.embed(self._config.embedding_model, query)
         return await search_memories(self._pool, query_embedding=embedding, top_k=top_k)
 
     def format_context(self, memories: list[dict], threshold: float = 0.5) -> str:

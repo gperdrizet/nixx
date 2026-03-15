@@ -1,8 +1,8 @@
 [Unit]
 Description=nixx API server
-After=network.target postgresql.service ollama.service
-Requires=postgresql.service
-Wants=ollama.service
+After=network.target docker.service nixx-embed.service
+Requires=docker.service
+Wants=nixx-embed.service
 
 [Service]
 Type=simple

@@ -67,7 +67,7 @@ def test_serve_host_port_override(config: NixxConfig) -> None:
 def test_status_ok(config: NixxConfig) -> None:
     args = _build_parser().parse_args(["status"])
     mock_response = MagicMock()
-    mock_response.json.return_value = {"status": "ok", "model": "qwen2.5-coder:7b", "llm": "ollama"}
+    mock_response.json.return_value = {"status": "ok", "model": "gpt-oss-20b"}
     mock_response.raise_for_status.return_value = None
 
     with patch("nixx.cli.httpx.get", return_value=mock_response):

@@ -148,7 +148,7 @@ async def test_pipeline_ingest_file(tmp_path: Path, config: NixxConfig) -> None:
     mock_pool = MagicMock()
 
     with (
-        patch("nixx.ingest.pipeline.create_llm_client") as mock_factory,
+        patch("nixx.ingest.pipeline.OpenAIClient") as mock_factory,
         patch("nixx.ingest.pipeline.save_source", new_callable=AsyncMock) as mock_save_source,
         patch("nixx.ingest.pipeline.save_memory", new_callable=AsyncMock) as mock_save_memory,
     ):
@@ -175,7 +175,7 @@ async def test_pipeline_ingest_empty_file(tmp_path: Path, config: NixxConfig) ->
     f.write_text("   ")
     mock_pool = MagicMock()
 
-    with patch("nixx.ingest.pipeline.create_llm_client"):
+    with patch("nixx.ingest.pipeline.OpenAIClient"):
         pipeline = IngestPipeline(config, mock_pool)
         with pytest.raises(ValueError, match="No content extracted"):
             await pipeline.ingest(str(f))
@@ -190,10 +190,10 @@ async def test_ingest_endpoint(mocked_app_client: httpx.AsyncClient, tmp_path: P
     f.write_text("# Nixx\n\nSelf-hosted memory system.")
 
     with (
-        patch("nixx.ingest.pipeline.create_llm_client") as mock_factory,
+        patch("nixx.ingest.pipeline.OpenAIClient") as mock_factory,
         patch("nixx.ingest.pipeline.save_source", new_callable=AsyncMock) as mock_save_source,
         patch("nixx.ingest.pipeline.save_memory", new_callable=AsyncMock),
-        patch("nixx.server.create_llm_client") as mock_server_factory,
+        patch("nixx.server.OpenAIClient") as mock_server_factory,
     ):
         mock_client = MagicMock()
         mock_client.embed = AsyncMock(return_value=[0.1] * 1024)

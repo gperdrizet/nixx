@@ -8,9 +8,9 @@ SYSTEMD_DIR="/etc/systemd/system"
 
 UNITS=(
     "nixx.target"
+    "nixx-embed.service"
     "nixx-server.service"
     "nixx-pgweb.service"
-    "ollama.service"
 )
 
 echo "Installing nixx systemd units..."

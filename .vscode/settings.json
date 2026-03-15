@@ -1,9 +1,11 @@
 {
     "cSpell.words": [
+        "changeme",
         "frontends",
+        "gguf",
+        "llamacpp",
         "mxbai",
         "mypy",
-        "Ollama",
         "pgvector",
         "pgweb",
         "pytest",

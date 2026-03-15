@@ -1,7 +1,7 @@
 [Unit]
 Description=pgweb database browser for nixx
 Documentation=https://github.com/sosedoff/pgweb
-After=network.target postgresql.service
+After=network.target docker.service
 
 [Service]
 Type=simple

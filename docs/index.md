@@ -35,7 +35,7 @@ The goal is to eliminate context fragmentation - no more isolated conversations 
 
 ## Tech stack
 
-Python · FastAPI · Uvicorn · asyncpg · PostgreSQL + pgvector · Ollama · Textual · Rich
+Python · FastAPI · Uvicorn · asyncpg · PostgreSQL + pgvector · llama.cpp · Textual · Rich
 
 See [docs/stack.md](stack.md) for a full breakdown of every library with links to documentation.
 
