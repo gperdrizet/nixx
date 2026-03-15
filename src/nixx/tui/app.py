@@ -1,10 +1,12 @@
 """Nixx chat TUI."""
 
 import json
+from pathlib import Path
 
 import httpx
 from textual import events
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import ScrollableContainer, Vertical
 from textual.widgets import Footer, Header, Input, Static
 
@@ -34,16 +36,37 @@ class Message(Static):
         text-style: italic;
         margin: 0 2;
     }
+    Message:focus {
+        border: tall $accent;
+    }
     """
 
-    def __init__(self, role: str, content: str = "") -> None:
+    BINDINGS = [
+        Binding("enter", "edit", "Edit"),
+        Binding("backspace", "rewind", "Rewind"),
+    ]
+
+    def __init__(self, role: str, content: str = "", history_index: int | None = None) -> None:
         super().__init__(content, classes=role)
         self._role = role
         self._content = content
+        self._history_index = history_index
+        if role in ("user", "assistant"):
+            self.can_focus = True
 
     def append(self, text: str) -> None:
         self._content += text
         self.update(self._content)
+
+    def action_edit(self) -> None:
+        if self._role == "user" and self._history_index is not None:
+            app: NixxApp = self.app  # type: ignore[assignment]
+            app.enter_edit_mode(self)
+
+    def action_rewind(self) -> None:
+        if self._history_index is not None:
+            app: NixxApp = self.app  # type: ignore[assignment]
+            app.rewind_to(self)
 
 
 class NixxApp(App[None]):
@@ -73,6 +96,7 @@ class NixxApp(App[None]):
     BINDINGS = [
         ("ctrl+c", "quit", "Quit"),
         ("ctrl+l", "clear", "Clear"),
+        Binding("escape", "cancel_edit", "Cancel", show=False),
     ]
 
     def __init__(self, config: NixxConfig) -> None:
@@ -80,6 +104,8 @@ class NixxApp(App[None]):
         self._config = config
         self._base_url = f"http://{config.host}:{config.port}"
         self._history: list[dict[str, str]] = []
+        self._editing_msg: Message | None = None
+        self._history_path: Path = config.memory_path / "chat_history.json"
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -90,14 +116,42 @@ class NixxApp(App[None]):
 
     def on_mount(self) -> None:
         self.query_one(Input).focus()
-        self._add_message("system", f"Connected to {self._base_url}")
+        self._load_history()
+        if self._history:
+            self._add_message("system", f"Connected to {self._base_url}")
+            self._add_message(
+                "system",
+                f"Restored {len(self._history)} messages. Use Ctrl+L to clear.",
+            )
+            for i, entry in enumerate(self._history):
+                self._add_message(entry["role"], entry["content"], history_index=i)
+        else:
+            self._add_message("system", f"Connected to {self._base_url}")
+            self._show_help()
 
-    def _add_message(self, role: str, content: str = "") -> Message:
-        msg = Message(role, content)
+    def _add_message(
+        self, role: str, content: str = "", history_index: int | None = None
+    ) -> Message:
+        msg = Message(role, content, history_index=history_index)
         container = self.query_one("#messages", ScrollableContainer)
         container.mount(msg)
         container.scroll_end(animate=False)
         return msg
+
+    def _save_history(self) -> None:
+        """Persist conversation history to disk."""
+        self._history_path.parent.mkdir(parents=True, exist_ok=True)
+        self._history_path.write_text(json.dumps(self._history), encoding="utf-8")
+
+    def _load_history(self) -> None:
+        """Load conversation history from disk."""
+        if self._history_path.is_file():
+            try:
+                data = json.loads(self._history_path.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    self._history = data
+            except (json.JSONDecodeError, OSError):
+                pass
 
     def on_key(self, event: events.Key) -> None:
         # VS Code's integrated terminal uses the Kitty keyboard protocol, which
@@ -115,8 +169,17 @@ class NixxApp(App[None]):
         if not text:
             return
         event.input.clear()
+
+        if self._editing_msg is not None:
+            self._do_edit(text)
+            event.input.placeholder = "Type a message and press Enter\u2026"
+            event.input.focus()
+            return
+
         if text.startswith("/"):
-            if text == "/context":
+            if text == "/help":
+                self._show_help()
+            elif text == "/context":
                 self.run_worker(self._show_context(), exclusive=False, thread=False)
             elif text.startswith("/source"):
                 name = text[7:].strip().strip("\"'")
@@ -137,14 +200,108 @@ class NixxApp(App[None]):
             event.input.focus()
             return
         self._history.append({"role": "user", "content": text})
-        self._add_message("user", text)
+        self._add_message("user", text, history_index=len(self._history) - 1)
         assistant_msg = self._add_message("assistant")
         self.run_worker(
             self._stream_response(assistant_msg),
             exclusive=False,
             thread=False,
         )
+        self._save_history()
         event.input.focus()
+
+    def enter_edit_mode(self, msg: Message) -> None:
+        """Load a user message into Input for editing."""
+        if self._editing_msg is not None:
+            return
+        self._editing_msg = msg
+        inp = self.query_one("#input", Input)
+        inp.value = msg._content
+        inp.placeholder = "Editing\u2026 Enter: save & regenerate | Escape: cancel"
+        inp.focus()
+
+    def action_cancel_edit(self) -> None:
+        """Cancel edit mode and return focus to input."""
+        if self._editing_msg is not None:
+            self._editing_msg = None
+            inp = self.query_one("#input", Input)
+            inp.clear()
+            inp.placeholder = "Type a message and press Enter\u2026"
+        self.query_one("#input", Input).focus()
+
+    def _do_edit(self, new_text: str) -> None:
+        """Apply an edit to a user message and regenerate."""
+        msg = self._editing_msg
+        assert msg is not None and msg._history_index is not None
+        idx = msg._history_index
+
+        self._history[idx] = {"role": "user", "content": new_text}
+        self._history = self._history[: idx + 1]
+        self._save_history()
+
+        msg._content = new_text
+        msg.update(new_text)
+
+        container = self.query_one("#messages", ScrollableContainer)
+        children = list(container.children)
+        try:
+            widget_idx = children.index(msg)
+        except ValueError:
+            self._editing_msg = None
+            return
+        for child in children[widget_idx + 1 :]:
+            child.remove()
+
+        self._editing_msg = None
+
+        assistant_msg = self._add_message("assistant")
+        self.run_worker(
+            self._stream_response(assistant_msg),
+            exclusive=False,
+            thread=False,
+        )
+
+    def rewind_to(self, msg: Message) -> None:
+        """Remove a message and everything after it."""
+        if msg._history_index is None:
+            return
+        self._history = self._history[: msg._history_index]
+        self._save_history()
+
+        container = self.query_one("#messages", ScrollableContainer)
+        children = list(container.children)
+        try:
+            idx = children.index(msg)
+        except ValueError:
+            return
+        for child in children[idx:]:
+            child.remove()
+
+        self._add_message("system", "Conversation rewound.")
+        if self._editing_msg is not None:
+            self.action_cancel_edit()
+        else:
+            self.query_one("#input", Input).focus()
+
+    def _show_help(self) -> None:
+        text = (
+            "[b]Commands[/b]\n"
+            "  /help                  Show this message\n"
+            '  /source "name"         Create a source from the conversation buffer\n'
+            "  /sources               List all sources\n"
+            '  /lookup "name" | <id>  Show full source content\n'
+            "  /context               Show base prompt and recall hits\n"
+            "\n"
+            "[b]Keybindings[/b]\n"
+            "  Ctrl+L                 Clear conversation\n"
+            "  Ctrl+P                 Command palette\n"
+            "  Tab / Shift+Tab        Focus messages\n"
+            "  Enter  (on message)    Edit user message and regenerate\n"
+            "  Backspace (on message) Rewind to before that message\n"
+            "  Escape                 Cancel edit\n"
+            "  Ctrl+C                 Quit"
+        )
+        self._add_message("system", text)
 
     async def _create_source(self, name: str) -> None:
         self._add_message("system", f"Creating source: [b]{name}[/b]…")
@@ -338,9 +495,14 @@ class NixxApp(App[None]):
 
         if accumulated:
             self._history.append({"role": "assistant", "content": accumulated})
+            msg._history_index = len(self._history) - 1
+            self._save_history()
 
     def action_clear(self) -> None:
         self._history.clear()
+        self._editing_msg = None
+        if self._history_path.is_file():
+            self._history_path.unlink()
         container = self.query_one("#messages", ScrollableContainer)
         container.remove_children()
         self._add_message("system", "Conversation cleared.")
