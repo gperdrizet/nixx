@@ -65,8 +65,7 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
     async with pool.acquire() as conn:
         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
-        await conn.execute(
-            """
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS buffer (
                 id          BIGSERIAL PRIMARY KEY,
                 role        TEXT        NOT NULL,
@@ -74,11 +73,9 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
                 origin      TEXT        NOT NULL DEFAULT 'api',
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-        """
-        )
+        """)
 
-        await conn.execute(
-            """
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS sources (
                 id          BIGSERIAL PRIMARY KEY,
                 name        TEXT        NOT NULL,
@@ -88,11 +85,9 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
                 end_id      BIGINT      REFERENCES buffer(id) ON DELETE SET NULL,
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-        """
-        )
+        """)
 
-        await conn.execute(
-            f"""
+        await conn.execute(f"""
             CREATE TABLE IF NOT EXISTS memories (
                 id          BIGSERIAL PRIMARY KEY,
                 content     TEXT        NOT NULL,
@@ -101,18 +96,14 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
                 metadata    JSONB       NOT NULL DEFAULT '{{}}',
                 created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-        """
-        )
+        """)
 
         # Migrate existing memories table: add source_id, drop legacy source column.
-        await conn.execute(
-            """
+        await conn.execute("""
             ALTER TABLE memories
             ADD COLUMN IF NOT EXISTS source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL;
-        """
-        )
-        await conn.execute(
-            """
+        """)
+        await conn.execute("""
             DO $$ BEGIN
                 IF EXISTS (
                     SELECT 1 FROM information_schema.columns
@@ -121,13 +112,11 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
                     ALTER TABLE memories DROP COLUMN source;
                 END IF;
             END $$;
-        """
-        )
+        """)
 
         # ── Episodic memory: summaries table ──
 
-        await conn.execute(
-            f"""
+        await conn.execute(f"""
             CREATE TABLE IF NOT EXISTS summaries (
                 id                  BIGSERIAL PRIMARY KEY,
                 content             TEXT        NOT NULL,
@@ -138,43 +127,34 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
                 end_buffer_id       BIGINT      REFERENCES buffer(id) ON DELETE SET NULL,
                 created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-        """
-        )
+        """)
 
         # ── Indexes ──
 
         # HNSW index for fast approximate nearest-neighbour search.
-        await conn.execute(
-            """
+        await conn.execute("""
             CREATE INDEX IF NOT EXISTS memories_embedding_hnsw
             ON memories
             USING hnsw (embedding vector_cosine_ops);
-        """
-        )
+        """)
 
-        await conn.execute(
-            """
+        await conn.execute("""
             CREATE INDEX IF NOT EXISTS summaries_embedding_hnsw
             ON summaries
             USING hnsw (embedding vector_cosine_ops);
-        """
-        )
+        """)
 
         # Full-text search on buffer: tsvector column + GIN index.
-        await conn.execute(
-            """
+        await conn.execute("""
             ALTER TABLE buffer
             ADD COLUMN IF NOT EXISTS tsv tsvector
             GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
-        """
-        )
+        """)
 
-        await conn.execute(
-            """
+        await conn.execute("""
             CREATE INDEX IF NOT EXISTS buffer_tsv_gin
             ON buffer USING gin (tsv);
-        """
-        )
+        """)
 
     logger.info("Database schema initialised")
 
