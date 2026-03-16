@@ -2,20 +2,29 @@
 
 from __future__ import annotations
 
+import json
+import logging
+
 import asyncpg
 
 from nixx.config import NixxConfig
 from nixx.ingest.chunker import chunk as chunk_text
 from nixx.llm import OpenAIClient
 from nixx.memory.db import (
+    count_unsummarized_words,
     get_buffer_entries,
     get_last_source_end_id,
     get_max_buffer_id,
     save_buffer_entry,
     save_memory,
     save_source,
+    save_summary,
+    search_buffer_fulltext,
     search_memories,
+    search_summaries,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryStore:
@@ -151,6 +160,135 @@ class MemoryStore:
         embedding = await self._embedder.embed(self._config.embedding_model, query)
         return await search_memories(self._pool, query_embedding=embedding, top_k=top_k)
 
+    # ── Episodic memory ───────────────────────────────────────────────────────
+
+    async def check_summary_due(self) -> bool:
+        """Return True if unsummarized word count >= summary_interval."""
+        words, _, _ = await count_unsummarized_words(self._pool)
+        return words >= self._config.summary_interval
+
+    async def create_episode_summary(self, tags: list[str]) -> dict:
+        """Summarize unsummarized buffer entries, extract entities, embed, and store.
+
+        Returns a dict with id, content, tags, entities, start_buffer_id, end_buffer_id.
+        """
+        words, start_id, end_id = await count_unsummarized_words(self._pool)
+        if start_id is None or end_id is None or words == 0:
+            raise ValueError("No unsummarized messages to process")
+
+        entries = await get_buffer_entries(self._pool, start_id, end_id)
+        entries = [e for e in entries if e["role"] != "marker"]
+        if not entries:
+            raise ValueError("No messages found in range")
+
+        # Use actual buffer IDs from fetched entries (theoretical start_id
+        # may reference a deleted row, violating the FK constraint).
+        start_id = int(entries[0]["id"])
+        end_id = int(entries[-1]["id"])
+
+        transcript = "\n".join(f"{e['role'].upper()}: {e['content']}" for e in entries)
+        tag_line = ", ".join(tags) if tags else ""
+        prompt_text = transcript
+        if tag_line:
+            prompt_text += f"\n\nTags: {tag_line}"
+
+        result = await self._summarize_and_extract(prompt_text)
+        summary_text = result["summary"]
+        entities = result["entities"]
+
+        embedding = await self._embedder.embed(self._config.embedding_model, summary_text)
+
+        summary_id = await save_summary(
+            self._pool,
+            content=summary_text,
+            embedding=embedding,
+            tags=tags,
+            entities=entities,
+            start_buffer_id=start_id,
+            end_buffer_id=end_id,
+        )
+
+        return {
+            "id": summary_id,
+            "content": summary_text,
+            "tags": tags,
+            "entities": entities,
+            "start_buffer_id": start_id,
+            "end_buffer_id": end_id,
+        }
+
+    async def _summarize_and_extract(self, transcript: str) -> dict:
+        """Ask the LLM to summarize and extract named entities in one call.
+
+        Returns {"summary": str, "entities": dict}.
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Analyze the following conversation. Return a JSON object with two keys:\n"
+                    '1. "summary": A 3-5 sentence summary of the key decisions, '
+                    "outcomes, and context. Write about the content directly - "
+                    "do not describe the conversation itself. "
+                    'For example, write "PostgreSQL supports..." not '
+                    '"The discussion focused on PostgreSQL...".\n'
+                    '2. "entities": An object with categorized key terms. '
+                    "Include specific names and important topics central to the "
+                    "conversation - not generic words. For each category, list up "
+                    "to 5 entries in order of importance. Omit empty categories. "
+                    'Categories: "tools", "people", "topics", "files", "urls".\n\n'
+                    "Return ONLY the JSON object, no other text."
+                ),
+            },
+            {"role": "user", "content": transcript},
+        ]
+        try:
+            result = await self._llm.chat(self._config.llm_model, messages, temperature=0.3)
+            raw = result.get("message", {}).get("content", "")
+            parsed = json.loads(raw)
+            return {
+                "summary": parsed.get("summary", raw),
+                "entities": parsed.get("entities", {}),
+            }
+        except (json.JSONDecodeError, Exception):
+            return {"summary": transcript[:500], "entities": {}}
+
+    async def recall_episodic(self, query: str, top_k: int = 5) -> list[dict]:
+        """Search episodic memory: vector search on summaries + full-text on buffer.
+
+        Returns a list of hits, each with a 'type' key ('summary' or 'transcript').
+        """
+        embedding = await self._embedder.embed(self._config.embedding_model, query)
+        summary_hits = await search_summaries(self._pool, query_embedding=embedding, top_k=top_k)
+        fulltext_hits = await search_buffer_fulltext(self._pool, query=query, limit=top_k)
+
+        results: list[dict] = []
+        for h in summary_hits:
+            results.append(
+                {
+                    "type": "summary",
+                    "content": h["content"],
+                    "similarity": float(h["similarity"]),
+                    "tags": h["tags"],
+                    "entities": h["entities"],
+                    "start_buffer_id": h["start_buffer_id"],
+                    "end_buffer_id": h["end_buffer_id"],
+                    "created_at": h["created_at"],
+                }
+            )
+        for h in fulltext_hits:
+            results.append(
+                {
+                    "type": "transcript",
+                    "content": h["content"],
+                    "rank": float(h["rank"]),
+                    "role": h["role"],
+                    "buffer_id": h["id"],
+                    "created_at": h["created_at"],
+                }
+            )
+        return results
+
     def format_context(self, memories: list[dict], threshold: float = 0.5) -> str:
         """Format retrieved memories as a context block for injection into a system prompt.
 
@@ -166,4 +304,34 @@ class MemoryStore:
         ]
         for m in relevant:
             lines.append(f"- {m['content']}")
+        return "\n".join(lines)
+
+    async def recall_episodic_for_prompt(
+        self, query: str, top_k: int = 3, threshold: float = 0.4
+    ) -> list[dict]:
+        """Return the top episodic summaries above threshold for prompt injection."""
+        embedding = await self._embedder.embed(self._config.embedding_model, query)
+        hits = await search_summaries(self._pool, query_embedding=embedding, top_k=top_k)
+        return [h for h in hits if float(h["similarity"]) >= threshold]
+
+    def format_episodic_context(self, summaries: list[dict]) -> str:
+        """Format episodic summary hits as a context block for the system prompt.
+
+        Returns an empty string if the list is empty.
+        """
+        if not summaries:
+            return ""
+        lines = [
+            "The following are summaries of past conversations with the user, "
+            "retrieved by relevance to the current message. They provide background "
+            "context about previous discussions, decisions, and topics. Use them to "
+            "inform your understanding of the user's history and ongoing work. "
+            "Do not reference these summaries directly in your response unless the "
+            "user asks about a past conversation. It is fine to ignore them entirely "
+            "if they are not relevant to the current question.",
+        ]
+        for s in summaries:
+            tags = ", ".join(s.get("tags", []))
+            tag_note = f" [tags: {tags}]" if tags else ""
+            lines.append(f"- {s['content']}{tag_note}")
         return "\n".join(lines)

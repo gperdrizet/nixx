@@ -26,7 +26,7 @@ The goal is to eliminate context fragmentation - no more isolated conversations 
 ## Documentation
 
 **Technical guides:**
-- [Architecture](architecture.md) - system design, data flow, three-tier memory model
+- [Architecture](architecture.md) - system design, data flow, two-tier memory model
 - [Tech stack](stack.md) - every library and tool with documentation links
 - [Knowledge graph](knowledge-graph.md) - planned knowledge graph architecture and roadmap
 - [pgweb guide](pgweb-guide.md) - web interface for database management

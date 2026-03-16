@@ -41,6 +41,11 @@ class NixxConfig(BaseSettings):
     embedding_model: str = Field(default="mxbai-embed-large", description="Embedding model name")
     embedding_dimensions: int = Field(default=1024, description="Embedding vector dimensions")
 
+    # Episodic memory settings
+    summary_interval: int = Field(
+        default=500, description="Word count threshold for episodic summary prompts"
+    )
+
     # Database settings
     database_url: str = Field(
         default="postgresql://nixx:changeme@localhost:5432/nixx",

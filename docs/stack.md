@@ -66,13 +66,21 @@ are handled transparently as Python lists of floats.
 PostgreSQL is the only database, running as a Docker container (`pgvector/pgvector:pg16`
 image, container name `student-postgres`). pgvector is a Postgres extension that adds a
 `vector` column type and vector similarity operators (`<=>` for cosine distance,
-`<->` for L2). The HNSW index on the `memories` table makes approximate nearest-neighbour
-search fast at scale. All three tiers of the memory system live here: `buffer`,
-`sources`, `memories`.
+`<->` for L2). HNSW indexes on `memories` and `summaries` make approximate
+nearest-neighbour search fast at scale.
+
+Four tables across two memory systems:
+
+- **Episodic** (automatic): `buffer` (append-only transcript with `tsvector` + GIN index for
+  full-text search) and `summaries` (LLM-generated summaries with vector embeddings, tags,
+  and extracted entities).
+- **Semantic** (curated): `sources` (named units from buffer sections or external documents)
+  and `memories` (embedded chunks for vector recall).
 
 - [PostgreSQL docs](https://www.postgresql.org/docs/)
 - [pgvector GitHub](https://github.com/pgvector/pgvector)
 - [HNSW indexing explanation](https://github.com/pgvector/pgvector#hnsw)
+- [PostgreSQL full-text search](https://www.postgresql.org/docs/current/textsearch.html)
 
 ---
 

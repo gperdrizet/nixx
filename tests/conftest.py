@@ -64,6 +64,20 @@ def _mock_memory_store() -> MagicMock:
         }
     )
     store.format_context = MagicMock(return_value="")
+    store.recall_episodic_for_prompt = AsyncMock(return_value=[])
+    store.format_episodic_context = MagicMock(return_value="")
+    store.check_summary_due = AsyncMock(return_value=False)
+    store.create_episode_summary = AsyncMock(
+        return_value={
+            "id": 1,
+            "content": "test summary",
+            "tags": ["test"],
+            "entities": {},
+            "start_buffer_id": 1,
+            "end_buffer_id": 10,
+        }
+    )
+    store.recall_episodic = AsyncMock(return_value=[])
     return store
 
 

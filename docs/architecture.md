@@ -17,6 +17,12 @@ Processes, modules, and communication paths as they exist today.
                                     │  GET  /v1/sources
                                     │  GET  /v1/sources/{id}
                                     │  GET  /v1/sources/{id}/content
+                                    │  GET  /v1/buffer/session
+                                    │  POST /v1/buffer/clear
+                                    │  GET  /v1/episodic/status
+                                    │  POST /v1/episodic/summary
+                                    │  POST /v1/episodic/search
+                                    │  GET  /v1/episodic/transcript
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  nixx serve · Python · Uvicorn + FastAPI                            │
@@ -29,6 +35,12 @@ Processes, modules, and communication paths as they exist today.
 │  │ GET  /v1/sources          │                                      │
 │  │ GET  /v1/sources/{id}     │                                      │
 │  │ GET  /v1/sources/{id}/... │                                      │
+│  │ GET  /v1/buffer/session   │                                      │
+│  │ POST /v1/buffer/clear     │                                      │
+│  │ GET  /v1/episodic/status  │                                      │
+│  │ POST /v1/episodic/summary │                                      │
+│  │ POST /v1/episodic/search  │                                      │
+│  │ GET  /v1/episodic/trans.. │                                      │
 │  │ GET  /v1/debug/context    │                                      │
 │  │ GET  /health              │                                      │
 │  └─────────────┬─────────────┘                                      │
@@ -36,6 +48,8 @@ Processes, modules, and communication paths as they exist today.
 │                └─────────────▶│ MemoryStore                      │  │
 │                               │ remember · recall · format_ctx   │  │
 │                               │ create_source · ingest           │  │
+│                               │ create_episode_summary           │  │
+│                               │ recall_episodic · check_summary  │  │
 │                               └──────────┬───────────────────┬───┘  │
 │  ┌──────────────────────────┐            │ embed             │ SQL  │
 │  │ OpenAIClient (chat)      │◀───┐      │           asyncpg │      │
@@ -55,11 +69,61 @@ Processes, modules, and communication paths as they exist today.
   │ llama.cpp (remote) │ │ llama.cpp (local)  │ │ PostgreSQL + pgvector · 5432   │
   │ gpt.perdrizet.org  │ │ localhost:8082     │ │ (student-postgres container)   │
   │                    │ │                    │ │                                │
-  │ gpt-oss-20b        │ │ mxbai-embed-large  │ │ buffer  (message tape)         │
-  │ chat + completions │ │ embeddings         │ │ sources (named units)          │
-  └────────────────────┘ └────────────────────┘ │ memories (recall index)        │
+  │ gpt-oss-20b        │ │ mxbai-embed-large  │ │ Episodic:                      │
+  │ chat + completions │ │ embeddings         │ │   buffer    (transcript + FTS) │
+  └────────────────────┘ └────────────────────┘ │   summaries (embedded chunks)  │
+                                                │ Semantic:                      │
+                                                │   sources   (curated units)    │
+                                                │   memories  (embedded chunks)  │
                                                 └────────────────────────────────┘
 ```
+
+---
+
+## Memory model
+
+Nixx has two separate memory systems, modeled after human cognition.
+
+### Episodic memory (automatic, uncurated)
+
+Everything that happens in conversation. Contains the full record of all exchanges,
+searchable two ways:
+
+- **Keyword search**: PostgreSQL full-text search (`tsvector` + GIN index) against the
+  raw buffer. For "what was that class you mentioned" style queries where you remember
+  a specific word or phrase.
+- **Semantic search**: vector similarity search on LLM-generated summaries of conversation
+  windows. For "what have we discussed about memory systems" style queries where you have
+  a topic but not exact words.
+
+Episodic memory is automatic. Every message goes into the buffer. Every N user messages
+(configurable via `NIXX_SUMMARY_INTERVAL`, default 10), nixx prompts for tags, generates
+a summary with entity extraction, embeds it, and stores it. The user can defer the prompt
+with `/skip` or trigger one manually with `/summary`.
+
+### Semantic memory (deliberate, curated)
+
+Knowledge that has been explicitly selected for long-term retention. Two paths in:
+
+- **`/source "name"`**: user marks a section of conversation as a named source. The
+  transcript is chunked, each chunk is embedded, and the chunks are stored in the
+  `memories` table for vector recall.
+- **`/ingest`**: external documents (files, web pages) are read, chunked, summarized,
+  embedded, and stored.
+
+Semantic memory is deliberate. Nothing enters it automatically - the user decides what
+to keep and how to label it.
+
+### How recall works
+
+On each chat turn, the server:
+1. Embeds the user's latest message
+2. Searches `memories` (semantic) by cosine similarity
+3. Formats relevant hits as context injected into the system prompt
+4. Sends the augmented prompt + conversation history to the LLM
+
+Episodic search (`/search` in the TUI) queries both the buffer (full-text) and summaries
+(vector) and returns combined results.
 
 ---
 
@@ -96,32 +160,57 @@ Where data lives, what it contains, and how it flows between structures.
   PERSISTENT · PostgreSQL
   ──────────────────────────────────────────────────────────────────────
 
-  Three tiers: buffer → sources → memories.
+  Two memory systems, four tables.
 
-  The "tape recorder" is the buffer - everything goes in. A source is a meaningful unit
-  marked explicitly from the buffer by the user (or proposed by nixx). Not every buffer
-  entry becomes a source. Documents, web pages, repos, and buffer sections are all sources.
-  Only sources feed into the recall index.
+  ═══════════════════════════════════════════════════════════════════
+  EPISODIC MEMORY · automatic, uncurated, everything goes in
+  ═══════════════════════════════════════════════════════════════════
 
-  buffer · persistent append-only tape
+  buffer · persistent append-only transcript
 
   ┌─────────────────────────────────────────────────────────────────────────┐
   │  column       type            constraint   notes                        │
   │  ──────────── ─────────────── ──────────── ──────────────────────────── │
   │  id           bigint          PK           auto-increment               │
-  │  role         text                         user | assistant | system    │
+  │  role         text                         user | assistant | marker    │
   │  content      text                         verbatim text                │
   │  origin       text                         tui | vscode | api           │
+  │  tsv          tsvector                     generated, for full-text     │
   │  created_at   timestamptz                  auto                         │
+  │                                                                         │
+  │  Indexes: buffer_tsv_gin (GIN on tsv)                                   │
   └────────────────────────────────────┬────────────────────────────────────┘
                                        │
-                      /source "name"   │  user marks a buffer range as a source
-                      nixx proposes    │  at a natural decision or milestone point
-                      not everything   │  needs to be sourced - tape always has more
-                      documents, repos,│  web pages also enter here directly
-                      code gen, etc.   │
+              every N user messages     │  LLM summarizes + extracts entities
+              nixx prompts for tags     │  summary is embedded via mxbai-embed-large
+              user can /skip or         │  tags provided by user
+              trigger with /summary     │
                                        ▼
-  sources · meaningful units that feed memory
+  summaries · embedded episodic summaries
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  column           type            constraint   notes                    │
+  │  ──────────────── ─────────────── ──────────── ──────────────────────── │
+  │  id               bigint          PK           auto-increment           │
+  │  content          text                         LLM-generated summary    │
+  │  embedding        vector(1024)                 from mxbai-embed-large   │
+  │  tags             text[]                       user-provided tags       │
+  │  entities         jsonb                        extracted named entities │
+  │  start_buffer_id  bigint          FK buffer    first buffer row covered │
+  │  end_buffer_id    bigint          FK buffer    last buffer row covered  │
+  │  created_at       timestamptz                  auto                     │
+  │                                                                         │
+  │  Indexes: summaries_embedding_hnsw (HNSW on embedding)                  │
+  └─────────────────────────────────────────────────────────────────────────┘
+       ▲  episodic recall: vector search on summaries + full-text on buffer
+       │  entities stored as: {tools: [...], people: [...], concepts: [...],
+       │                       files: [...], urls: [...]}
+
+  ═══════════════════════════════════════════════════════════════════
+  SEMANTIC MEMORY · deliberate, curated, user-selected knowledge
+  ═══════════════════════════════════════════════════════════════════
+
+  sources · meaningful units marked by the user or ingested from documents
 
   ┌─────────────────────────────────────────────────────────────────────────┐
   │  column       type            constraint   notes                        │
@@ -135,10 +224,10 @@ Where data lives, what it contains, and how it flows between structures.
   │  created_at   timestamptz                  auto                         │
   └────────────────────────────────────┬────────────────────────────────────┘
                                        │  chunk verbatim transcript → embed
-                                       │  each chunk → store in memories
-                                       │  summary is for display only
+              /source "name"           │  each chunk → store in memories
+              /ingest <file|url>       │  summary is for display only
                                        ▼
-  memories · embedded recall index
+  memories · embedded semantic recall index
 
   ┌─────────────────────────────────────────────────────────────────────────┐
   │  column       type            constraint   notes                        │
@@ -149,9 +238,11 @@ Where data lives, what it contains, and how it flows between structures.
   │  source_id    bigint          FK sources   which source this came from  │
   │  metadata     jsonb                        {chunk: i, total_chunks: N}  │
   │  created_at   timestamptz                  auto                         │
+  │                                                                         │
+  │  Indexes: memories_embedding_hnsw (HNSW on embedding)                   │
   └─────────────────────────────────────────────────────────────────────────┘
-       ▲  recalled per turn (cosine similarity search via pgvector HNSW index)
-       │  content = verbatim transcript chunks + document chunks
+       ▲  semantic recall: cosine similarity search via pgvector
+       │  recalled per turn and injected into the system prompt
 ```
 
 ## Design principles

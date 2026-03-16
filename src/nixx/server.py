@@ -17,7 +17,17 @@ from pydantic import BaseModel
 from nixx.config import NixxConfig
 from nixx.ingest.pipeline import IngestPipeline
 from nixx.llm import OpenAIClient
-from nixx.memory.db import create_pool, get_source, get_source_content, init_schema, list_sources
+from nixx.memory.db import (
+    create_pool,
+    get_buffer_entries,
+    get_current_session_entries,
+    get_source,
+    get_source_content,
+    init_schema,
+    list_sources,
+    list_summaries,
+    save_session_marker,
+)
 from nixx.memory.store import MemoryStore
 from nixx.prompts import SYSTEM_PROMPT
 
@@ -58,6 +68,15 @@ class IngestRequest(BaseModel):
     name: str | None = None
 
 
+class CreateSummaryRequest(BaseModel):
+    tags: list[str] = []
+
+
+class EpisodicSearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 
@@ -83,7 +102,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         return {"status": "ok", "model": config.llm_model}
 
     @app.get("/v1/debug/context")
-    async def debug_context() -> dict[str, str | None]:
+    async def debug_context() -> dict[str, Any]:
         """Return the last assembled system context sent to the LLM."""
         ctx: dict[str, str | None] = getattr(
             app.state, "last_context", {"base": SYSTEM_PROMPT, "memory": None}
@@ -102,17 +121,17 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         completion_id = f"chatcmpl-{uuid.uuid4().hex}"
         created = int(time.time())
 
-        # Build system message: base identity prompt + recalled memory context
+        # Build system message: base identity prompt + episodic memory context
         memory: MemoryStore = app.state.memory
         last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         context_block = ""
         recalled: list[dict] = []
         if last_user:
             try:
-                recalled = await memory.recall(last_user)
-                context_block = memory.format_context(recalled)
+                recalled = await memory.recall_episodic_for_prompt(last_user, top_k=3)
+                context_block = memory.format_episodic_context(recalled)
             except Exception as exc:
-                logger.warning("Memory recall failed (continuing without context): %s", exc)
+                logger.warning("Episodic recall failed (continuing without context): %s", exc)
         system_content = SYSTEM_PROMPT + (f"\n\n{context_block}" if context_block else "")
         messages = [{"role": "system", "content": system_content}] + messages
         app.state.last_context = {
@@ -122,7 +141,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                 {
                     "content": r["content"],
                     "similarity": round(float(r["similarity"]), 3),
-                    "source_id": r["source_id"],
+                    "tags": r.get("tags", []),
                 }
                 for r in recalled
             ],
@@ -231,6 +250,78 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             "chunks": chunks,
             "total_chunks": len(chunks),
         }
+
+    @app.get("/v1/buffer/session")
+    async def buffer_session() -> dict:
+        """Return buffer entries for the current session (after last marker)."""
+        pool = app.state.memory._pool
+        entries = await get_current_session_entries(pool)
+        return {
+            "entries": [{"role": e["role"], "content": e["content"]} for e in entries],
+            "count": len(entries),
+        }
+
+    @app.post("/v1/buffer/clear")
+    async def buffer_clear() -> dict:
+        """Write a session marker to the buffer, starting a new session."""
+        pool = app.state.memory._pool
+        marker_id = await save_session_marker(pool)
+        return {"marker_id": marker_id}
+
+    # ── Episodic memory endpoints ─────────────────────────────────────────
+
+    @app.get("/v1/episodic/status")
+    async def episodic_status() -> dict:
+        """Check whether a summary is due."""
+        mem: MemoryStore = app.state.memory
+        due = await mem.check_summary_due()
+        return {"summary_due": due, "interval_words": config.summary_interval}
+
+    @app.post("/v1/episodic/config")
+    async def update_episodic_config(request: dict) -> dict:
+        """Update episodic memory configuration at runtime."""
+        if "interval_words" in request:
+            val = int(request["interval_words"])
+            if val < 1:
+                raise HTTPException(status_code=400, detail="interval_words must be >= 1")
+            config.summary_interval = val
+        return {"interval_words": config.summary_interval}
+
+    @app.post("/v1/episodic/summary")
+    async def create_episode_summary(request: CreateSummaryRequest) -> dict:
+        """Create an episodic summary of unsummarized buffer entries."""
+        mem: MemoryStore = app.state.memory
+        try:
+            return await mem.create_episode_summary(tags=request.tags)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/v1/episodic/search")
+    async def episodic_search(request: EpisodicSearchRequest) -> dict:
+        """Search episodic memory (summaries + buffer full-text)."""
+        mem: MemoryStore = app.state.memory
+        results = await mem.recall_episodic(request.query, top_k=request.top_k)
+        return {"results": results, "count": len(results)}
+
+    @app.get("/v1/episodic/transcript")
+    async def episodic_transcript(start_id: int, end_id: int) -> dict:
+        """Return buffer entries for a given range (for expanding summary context)."""
+        pool = app.state.memory._pool
+        entries = await get_buffer_entries(pool, start_id, end_id)
+        entries = [e for e in entries if e["role"] != "marker"]
+        return {
+            "entries": [
+                {"id": e["id"], "role": e["role"], "content": e["content"]} for e in entries
+            ],
+            "count": len(entries),
+        }
+
+    @app.get("/v1/episodic/summaries")
+    async def get_episodic_summaries() -> dict:
+        """List all episodic summaries."""
+        pool = app.state.memory._pool
+        summaries = await list_summaries(pool)
+        return {"summaries": summaries, "count": len(summaries)}
 
     @app.post("/v1/completions", response_model=None)
     async def completions(
