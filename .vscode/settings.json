@@ -1,15 +1,23 @@
 {
     "cSpell.words": [
+        "asyncpg",
         "changeme",
         "frontends",
         "gguf",
+        "HNSW",
+        "Leeloo",
         "llamacpp",
         "mxbai",
         "mypy",
         "pgvector",
         "pgweb",
         "pytest",
-        "tailscaled"
+        "tailscaled",
+        "timestamptz",
+        "tsvector",
+        "uncurated",
+        "unsummarized",
+        "Uvicorn"
     ],
     "pylint.enabled": false,
     "python.linting.pylintEnabled": false,
