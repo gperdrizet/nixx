@@ -28,9 +28,7 @@ CHAT_RESPONSE: dict = {
 def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> NixxConfig:
     """Isolated NixxConfig — no .env on disk, all paths under tmp_path.
 
-    chdir to tmp_path so:
-    - pydantic-settings finds no .env file to load
-    - NixxConfig.__init__ creates data/ and config/ inside tmp_path, not cwd
+    chdir to tmp_path so pydantic-settings finds no .env file to load.
     """
     monkeypatch.chdir(tmp_path)
     for key in ["NIXX_DATABASE_URL", "NIXX_POSTGRES_PASSWORD"]:
