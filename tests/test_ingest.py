@@ -5,12 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-import respx
 
 from nixx.ingest.chunker import chunk
 from nixx.ingest.handlers import HandlerRegistry
 from nixx.ingest.pipeline import IngestPipeline
-from nixx.ingest.reader import read
 from nixx.config import NixxConfig
 
 # ── handler registry ──────────────────────────────────────────────────────────
@@ -26,20 +24,6 @@ def test_registry_routes_file() -> None:
     registry = HandlerRegistry()
     handler = registry.get_handler("/some/file.md")
     assert handler.name == "file"
-
-
-def test_registry_plugin_loaded(tmp_path: Path) -> None:
-    plugin = tmp_path / "custom.py"
-    plugin.write_text(
-        "from nixx.ingest.handlers.base import IngestHandler\n"
-        "class CustomHandler(IngestHandler):\n"
-        "    name = 'custom'\n"
-        "    def can_handle(self, source: str) -> bool: return source.startswith('custom://')\n"
-        "    async def read(self, source: str) -> tuple[str, str]: return ('text', 'custom')\n"
-    )
-    registry = HandlerRegistry(handlers_dir=tmp_path)
-    handler = registry.get_handler("custom://foo")
-    assert handler.name == "custom"
 
 
 # ── chunker ───────────────────────────────────────────────────────────────────
@@ -78,64 +62,6 @@ def test_chunk_hard_splits_long_paragraph() -> None:
     assert len(result) >= 2
     for r in result:
         assert len(r) <= 1500
-
-
-# ── reader ────────────────────────────────────────────────────────────────────
-
-
-async def test_read_file(tmp_path: Path) -> None:
-    f = tmp_path / "note.md"
-    f.write_text("# Hello\n\nThis is a test note.")
-    text, kind = await read(str(f))
-    assert "Hello" in text
-    assert kind == "document"
-
-
-async def test_read_file_not_found() -> None:
-    with pytest.raises(FileNotFoundError):
-        await read("/nonexistent/file.md")
-
-
-async def test_read_file_unsupported_type(tmp_path: Path) -> None:
-    f = tmp_path / "file.xyz"
-    f.write_text("content")
-    with pytest.raises(ValueError, match="Unsupported file type"):
-        await read(str(f))
-
-
-async def test_read_html_file(tmp_path: Path) -> None:
-    f = tmp_path / "page.html"
-    f.write_text("<html><body><p>Hello world</p><script>alert(1)</script></body></html>")
-    text, kind = await read(str(f))
-    assert "Hello world" in text
-    assert "alert" not in text
-    assert kind == "document"
-
-
-@respx.mock
-async def test_read_url() -> None:
-    respx.get("https://example.com/page").mock(
-        return_value=httpx.Response(
-            200,
-            text="<html><body><p>Test page</p></body></html>",
-            headers={"content-type": "text/html"},
-        )
-    )
-    text, kind = await read("https://example.com/page")
-    assert "Test page" in text
-    assert kind == "web"
-
-
-@respx.mock
-async def test_read_url_plain_text() -> None:
-    respx.get("https://example.com/file.txt").mock(
-        return_value=httpx.Response(
-            200, text="raw text content", headers={"content-type": "text/plain"}
-        )
-    )
-    text, kind = await read("https://example.com/file.txt")
-    assert text == "raw text content"
-    assert kind == "web"
 
 
 # ── pipeline ──────────────────────────────────────────────────────────────────

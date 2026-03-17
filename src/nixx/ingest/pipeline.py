@@ -28,7 +28,7 @@ class IngestPipeline:
         self._pool = pool
         self._llm = OpenAIClient(base_url=config.llm_base_url, api_key=config.llm_api_key)
         self._embedder = OpenAIClient(base_url=config.embedding_base_url)
-        self._registry = HandlerRegistry(handlers_dir=config.handlers_dir)
+        self._registry = HandlerRegistry()
 
     async def ingest(self, source: str, name: str | None = None) -> dict:
         """Ingest a file path or URL.

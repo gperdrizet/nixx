@@ -59,38 +59,6 @@ async def test_chat_http_error() -> None:
         await client.chat("model", [{"role": "user", "content": "hi"}])
 
 
-# ── Non-streaming generate ────────────────────────────────────────────────────
-
-
-@respx.mock
-async def test_generate_success() -> None:
-    openai_response = {
-        "id": "cmpl-abc",
-        "object": "text_completion",
-        "choices": [{"index": 0, "text": "def foo(): pass"}],
-        "usage": {"prompt_tokens": 8, "completion_tokens": 6, "total_tokens": 14},
-    }
-    respx.post(f"{BASE_URL}/v1/completions").mock(
-        return_value=httpx.Response(200, json=openai_response)
-    )
-
-    client = OpenAIClient(base_url=BASE_URL)
-    result = await client.generate("gpt-oss-20b", "def foo():")
-
-    assert result["response"] == "def foo(): pass"
-    assert result["done"] is True
-    assert result["prompt_eval_count"] == 8
-    assert result["eval_count"] == 6
-
-
-@respx.mock
-async def test_generate_http_error() -> None:
-    respx.post(f"{BASE_URL}/v1/completions").mock(return_value=httpx.Response(503))
-    client = OpenAIClient(base_url=BASE_URL)
-    with pytest.raises(httpx.HTTPStatusError):
-        await client.generate("model", "def foo():")
-
-
 # ── Embeddings ────────────────────────────────────────────────────────────────
 
 

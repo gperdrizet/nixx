@@ -8,7 +8,6 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from httpx import HTTPError as HttpError
@@ -44,14 +43,6 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     model: str | None = None
     messages: list[ChatMessage]
-    stream: bool = False
-    temperature: float | None = None
-    max_tokens: int | None = None
-
-
-class CompletionRequest(BaseModel):
-    model: str | None = None
-    prompt: str
     stream: bool = False
     temperature: float | None = None
     max_tokens: int | None = None
@@ -323,46 +314,6 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         summaries = await list_summaries(pool)
         return {"summaries": summaries, "count": len(summaries)}
 
-    @app.post("/v1/completions", response_model=None)
-    async def completions(
-        request: CompletionRequest,
-    ) -> StreamingResponse | dict[str, Any]:
-        model = request.model or config.llm_model
-        temperature = (
-            request.temperature if request.temperature is not None else config.llm_temperature
-        )
-        completion_id = f"cmpl-{uuid.uuid4().hex}"
-        created = int(time.time())
-
-        if request.stream:
-            return StreamingResponse(
-                _completion_event_stream(
-                    llm,
-                    model,
-                    request.prompt,
-                    temperature,
-                    request.max_tokens,
-                    completion_id,
-                    created,
-                ),
-                media_type="text/event-stream",
-            )
-
-        try:
-            result = await llm.generate(model, request.prompt, temperature, request.max_tokens)
-        except HttpError as exc:
-            raise HTTPException(status_code=502, detail=f"LLM backend error: {exc}") from exc
-
-        text = result.get("response", "")
-        return {
-            "id": completion_id,
-            "object": "text_completion",
-            "created": created,
-            "model": model,
-            "choices": [{"index": 0, "text": text, "finish_reason": "stop"}],
-            "usage": _usage(result),
-        }
-
     return app
 
 
@@ -421,36 +372,6 @@ async def _chat_event_stream(
             logger.warning("Buffer write failed: %s", exc)
 
 
-async def _completion_event_stream(
-    llm: OpenAIClient,
-    model: str,
-    prompt: str,
-    temperature: float,
-    max_tokens: int | None,
-    completion_id: str,
-    created: int,
-) -> AsyncGenerator[str, None]:
-    try:
-        async for chunk in llm.generate_stream(model, prompt, temperature, max_tokens):
-            text = chunk.get("response", "")
-            done = chunk.get("done", False)
-            data = {
-                "id": completion_id,
-                "object": "text_completion",
-                "created": created,
-                "model": model,
-                "choices": [{"index": 0, "text": text, "finish_reason": "stop" if done else None}],
-            }
-            yield f"data: {json.dumps(data)}\n\n"
-            if done:
-                break
-    except Exception as exc:
-        error = {"error": {"message": str(exc), "type": "server_error"}}
-        yield f"data: {json.dumps(error)}\n\n"
-    finally:
-        yield "data: [DONE]\n\n"
-
-
 def _usage(result: dict[str, Any]) -> dict[str, int]:
     prompt_tokens = int(result.get("prompt_eval_count") or 0)
     completion_tokens = int(result.get("eval_count") or 0)
@@ -459,16 +380,3 @@ def _usage(result: dict[str, Any]) -> dict[str, int]:
         "completion_tokens": completion_tokens,
         "total_tokens": prompt_tokens + completion_tokens,
     }
-
-
-# ── Entry point ───────────────────────────────────────────────────────────────
-
-
-def main() -> None:
-    config = NixxConfig()
-    uvicorn.run(
-        create_app(config),
-        host=config.host,
-        port=config.port,
-        reload=config.reload,
-    )

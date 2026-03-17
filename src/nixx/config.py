@@ -34,7 +34,6 @@ class NixxConfig(BaseSettings):
     llm_api_key: Optional[str] = Field(default=None, description="API key for the LLM backend")
 
     # Memory settings
-    memory_path: Path = Field(default=Path("./data/memory"), description="Path to memory storage")
     embedding_base_url: str = Field(
         default="http://localhost:8082", description="Base URL for embedding server"
     )
@@ -55,19 +54,6 @@ class NixxConfig(BaseSettings):
         default=None, description="Password for the nixx PostgreSQL role (used by init-db.sh)"
     )
 
-    # Ingest handler plugins
-    handlers_dir: Path = Field(
-        default=Path("~/.config/nixx/handlers").expanduser(),
-        description="Directory for user-defined ingest handler plugins",
-    )
-
-    # Hardware monitoring (optional)
-    enable_hardware_monitoring: bool = Field(
-        default=False, description="Enable hardware monitoring"
-    )
-
     def __init__(self, **data: Any) -> None:
         """Initialize config and ensure directories exist."""
         super().__init__(**data)
-        self.memory_path.mkdir(parents=True, exist_ok=True)
-        Path("./data").mkdir(parents=True, exist_ok=True)

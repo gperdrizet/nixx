@@ -20,13 +20,6 @@ CHAT_RESPONSE: dict = {
     "eval_count": 5,
 }
 
-GENERATE_RESPONSE: dict = {
-    "response": "def foo(): pass",
-    "done": True,
-    "prompt_eval_count": 8,
-    "eval_count": 6,
-}
-
 
 # ── Config fixture ────────────────────────────────────────────────────────────
 
@@ -51,8 +44,6 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> NixxConfig:
 def _mock_memory_store() -> MagicMock:
     """Return a MagicMock MemoryStore with async no-op methods."""
     store = MagicMock()
-    store.recall = AsyncMock(return_value=[])
-    store.remember = AsyncMock(return_value=1)
     store.save_to_buffer = AsyncMock(return_value=1)
     store.create_source = AsyncMock(
         return_value={
@@ -63,7 +54,6 @@ def _mock_memory_store() -> MagicMock:
             "summary": "test summary",
         }
     )
-    store.format_context = MagicMock(return_value="")
     store.recall_episodic_for_prompt = AsyncMock(return_value=[])
     store.format_episodic_context = MagicMock(return_value="")
     store.check_summary_due = AsyncMock(return_value=False)
@@ -107,7 +97,6 @@ async def mocked_app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncCli
     """
     mock_client = MagicMock()
     mock_client.chat = AsyncMock(return_value=CHAT_RESPONSE)
-    mock_client.generate = AsyncMock(return_value=GENERATE_RESPONSE)
     with patch("nixx.server.OpenAIClient", return_value=mock_client):
         app = create_app(config)
         app.state.memory = _mock_memory_store()

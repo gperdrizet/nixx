@@ -21,7 +21,6 @@ def test_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert cfg.llm_temperature == 0.7
     assert "postgresql" in cfg.database_url
     assert cfg.postgres_password is None
-    assert cfg.enable_hardware_monitoring is False
 
 
 def test_env_var_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -37,17 +36,6 @@ def test_env_var_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert cfg.port == 9000
     assert cfg.llm_model == "llama3:8b"
     assert cfg.llm_temperature == 0.2
-
-
-def test_creates_data_directories(config: NixxConfig, tmp_path: Path) -> None:
-    assert (tmp_path / "data" / "memory").is_dir()
-    assert (tmp_path / "data").is_dir()
-
-
-def test_memory_path_is_absolute_after_mkdir(config: NixxConfig, tmp_path: Path) -> None:
-    # memory_path should exist as a real directory
-    assert config.memory_path.exists()
-    assert config.memory_path.is_dir()
 
 
 def test_constructor_kwargs_override_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

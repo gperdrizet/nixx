@@ -1,13 +1,7 @@
 """Base class for ingest handlers.
 
-To add a new handler, subclass IngestHandler and either:
-- Place it in src/nixx/ingest/handlers/ and register it in registry.py, or
-- Drop a .py file in NixxConfig.handlers_dir (~/.config/nixx/handlers/ by
-  default). Any IngestHandler subclass found there is loaded automatically
-  and takes priority over built-in handlers.
-
 Subclasses must implement:
-- name: a short identifier (e.g. "github", "web", "file")
+- name: a short identifier (e.g. "web", "file")
 - can_handle(source) -> bool
 - read(source) -> (text, kind)
 

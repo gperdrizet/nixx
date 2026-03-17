@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
 
 import asyncpg
 from pgvector.asyncpg import register_vector
@@ -441,26 +440,3 @@ async def save_memory(
             json.dumps(metadata or {}),
         )
         return int(row["id"])
-
-
-async def search_memories(
-    pool: asyncpg.Pool,  # type: ignore[type-arg]
-    query_embedding: list[float],
-    top_k: int = 5,
-) -> list[dict]:
-    """Return the top-k most similar memories by cosine distance, closest first."""
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT id, content, source_id, metadata, created_at, "
-            "       1 - (embedding <=> $1) AS similarity "
-            "FROM memories "
-            "ORDER BY embedding <=> $1 "
-            "LIMIT $2",
-            query_embedding,
-            top_k,
-        )
-        return [dict(r) for r in rows]
-
-
-def utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
