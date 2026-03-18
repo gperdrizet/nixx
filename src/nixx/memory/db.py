@@ -211,16 +211,33 @@ async def save_session_marker(
 
 async def get_current_session_entries(
     pool: asyncpg.Pool,  # type: ignore[type-arg]
+    limit: int | None = None,
 ) -> list[dict]:
-    """Return buffer entries after the last session marker, excluding markers."""
+    """Return buffer entries after the last session marker, excluding markers.
+
+    Args:
+        pool: Database connection pool
+        limit: Max entries to return (most recent first if limited)
+    """
     async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT id, role, content, origin, created_at FROM buffer "
-            "WHERE role != 'marker' AND id > COALESCE("
-            "  (SELECT MAX(id) FROM buffer WHERE role = 'marker'), 0"
-            ") ORDER BY id ASC",
-        )
-        return [dict(r) for r in rows]
+        if limit is not None:
+            # Get most recent N entries (reversed to get chronological order)
+            rows = await conn.fetch(
+                "SELECT id, role, content, origin, created_at FROM buffer "
+                "WHERE role != 'marker' AND id > COALESCE("
+                "  (SELECT MAX(id) FROM buffer WHERE role = 'marker'), 0"
+                ") ORDER BY id DESC LIMIT $1",
+                limit,
+            )
+            return [dict(r) for r in reversed(rows)]
+        else:
+            rows = await conn.fetch(
+                "SELECT id, role, content, origin, created_at FROM buffer "
+                "WHERE role != 'marker' AND id > COALESCE("
+                "  (SELECT MAX(id) FROM buffer WHERE role = 'marker'), 0"
+                ") ORDER BY id ASC",
+            )
+            return [dict(r) for r in rows]
 
 
 async def search_buffer_fulltext(

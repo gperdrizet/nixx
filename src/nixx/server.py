@@ -29,20 +29,21 @@ from nixx.memory.db import (
     save_session_marker,
 )
 from nixx.memory.store import MemoryStore
-from nixx.prompts import SYSTEM_PROMPT
+from nixx.prompts import INTENT_DERIVATION_PROMPT, SYSTEM_PROMPT
+from nixx.tools import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
-# Token budget reserved for the LLM response.
-_RESPONSE_RESERVE = 1024
+# Token budget reserved for the LLM response and tool loop expansion.
+_RESPONSE_RESERVE = 2048
 
 
 def _estimate_tokens(text: str) -> int:
-    """Rough token estimate: 1 token ≈ 4 characters."""
-    return len(text) // 4
+    """Rough token estimate: 1 token ≈ 3 characters (conservative overestimate)."""
+    return max(1, len(text) // 3)
 
 
-def _truncate_messages(messages: list[dict[str, str]], context_length: int) -> list[dict[str, str]]:
+def _truncate_messages(messages: list[dict[str, Any]], context_length: int) -> list[dict[str, Any]]:
     """Drop oldest conversation messages to fit within the token budget.
 
     Keeps the system message (index 0) and as many recent messages as fit.
@@ -51,15 +52,15 @@ def _truncate_messages(messages: list[dict[str, str]], context_length: int) -> l
     if budget <= 0:
         return messages[:1]
 
-    system_tokens = _estimate_tokens(messages[0]["content"]) if messages else 0
+    system_tokens = _estimate_tokens(messages[0].get("content") or "") if messages else 0
     remaining = budget - system_tokens
     if remaining <= 0:
         return messages[:1]
 
     # Walk backwards through conversation messages, accumulating tokens.
-    kept: list[dict[str, str]] = []
+    kept: list[dict[str, Any]] = []
     for msg in reversed(messages[1:]):
-        msg_tokens = _estimate_tokens(msg["content"]) + 4  # +4 for message framing
+        msg_tokens = _estimate_tokens(msg.get("content") or "") + 4  # +4 for message framing
         if msg_tokens > remaining:
             break
         remaining -= msg_tokens
@@ -105,6 +106,10 @@ class EpisodicSearchRequest(BaseModel):
     top_k: int = 5
 
 
+class SetIntentRequest(BaseModel):
+    intent: str
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 
@@ -119,7 +124,11 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         app.state.memory = MemoryStore(config, pool)
         app.state.ingest = IngestPipeline(config, pool)
         app.state.recall_enabled = True
+        app.state.tools = ToolRegistry(config.scratch_dir, memory=app.state.memory)
+        app.state.intent = None  # Current derived/set intent
+        app.state.messages_since_intent = 0  # Counter for automatic derivation
         logger.info("Memory store ready")
+        logger.info("Tool registry ready (scratch_dir=%s)", config.scratch_dir)
         yield
         await pool.close()
 
@@ -150,7 +159,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         completion_id = f"chatcmpl-{uuid.uuid4().hex}"
         created = int(time.time())
 
-        # Build system message: base identity prompt + episodic memory context
+        # Build system message: base identity prompt + intent + episodic memory context
         memory: MemoryStore = app.state.memory
         last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         context_block = ""
@@ -161,13 +170,22 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                 context_block = memory.format_episodic_context(recalled)
             except Exception as exc:
                 logger.warning("Episodic recall failed (continuing without context): %s", exc)
-        system_content = SYSTEM_PROMPT + (f"\n\n{context_block}" if context_block else "")
+
+        # Build intent block if set
+        intent_block = ""
+        if app.state.intent:
+            intent_block = f"\n\n## Current Intent\n\n{app.state.intent}"
+
+        system_content = (
+            SYSTEM_PROMPT + intent_block + (f"\n\n{context_block}" if context_block else "")
+        )
         messages = [{"role": "system", "content": system_content}] + messages
         # Truncate to fit within the LLM context window.
         messages = _truncate_messages(messages, config.llm_context_length)
         prompt_token_estimate = sum(_estimate_tokens(m["content"]) + 4 for m in messages)
         app.state.last_context = {
             "base": SYSTEM_PROMPT,
+            "intent": app.state.intent,
             "memory": context_block or None,
             "hits": [
                 {
@@ -195,16 +213,55 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                     created,
                     memory=memory,
                     user_text=last_user,
+                    tools=app.state.tools,
+                    app=app,
+                    config=config,
                 ),
                 media_type="text/event-stream",
             )
 
-        try:
-            result = await llm.chat(model, messages, temperature, request.max_tokens)
-        except HttpError as exc:
-            raise HTTPException(status_code=502, detail=f"LLM backend error: {exc}") from exc
+        # Non-streaming with tool execution loop
+        tools = app.state.tools
+        tool_defs = tools.to_openai_tools()
+        max_tool_rounds = 5  # Prevent infinite loops
 
-        content = result.get("message", {}).get("content", "")
+        for _ in range(max_tool_rounds):
+            try:
+                result = await llm.chat(
+                    model, messages, temperature, request.max_tokens, tools=tool_defs
+                )
+            except HttpError as exc:
+                raise HTTPException(status_code=502, detail=f"LLM backend error: {exc}") from exc
+
+            # If no tool calls, we're done
+            if not result.tool_calls:
+                break
+
+            # Execute tool calls and append results
+            assistant_msg: dict[str, Any] = {
+                "role": "assistant",
+                "content": result.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.name, "arguments": tc.arguments},
+                    }
+                    for tc in result.tool_calls
+                ],
+            }
+            messages.append(assistant_msg)
+            for tc in result.tool_calls:
+                tool_result = await tools.execute(tc.name, tc.arguments)
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": tool_result.to_content(),
+                    }
+                )
+
+        content = result.content
 
         # Persist the exchange to the buffer.
         if last_user:
@@ -214,6 +271,14 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                     await memory.save_to_buffer("assistant", content)
             except Exception as exc:
                 logger.warning("Buffer write failed: %s", exc)
+
+        # Increment message counter and check for intent derivation
+        app.state.messages_since_intent += 1
+        if app.state.messages_since_intent >= config.intent_interval:
+            try:
+                await _derive_intent(app, llm, config)
+            except Exception as exc:
+                logger.warning("Intent derivation failed: %s", exc)
 
         return {
             "id": completion_id,
@@ -227,7 +292,11 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                     "finish_reason": "stop",
                 }
             ],
-            "usage": _usage(result),
+            "usage": {
+                "prompt_tokens": result.prompt_tokens,
+                "completion_tokens": result.completion_tokens,
+                "total_tokens": result.prompt_tokens + result.completion_tokens,
+            },
         }
 
     @app.post("/v1/ingest")
@@ -370,7 +439,86 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         summaries = await list_summaries(pool)
         return {"summaries": summaries, "count": len(summaries)}
 
+    # ── Intent endpoints ──────────────────────────────────────────────────────
+
+    @app.get("/v1/intent")
+    async def get_intent() -> dict:
+        """Get the current intent/motivation."""
+        return {
+            "intent": app.state.intent,
+            "messages_since_derivation": app.state.messages_since_intent,
+        }
+
+    @app.post("/v1/intent")
+    async def set_intent(request: SetIntentRequest) -> dict:
+        """Set the intent/motivation manually."""
+        app.state.intent = request.intent
+        app.state.messages_since_intent = 0  # Reset counter
+        logger.info("Intent set manually: %s", request.intent[:100])
+        return {"intent": app.state.intent}
+
+    @app.delete("/v1/intent")
+    async def clear_intent() -> dict:
+        """Clear the current intent."""
+        app.state.intent = None
+        app.state.messages_since_intent = 0
+        return {"intent": None}
+
+    @app.post("/v1/intent/derive")
+    async def derive_intent_endpoint() -> dict:
+        """Manually trigger intent derivation."""
+        await _derive_intent(app, llm, config)
+        return {
+            "intent": app.state.intent,
+            "messages_since_derivation": app.state.messages_since_intent,
+        }
+
     return app
+
+
+# ── Intent derivation ─────────────────────────────────────────────────────────
+
+
+async def _derive_intent(app: FastAPI, llm: OpenAIClient, config: NixxConfig) -> None:
+    """Derive intent from recent conversation by asking the LLM to analyze it."""
+    memory: MemoryStore = app.state.memory
+    pool = memory._pool
+
+    # Get recent buffer entries
+    entries = await get_current_session_entries(pool, limit=config.intent_lookback)
+    if len(entries) < 2:
+        logger.info("Not enough messages to derive intent")
+        return
+
+    # Format as exchange
+    exchange_lines = []
+    for e in entries:
+        role = "User" if e["role"] == "user" else "Assistant"
+        content = e["content"][:500]  # Truncate long messages
+        if len(e["content"]) > 500:
+            content += "..."
+        exchange_lines.append(f"{role}: {content}")
+
+    exchange = "\n\n".join(exchange_lines)
+
+    # Call LLM to derive intent (simple prompt, no tools, no recall)
+    prompt = INTENT_DERIVATION_PROMPT.format(exchange=exchange)
+    messages = [{"role": "user", "content": prompt}]
+
+    try:
+        result = await llm.chat(
+            config.llm_model,
+            messages,
+            temperature=0.3,  # Lower temperature for more focused response
+            max_tokens=150,
+        )
+        intent = result.content.strip()
+        if intent:
+            app.state.intent = intent
+            app.state.messages_since_intent = 0
+            logger.info("Intent derived: %s", intent[:100])
+    except Exception as exc:
+        logger.warning("Failed to derive intent: %s", exc)
 
 
 # ── Streaming helpers ─────────────────────────────────────────────────────────
@@ -379,45 +527,114 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
 async def _chat_event_stream(
     llm: OpenAIClient,
     model: str,
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     temperature: float,
     max_tokens: int | None,
     completion_id: str,
     created: int,
     memory: MemoryStore | None = None,
     user_text: str = "",
+    tools: ToolRegistry | None = None,
+    app: FastAPI | None = None,
+    config: NixxConfig | None = None,
 ) -> AsyncGenerator[str, None]:
     accumulated = ""
-    try:
-        async for chunk in llm.chat_stream(model, messages, temperature, max_tokens):
-            content = chunk.get("message", {}).get("content", "")
-            done = chunk.get("done", False)
-            if content:
-                accumulated += content
-            data = {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": model,
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"content": content} if content else {},
-                        "finish_reason": "stop" if done else None,
-                    }
-                ],
-            }
-            yield f"data: {json.dumps(data)}\n\n"
-            if done:
-                break
-    except Exception as exc:
-        error = {"error": {"message": str(exc), "type": "server_error"}}
-        yield f"data: {json.dumps(error)}\n\n"
-        yield "data: [DONE]\n\n"
-        return
+    tool_defs = tools.to_openai_tools() if tools else None
+    max_tool_rounds = 5
 
-    # Write to buffer BEFORE yielding [DONE] — otherwise the client may close
-    # the connection and cancel the generator before this code runs.
+    for _ in range(max_tool_rounds):
+        pending_tool_calls: list[dict[str, Any]] = []
+
+        try:
+            async for chunk in llm.chat_stream(
+                model, messages, temperature, max_tokens, tools=tool_defs
+            ):
+                content = chunk.content
+                done = chunk.done
+
+                if content:
+                    accumulated += content
+                    data = {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": model,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": content},
+                                "finish_reason": None,
+                            }
+                        ],
+                    }
+                    yield f"data: {json.dumps(data)}\n\n"
+
+                # Collect tool calls from final chunk
+                if done and chunk.tool_calls:
+                    pending_tool_calls = [
+                        {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                        for tc in chunk.tool_calls
+                    ]
+                    break
+
+                if done and not chunk.tool_calls:
+                    # No tool calls, finish streaming
+                    data = {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": model,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                    }
+                    yield f"data: {json.dumps(data)}\n\n"
+                    break
+
+        except Exception as exc:
+            error = {"error": {"message": str(exc), "type": "server_error"}}
+            yield f"data: {json.dumps(error)}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        # If no tool calls, we're done with the loop
+        if not pending_tool_calls:
+            break
+
+        # Execute tool calls
+        if tools:
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": accumulated,
+                    "tool_calls": [
+                        {
+                            "id": tc["id"],
+                            "type": "function",
+                            "function": {"name": tc["name"], "arguments": tc["arguments"]},
+                        }
+                        for tc in pending_tool_calls
+                    ],
+                }
+            )
+            for tc in pending_tool_calls:
+                logger.info("Executing tool: %s", tc["name"])
+                tool_result = await tools.execute(tc["name"], tc["arguments"])
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": tool_result.to_content(),
+                    }
+                )
+            # Clear accumulated for next round
+            accumulated = ""
+
+    # Write to buffer BEFORE yielding [DONE]
     if memory is not None:
         try:
             if user_text:
@@ -427,14 +644,13 @@ async def _chat_event_stream(
         except Exception as exc:
             logger.warning("Buffer write failed: %s", exc)
 
+    # Increment message counter and check for intent derivation
+    if app is not None and config is not None:
+        app.state.messages_since_intent += 1
+        if app.state.messages_since_intent >= config.intent_interval:
+            try:
+                await _derive_intent(app, llm, config)
+            except Exception as exc:
+                logger.warning("Intent derivation failed: %s", exc)
+
     yield "data: [DONE]\n\n"
-
-
-def _usage(result: dict[str, Any]) -> dict[str, int]:
-    prompt_tokens = int(result.get("prompt_eval_count") or 0)
-    completion_tokens = int(result.get("eval_count") or 0)
-    return {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": prompt_tokens + completion_tokens,
-    }

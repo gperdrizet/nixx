@@ -8,17 +8,20 @@ import httpx
 import pytest
 
 from nixx.config import NixxConfig
+from nixx.llm import ChatResponse
 from nixx.server import create_app
+from nixx.tools import ToolRegistry
 
 # ── Reusable LLM response shapes ─────────────────────────────────────────────
-# These match the internal format returned by OpenAIClient.
+# These use the ChatResponse dataclass returned by OpenAIClient.
 
-CHAT_RESPONSE: dict = {
-    "message": {"role": "assistant", "content": "Hello!"},
-    "done": True,
-    "prompt_eval_count": 10,
-    "eval_count": 5,
-}
+CHAT_RESPONSE = ChatResponse(
+    content="Hello!",
+    tool_calls=[],
+    done=True,
+    prompt_tokens=10,
+    completion_tokens=5,
+)
 
 
 # ── Config fixture ────────────────────────────────────────────────────────────
@@ -73,7 +76,7 @@ def _mock_memory_store() -> MagicMock:
 
 
 @pytest.fixture
-async def app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncClient, None]:
+async def app_client(config: NixxConfig, tmp_path: Path) -> AsyncGenerator[httpx.AsyncClient, None]:
     """HTTP client against the real app with memory store mocked out.
 
     The lifespan is bypassed entirely — app.state.memory is set directly.
@@ -82,6 +85,9 @@ async def app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncClient, No
     app = create_app(config)
     app.state.memory = _mock_memory_store()
     app.state.recall_enabled = True
+    app.state.tools = ToolRegistry(tmp_path / "scratch", memory=app.state.memory)
+    app.state.intent = None
+    app.state.messages_since_intent = 0
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -89,7 +95,9 @@ async def app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncClient, No
 
 
 @pytest.fixture
-async def mocked_app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncClient, None]:
+async def mocked_app_client(
+    config: NixxConfig, tmp_path: Path
+) -> AsyncGenerator[httpx.AsyncClient, None]:
     """HTTP client against the app with LLM client and MemoryStore mocked out.
 
     Use for LLM endpoint tests that should not hit the backend or Postgres.
@@ -100,6 +108,9 @@ async def mocked_app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncCli
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         app.state.recall_enabled = True
+        app.state.tools = ToolRegistry(tmp_path / "scratch", memory=app.state.memory)
+        app.state.intent = None
+        app.state.messages_since_intent = 0
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:

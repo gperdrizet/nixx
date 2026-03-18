@@ -48,6 +48,20 @@ class NixxConfig(BaseSettings):
         default=1000, description="Word count threshold for episodic summary prompts"
     )
 
+    # Intent derivation settings
+    intent_interval: int = Field(
+        default=10, description="Number of messages between automatic intent derivation"
+    )
+    intent_lookback: int = Field(
+        default=10, description="Number of recent messages to analyze for intent derivation"
+    )
+
+    # Scratch directory for file operations
+    scratch_dir: Path = Field(
+        default=Path.home() / "nixx_scratch",
+        description="Directory for file read/write operations",
+    )
+
     # Database settings
     database_url: str = Field(
         default="postgresql://nixx:changeme@localhost:5432/nixx",

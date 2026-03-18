@@ -325,6 +325,12 @@ class NixxApp(App[None]):
                     self.run_worker(self._show_interval(), exclusive=False, thread=False)
             elif text == "/recall":
                 self.action_toggle_recall()
+            elif text.startswith("/intent"):
+                arg = text[7:].strip()
+                if arg:
+                    self.run_worker(self._set_intent(arg), exclusive=False, thread=False)
+                else:
+                    self.run_worker(self._show_intent(), exclusive=False, thread=False)
             else:
                 self._add_message("system", f"Unknown command: {text}")
             event.input.focus()
@@ -421,6 +427,7 @@ class NixxApp(App[None]):
             "  /clear                  Clear conversation\n"
             "  /recall                 Toggle episodic recall on/off\n"
             "  /interval \\[words]       Show or set summary word threshold\n"
+            "  /intent \\[text]          Show or set current intent\n"
             "\n"
             "[b]Keybindings[/b]\n"
             "  Ctrl+L                  Clear conversation\n"
@@ -573,6 +580,42 @@ class NixxApp(App[None]):
             self._add_message("system", f"[red]Error: {exc}[/red]")
             return
         self._add_message("system", f"Summary interval: [b]{data['interval_words']}[/b] words.")
+
+    async def _set_intent(self, intent: str) -> None:
+        """Set the current intent/motivation."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"{self._base_url}/v1/intent",
+                    json={"intent": intent},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+        self._add_message("system", f"Intent set: [b]{data['intent']}[/b]")
+
+    async def _show_intent(self) -> None:
+        """Show the current intent/motivation."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{self._base_url}/v1/intent")
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+        intent = data.get("intent")
+        msg_count = data.get("messages_since_derivation", 0)
+        if intent:
+            self._add_message(
+                "system",
+                f"Current intent: [b]{intent}[/b]\n"
+                f"[dim]({msg_count} messages since last derivation)[/dim]",
+            )
+        else:
+            self._add_message("system", "[dim]No intent set[/dim]")
 
     async def _update_context_bar(self) -> None:
         """Fetch token usage from the server and update the context gauge."""

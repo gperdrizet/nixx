@@ -130,7 +130,7 @@ class MemoryStore:
         ]
         try:
             result = await self._llm.chat(self._config.llm_model, messages, temperature=0.3)
-            return result.get("message", {}).get("content") or transcript[:500]
+            return result.content or transcript[:500]
         except Exception:
             return transcript[:500]
 
@@ -216,7 +216,7 @@ class MemoryStore:
         ]
         try:
             result = await self._llm.chat(self._config.llm_model, messages, temperature=0.3)
-            raw = result.get("message", {}).get("content", "")
+            raw = result.content
             parsed = json.loads(raw)
             return {
                 "summary": parsed.get("summary", raw),

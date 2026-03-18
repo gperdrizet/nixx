@@ -1,12 +1,15 @@
 """Tests for the FastAPI server endpoints."""
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
 
 from nixx.config import NixxConfig
+from nixx.llm import ChatResponse
 from nixx.server import _truncate_messages, create_app
+from nixx.tools import ToolRegistry
 from tests.conftest import CHAT_RESPONSE, _mock_memory_store
 
 # ── /health ───────────────────────────────────────────────────────────────────
@@ -65,13 +68,16 @@ async def test_chat_completions_uses_default_model(
     assert response.json()["model"] == config.llm_model
 
 
-async def test_chat_completions_model_override(config: NixxConfig) -> None:
+async def test_chat_completions_model_override(config: NixxConfig, tmp_path: Path) -> None:
     mock_client = AsyncMock()
     mock_client.chat = AsyncMock(return_value=CHAT_RESPONSE)
     with patch("nixx.server.OpenAIClient", return_value=mock_client):
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         app.state.recall_enabled = True
+        app.state.tools = ToolRegistry(tmp_path / "scratch")
+        app.state.intent = None
+        app.state.messages_since_intent = 0
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -82,13 +88,16 @@ async def test_chat_completions_model_override(config: NixxConfig) -> None:
     assert response.json()["model"] == "llama3:8b"
 
 
-async def test_chat_completions_llm_error(config: NixxConfig) -> None:
+async def test_chat_completions_llm_error(config: NixxConfig, tmp_path: Path) -> None:
     mock_client = AsyncMock()
     mock_client.chat = AsyncMock(side_effect=httpx.ConnectError("All connection attempts failed"))
     with patch("nixx.server.OpenAIClient", return_value=mock_client):
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         app.state.recall_enabled = True
+        app.state.tools = ToolRegistry(tmp_path / "scratch")
+        app.state.intent = None
+        app.state.messages_since_intent = 0
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -100,10 +109,10 @@ async def test_chat_completions_llm_error(config: NixxConfig) -> None:
     assert "LLM backend error" in response.json()["detail"]
 
 
-async def test_chat_completions_streaming(config: NixxConfig) -> None:
+async def test_chat_completions_streaming(config: NixxConfig, tmp_path: Path) -> None:
     async def mock_chat_stream(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
-        yield {"message": {"role": "assistant", "content": "Hi"}, "done": False}
-        yield {"message": {"role": "assistant", "content": ""}, "done": True}
+        yield ChatResponse(content="Hi", done=False)
+        yield ChatResponse(content="", done=True)
 
     mock_client = AsyncMock()
     mock_client.chat_stream = mock_chat_stream
@@ -111,6 +120,9 @@ async def test_chat_completions_streaming(config: NixxConfig) -> None:
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         app.state.recall_enabled = True
+        app.state.tools = ToolRegistry(tmp_path / "scratch")
+        app.state.intent = None
+        app.state.messages_since_intent = 0
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -169,13 +181,16 @@ def test_truncate_messages_keeps_system_when_budget_tiny() -> None:
 # ── Recall toggle ─────────────────────────────────────────────────────────────
 
 
-async def test_recall_toggle_disables_context_injection(config: NixxConfig) -> None:
+async def test_recall_toggle_disables_context_injection(config: NixxConfig, tmp_path: Path) -> None:
     mock_client = AsyncMock()
     mock_client.chat = AsyncMock(return_value=CHAT_RESPONSE)
     with patch("nixx.server.OpenAIClient", return_value=mock_client):
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         app.state.recall_enabled = True
+        app.state.tools = ToolRegistry(tmp_path / "scratch")
+        app.state.intent = None
+        app.state.messages_since_intent = 0
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:

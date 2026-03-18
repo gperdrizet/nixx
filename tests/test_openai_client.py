@@ -27,10 +27,11 @@ async def test_chat_success() -> None:
     client = OpenAIClient(base_url=BASE_URL)
     result = await client.chat("gpt-oss-20b", [{"role": "user", "content": "hi"}])
 
-    assert result["message"]["content"] == "Hello!"
-    assert result["done"] is True
-    assert result["prompt_eval_count"] == 10
-    assert result["eval_count"] == 5
+    assert result.content == "Hello!"
+    assert result.done is True
+    assert result.prompt_tokens == 10
+    assert result.completion_tokens == 5
+    assert result.tool_calls == []
 
 
 @respx.mock

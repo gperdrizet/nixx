@@ -96,6 +96,6 @@ class IngestPipeline:
         ]
         try:
             result = await self._llm.chat(self._config.llm_model, messages, temperature=0.3)
-            return result.get("message", {}).get("content") or text[:500]
+            return result.content or text[:500]
         except Exception:
             return text[:500]
