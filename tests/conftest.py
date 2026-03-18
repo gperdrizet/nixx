@@ -81,6 +81,7 @@ async def app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncClient, No
     """
     app = create_app(config)
     app.state.memory = _mock_memory_store()
+    app.state.recall_enabled = True
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -98,6 +99,7 @@ async def mocked_app_client(config: NixxConfig) -> AsyncGenerator[httpx.AsyncCli
     with patch("nixx.server.OpenAIClient", return_value=mock_client):
         app = create_app(config)
         app.state.memory = _mock_memory_store()
+        app.state.recall_enabled = True
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:

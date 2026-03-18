@@ -17,6 +17,7 @@ from nixx.config import NixxConfig
 from nixx.ingest.pipeline import IngestPipeline
 from nixx.llm import OpenAIClient
 from nixx.memory.db import (
+    count_unsummarized_words,
     create_pool,
     get_buffer_entries,
     get_current_session_entries,
@@ -31,6 +32,42 @@ from nixx.memory.store import MemoryStore
 from nixx.prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
+
+# Token budget reserved for the LLM response.
+_RESPONSE_RESERVE = 1024
+
+
+def _estimate_tokens(text: str) -> int:
+    """Rough token estimate: 1 token ≈ 4 characters."""
+    return len(text) // 4
+
+
+def _truncate_messages(messages: list[dict[str, str]], context_length: int) -> list[dict[str, str]]:
+    """Drop oldest conversation messages to fit within the token budget.
+
+    Keeps the system message (index 0) and as many recent messages as fit.
+    """
+    budget = context_length - _RESPONSE_RESERVE
+    if budget <= 0:
+        return messages[:1]
+
+    system_tokens = _estimate_tokens(messages[0]["content"]) if messages else 0
+    remaining = budget - system_tokens
+    if remaining <= 0:
+        return messages[:1]
+
+    # Walk backwards through conversation messages, accumulating tokens.
+    kept: list[dict[str, str]] = []
+    for msg in reversed(messages[1:]):
+        msg_tokens = _estimate_tokens(msg["content"]) + 4  # +4 for message framing
+        if msg_tokens > remaining:
+            break
+        remaining -= msg_tokens
+        kept.append(msg)
+
+    kept.reverse()
+    return [messages[0]] + kept
+
 
 # ── OpenAI-compatible request models ──────────────────────────────────────────
 
@@ -81,6 +118,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         await init_schema(pool, dimensions=config.embedding_dimensions)
         app.state.memory = MemoryStore(config, pool)
         app.state.ingest = IngestPipeline(config, pool)
+        app.state.recall_enabled = True
         logger.info("Memory store ready")
         yield
         await pool.close()
@@ -117,7 +155,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         context_block = ""
         recalled: list[dict] = []
-        if last_user:
+        if last_user and app.state.recall_enabled:
             try:
                 recalled = await memory.recall_episodic_for_prompt(last_user, top_k=3)
                 context_block = memory.format_episodic_context(recalled)
@@ -125,6 +163,9 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                 logger.warning("Episodic recall failed (continuing without context): %s", exc)
         system_content = SYSTEM_PROMPT + (f"\n\n{context_block}" if context_block else "")
         messages = [{"role": "system", "content": system_content}] + messages
+        # Truncate to fit within the LLM context window.
+        messages = _truncate_messages(messages, config.llm_context_length)
+        prompt_token_estimate = sum(_estimate_tokens(m["content"]) + 4 for m in messages)
         app.state.last_context = {
             "base": SYSTEM_PROMPT,
             "memory": context_block or None,
@@ -136,6 +177,10 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                 }
                 for r in recalled
             ],
+            "token_usage": {
+                "prompt_tokens": prompt_token_estimate,
+                "context_length": config.llm_context_length,
+            },
         }
 
         if request.stream:
@@ -266,7 +311,13 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         """Check whether a summary is due."""
         mem: MemoryStore = app.state.memory
         due = await mem.check_summary_due()
-        return {"summary_due": due, "interval_words": config.summary_interval}
+        words, _, _ = await count_unsummarized_words(mem._pool)
+        return {
+            "summary_due": due,
+            "current_words": words,
+            "interval_words": config.summary_interval,
+            "recall_enabled": app.state.recall_enabled,
+        }
 
     @app.post("/v1/episodic/config")
     async def update_episodic_config(request: dict) -> dict:
@@ -276,7 +327,12 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             if val < 1:
                 raise HTTPException(status_code=400, detail="interval_words must be >= 1")
             config.summary_interval = val
-        return {"interval_words": config.summary_interval}
+        if "recall_enabled" in request:
+            app.state.recall_enabled = bool(request["recall_enabled"])
+        return {
+            "interval_words": config.summary_interval,
+            "recall_enabled": app.state.recall_enabled,
+        }
 
     @app.post("/v1/episodic/summary")
     async def create_episode_summary(request: CreateSummaryRequest) -> dict:
@@ -354,14 +410,14 @@ async def _chat_event_stream(
             yield f"data: {json.dumps(data)}\n\n"
             if done:
                 break
-        yield "data: [DONE]\n\n"
     except Exception as exc:
         error = {"error": {"message": str(exc), "type": "server_error"}}
         yield f"data: {json.dumps(error)}\n\n"
         yield "data: [DONE]\n\n"
         return
 
-    # Write to buffer after the stream completes cleanly.
+    # Write to buffer BEFORE yielding [DONE] — otherwise the client may close
+    # the connection and cancel the generator before this code runs.
     if memory is not None:
         try:
             if user_text:
@@ -370,6 +426,8 @@ async def _chat_event_stream(
                 await memory.save_to_buffer("assistant", accumulated)
         except Exception as exc:
             logger.warning("Buffer write failed: %s", exc)
+
+    yield "data: [DONE]\n\n"
 
 
 def _usage(result: dict[str, Any]) -> dict[str, int]:

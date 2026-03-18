@@ -32,6 +32,9 @@ class NixxConfig(BaseSettings):
     llm_model: str = Field(default="gpt-oss-20b", description="Default LLM model")
     llm_temperature: float = Field(default=0.7, description="LLM temperature")
     llm_api_key: Optional[str] = Field(default=None, description="API key for the LLM backend")
+    llm_context_length: int = Field(
+        default=8192, description="Max context length in tokens for the LLM backend"
+    )
 
     # Memory settings
     embedding_base_url: str = Field(
@@ -42,7 +45,7 @@ class NixxConfig(BaseSettings):
 
     # Episodic memory settings
     summary_interval: int = Field(
-        default=500, description="Word count threshold for episodic summary prompts"
+        default=1000, description="Word count threshold for episodic summary prompts"
     )
 
     # Database settings

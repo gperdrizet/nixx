@@ -201,17 +201,15 @@ class MemoryStore:
                 "role": "system",
                 "content": (
                     "Analyze the following conversation. Return a JSON object with two keys:\n"
-                    '1. "summary": A 3-5 sentence summary of the key decisions, '
-                    "outcomes, and context. Write about the content directly - "
-                    "do not describe the conversation itself. "
-                    'For example, write "PostgreSQL supports..." not '
-                    '"The discussion focused on PostgreSQL...".\n'
-                    '2. "entities": An object with categorized key terms. '
-                    "Include specific names and important topics central to the "
-                    "conversation - not generic words. For each category, list up "
-                    "to 5 entries in order of importance. Omit empty categories. "
+                    '1. "summary": A 2-3 sentence summary of key decisions and outcomes. '
+                    "Write about the content directly, not about the conversation. "
+                    'For example: "PostgreSQL supports..." not "The discussion focused on...".\n'
+                    '2. "entities": Categorized key terms. Be highly selective - '
+                    "only include proper nouns, specific tool/library names, or "
+                    "uniquely identifying terms. Skip generic words like 'database', "
+                    "'system', 'code'. Maximum 2-3 entries per category. Omit empty categories. "
                     'Categories: "tools", "people", "topics", "files", "urls".\n\n'
-                    "Return ONLY the JSON object, no other text."
+                    "Return ONLY valid JSON, no markdown or other text."
                 ),
             },
             {"role": "user", "content": transcript},
@@ -227,33 +225,17 @@ class MemoryStore:
         except (json.JSONDecodeError, Exception):
             return {"summary": transcript[:500], "entities": {}}
 
-    async def recall_episodic(self, query: str, top_k: int = 5) -> list[dict]:
-        """Search episodic memory: vector search on summaries + full-text on buffer.
+    async def recall_episodic(self, query: str, top_k: int = 10) -> list[dict]:
+        """Search episodic memory: keyword search on transcript buffer.
 
-        Returns a list of hits, each with a 'type' key ('summary' or 'transcript').
+        Returns a list of transcript hits with buffer IDs for context viewing.
         """
-        embedding = await self._embedder.embed(self._config.embedding_model, query)
-        summary_hits = await search_summaries(self._pool, query_embedding=embedding, top_k=top_k)
         fulltext_hits = await search_buffer_fulltext(self._pool, query=query, limit=top_k)
 
         results: list[dict] = []
-        for h in summary_hits:
-            results.append(
-                {
-                    "type": "summary",
-                    "content": h["content"],
-                    "similarity": float(h["similarity"]),
-                    "tags": h["tags"],
-                    "entities": h["entities"],
-                    "start_buffer_id": h["start_buffer_id"],
-                    "end_buffer_id": h["end_buffer_id"],
-                    "created_at": h["created_at"],
-                }
-            )
         for h in fulltext_hits:
             results.append(
                 {
-                    "type": "transcript",
                     "content": h["content"],
                     "rank": float(h["rank"]),
                     "role": h["role"],
@@ -280,12 +262,9 @@ class MemoryStore:
             return ""
         lines = [
             "The following are summaries of past conversations with the user, "
-            "retrieved by relevance to the current message. They provide background "
-            "context about previous discussions, decisions, and topics. Use them to "
-            "inform your understanding of the user's history and ongoing work. "
-            "Do not reference these summaries directly in your response unless the "
-            "user asks about a past conversation. It is fine to ignore them entirely "
-            "if they are not relevant to the current question.",
+            "retrieved by relevance to the current message. Use them to inform "
+            "your response. You may reference them directly if it makes sense "
+            "in context, or use them as background without calling them out.",
         ]
         for s in summaries:
             tags = ", ".join(s.get("tags", []))

@@ -4,11 +4,12 @@ import json
 
 import httpx
 from rich.markdown import Markdown as RichMarkdown
+from rich.markup import escape as escape_markup
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import ScrollableContainer, Vertical
-from textual.widgets import Footer, Header, Input, Static
+from textual.containers import Horizontal, ScrollableContainer, Vertical
+from textual.widgets import Footer, Header, Input, Static, Switch
 
 from nixx.config import NixxConfig
 
@@ -74,6 +75,77 @@ class Message(Static):
             app.rewind_to(self)
 
 
+class ContextBar(Static):
+    """Visual indicator of context window fill level."""
+
+    DEFAULT_CSS = """
+    ContextBar {
+        height: auto;
+        max-height: 1;
+        width: auto;
+        padding: 0 1 0 0;
+        color: $text-muted;
+    }
+    """
+
+    def __init__(self, id: str | None = None) -> None:
+        super().__init__("[dim]" + "\u2591" * 20 + " 0%[/dim]", id=id)
+
+    def set_usage(self, prompt_tokens: int, context_length: int) -> None:
+        if context_length <= 0:
+            return
+        pct = min(prompt_tokens / context_length, 1.0)
+        filled = int(pct * 20)
+        bar = "\u2588" * filled + "\u2591" * (20 - filled)
+        if pct < 0.5:
+            color = "green"
+        elif pct < 0.8:
+            color = "yellow"
+        else:
+            color = "red"
+        self.update(
+            f"[{color}]{bar}[/] {pct:.0%} "
+            f"[dim]({prompt_tokens:,} / {context_length:,} tokens)[/dim]"
+        )
+
+    def clear_usage(self) -> None:
+        self.update("[dim]" + "\u2591" * 20 + " 0%[/dim]")
+
+
+class SummaryBar(Static):
+    """Visual indicator of progress toward next episodic summary."""
+
+    DEFAULT_CSS = """
+    SummaryBar {
+        height: auto;
+        max-height: 1;
+        width: auto;
+        padding: 0 1 0 0;
+        color: $text-muted;
+    }
+    """
+
+    def __init__(self, id: str | None = None) -> None:
+        super().__init__("[dim]" + "\u2591" * 10 + " 0w[/dim]", id=id)
+
+    def set_progress(self, current_words: int, interval_words: int) -> None:
+        if interval_words <= 0:
+            return
+        pct = min(current_words / interval_words, 1.0)
+        filled = int(pct * 10)
+        bar = "\u2588" * filled + "\u2591" * (10 - filled)
+        if pct < 0.5:
+            color = "dim"
+        elif pct < 0.9:
+            color = "cyan"
+        else:
+            color = "magenta"
+        self.update(f"[{color}]{bar}[/] [dim]summary {current_words:,}/{interval_words:,}w[/dim]")
+
+    def clear_progress(self) -> None:
+        self.update("[dim]" + "\u2591" * 10 + " summary 0w[/dim]")
+
+
 class NixxApp(App[None]):
     """Nixx chat terminal UI."""
 
@@ -105,11 +177,28 @@ class NixxApp(App[None]):
         width: 1fr;
         border: tall $warning;
     }
+    #status-row {
+        height: auto;
+        max-height: 1;
+        padding: 0 2;
+    }
+    #recall-label {
+        width: auto;
+        padding: 0 1 0 0;
+        color: $text-muted;
+    }
+    #recall-switch {
+        width: auto;
+        height: auto;
+        min-height: 1;
+        padding: 0;
+    }
     """
 
     BINDINGS = [
         ("ctrl+c", "quit", "Quit"),
         ("ctrl+l", "clear", "Clear"),
+        ("ctrl+r", "toggle_recall", "Recall"),
         Binding("escape", "cancel_edit", "Cancel", show=False),
     ]
 
@@ -125,6 +214,11 @@ class NixxApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         yield ScrollableContainer(id="messages", can_focus=False)
+        with Horizontal(id="status-row"):
+            yield ContextBar(id="context-bar")
+            yield SummaryBar(id="summary-bar")
+            yield Static("recall", id="recall-label")
+            yield Switch(value=True, id="recall-switch")
         with Vertical(id="tag-row"):
             yield Input(
                 placeholder="Tags (e.g. langchain, memory, architecture) or Enter to skip\u2026",
@@ -138,6 +232,7 @@ class NixxApp(App[None]):
         self.query_one("#input", Input).focus()
         self._add_message("system", f"Connected to {self._base_url}")
         self.run_worker(self._restore_session(), exclusive=False, thread=False)
+        self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
 
     def _add_message(
         self, role: str, content: str = "", history_index: int | None = None
@@ -202,30 +297,24 @@ class NixxApp(App[None]):
                 self._show_help()
             elif text == "/context":
                 self.run_worker(self._show_context(), exclusive=False, thread=False)
-            elif text.startswith("/source"):
-                name = text[7:].strip().strip("\"'")
-                if name:
-                    self.run_worker(self._create_source(name), exclusive=False, thread=False)
-                else:
-                    self._add_message("system", 'Usage: /source "name"')
-            elif text == "/sources":
-                self.run_worker(self._list_sources(), exclusive=False, thread=False)
-            elif text.startswith("/lookup"):
-                arg = text[7:].strip().strip("\"'")
-                if arg:
-                    self.run_worker(self._lookup_source(arg), exclusive=False, thread=False)
-                else:
-                    self._add_message("system", 'Usage: /lookup "name" or /lookup <id>')
             elif text == "/summary":
                 self._prompt_for_tags()
-            elif text == "/summaries":
-                self.run_worker(self._list_summaries(), exclusive=False, thread=False)
             elif text.startswith("/search"):
                 query = text[7:].strip().strip("\"'")
                 if query:
                     self.run_worker(self._search_episodic(query), exclusive=False, thread=False)
                 else:
                     self._add_message("system", 'Usage: /search "query"')
+            elif text.startswith("/transcript"):
+                args = text[11:].strip().split()
+                if args:
+                    start_id = args[0]
+                    end_id = args[1] if len(args) > 1 else None
+                    self.run_worker(
+                        self._view_transcript(start_id, end_id), exclusive=False, thread=False
+                    )
+                else:
+                    self._add_message("system", "Usage: /transcript <id> [end_id]")
             elif text == "/clear":
                 self.action_clear()
             elif text.startswith("/interval"):
@@ -234,6 +323,8 @@ class NixxApp(App[None]):
                     self.run_worker(self._set_interval(arg), exclusive=False, thread=False)
                 else:
                     self.run_worker(self._show_interval(), exclusive=False, thread=False)
+            elif text == "/recall":
+                self.action_toggle_recall()
             else:
                 self._add_message("system", f"Unknown command: {text}")
             event.input.focus()
@@ -322,144 +413,26 @@ class NixxApp(App[None]):
     def _show_help(self) -> None:
         text = (
             "[b]Commands[/b]\n"
-            "  /help                  Show this message\n"
-            '  /source "name"         Create a semantic source from the conversation buffer\n'
-            "  /sources               List all sources\n"
-            '  /lookup "name" | <id>  Show full source content\n'
-            "  /context               Show base prompt and recall hits\n"
-            "  /summary               Create an episodic summary now\n"
-            "  /summaries             List all episodic summaries\n"
-            '  /search "query"        Search episodic memory\n'
-            "  /clear                 Clear conversation\n"
-            "  /interval [words]      Show or set summary word threshold\n"
+            "  /help                   Show this message\n"
+            "  /context                Show base prompt and recall hits\n"
+            "  /summary                Create an episodic summary now\n"
+            '  /search "query"         Search transcript (keyword)\n'
+            "  /transcript <id> \\[end]  View transcript messages\n"
+            "  /clear                  Clear conversation\n"
+            "  /recall                 Toggle episodic recall on/off\n"
+            "  /interval \\[words]       Show or set summary word threshold\n"
             "\n"
             "[b]Keybindings[/b]\n"
-            "  Ctrl+L                 Clear conversation\n"
-            "  Ctrl+P                 Command palette\n"
-            "  Tab / Shift+Tab        Focus messages\n"
-            "  Enter  (on message)    Edit user message and regenerate\n"
-            "  Backspace (on message) Rewind to before that message\n"
-            "  Escape                 Cancel edit\n"
-            "  Ctrl+C                 Quit"
+            "  Ctrl+L                  Clear conversation\n"
+            "  Ctrl+R                  Toggle episodic recall\n"
+            "  Ctrl+P                  Command palette\n"
+            "  Tab / Shift+Tab         Focus messages\n"
+            "  Enter (on message)      Edit user message and regenerate\n"
+            "  Backspace (on message)  Rewind to before that message\n"
+            "  Escape                  Cancel edit\n"
+            "  Ctrl+C                  Quit"
         )
         self._add_message("system", text)
-
-    async def _create_source(self, name: str) -> None:
-        self._add_message("system", f"Creating source: [b]{name}[/b]…")
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                resp = await client.post(
-                    f"{self._base_url}/v1/sources",
-                    json={"name": name},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-        except httpx.ConnectError:
-            self._add_message("system", "[red]Cannot reach server.[/red]")
-            return
-        except Exception as exc:
-            self._add_message("system", f"[red]Error: {exc}[/red]")
-            return
-        self._add_message(
-            "system",
-            f"Source [b]{data['name']}[/b] created "
-            f"(buffer {data['start_id']}\u2013{data['end_id']}, {data.get('chunks', '?')} chunks)\n"
-            f"[dim]{data['summary']}[/dim]",
-        )
-
-    async def _list_sources(self) -> None:
-        """List all sources."""
-        self._add_message("system", "Fetching sources…")
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(f"{self._base_url}/v1/sources")
-                resp.raise_for_status()
-                data = resp.json()
-        except httpx.ConnectError:
-            self._add_message("system", "[red]Cannot reach server.[/red]")
-            return
-        except Exception as exc:
-            self._add_message("system", f"[red]Error: {exc}[/red]")
-            return
-
-        sources = data.get("sources", [])
-        if not sources:
-            self._add_message("system", "[dim]No sources yet.[/dim]")
-            return
-
-        text = f"[b]{data['count']} sources:[/b]\n\n"
-        for s in sources:
-            source_id = s["id"]
-            name = s["name"]
-            type_ = s["type"]
-            summary = s["summary"][:80] + "…" if len(s["summary"]) > 80 else s["summary"]
-            text += f"[cyan]{source_id}[/] [b]{name}[/] [dim]({type_})[/]\n"
-            text += f"  [dim]{summary}[/dim]\n\n"
-        self._add_message("system", text.strip())
-
-    async def _lookup_source(self, arg: str) -> None:
-        """Look up a source by ID or name and display its full content."""
-        # Try to parse as integer ID first
-        try:
-            source_id = int(arg)
-        except ValueError:
-            # Not an ID, try name search
-            self._add_message("system", f"Searching for source: [b]{arg}[/b]…")
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.get(f"{self._base_url}/v1/sources", params={"name": arg})
-                    resp.raise_for_status()
-                    data = resp.json()
-            except httpx.ConnectError:
-                self._add_message("system", "[red]Cannot reach server.[/red]")
-                return
-            except Exception as exc:
-                self._add_message("system", f"[red]Error: {exc}[/red]")
-                return
-
-            sources = data.get("sources", [])
-            if not sources:
-                self._add_message("system", f"[red]No source found matching: {arg}[/red]")
-                return
-            elif len(sources) > 1:
-                text = f"[yellow]Multiple matches found ({len(sources)}). Use ID instead:[/]\n\n"
-                for s in sources:
-                    text += f"[cyan]{s['id']}[/] [b]{s['name']}[/] [dim]({s['type']})[/]\n"
-                self._add_message("system", text.strip())
-                return
-            source_id = sources[0]["id"]
-
-        # Fetch full source content
-        self._add_message("system", f"Loading source {source_id}…")
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.get(f"{self._base_url}/v1/sources/{source_id}/content")
-                resp.raise_for_status()
-                data = resp.json()
-        except httpx.ConnectError:
-            self._add_message("system", "[red]Cannot reach server.[/red]")
-            return
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 404:
-                self._add_message("system", f"[red]Source {source_id} not found.[/red]")
-            else:
-                self._add_message("system", f"[red]Error: {exc}[/red]")
-            return
-        except Exception as exc:
-            self._add_message("system", f"[red]Error: {exc}[/red]")
-            return
-
-        # Display source content
-        name = data["source_name"]
-        type_ = data["source_type"]
-        chunks = data["chunks"]
-        total = data["total_chunks"]
-
-        text = f"[b]Source #{source_id}: {name}[/] [dim]({type_}, {total} chunks)[/]\n\n"
-        for chunk in chunks:
-            content = chunk["content"]
-            text += f"{content}\n\n"
-        self._add_message("system", text.strip())
 
     async def _show_context(self) -> None:
         try:
@@ -518,6 +491,7 @@ class NixxApp(App[None]):
         if not text:
             self._add_message("system", "Summary deferred.")
             self._defer_summary()
+            self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
             return
         tags = [t.strip() for t in text.split(",") if t.strip()]
         self.run_worker(self._create_summary(tags), exclusive=False, thread=False)
@@ -558,11 +532,12 @@ class NixxApp(App[None]):
             f"{data['content']}",
         )
         self._summary_in_progress = False
+        self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
 
     def _defer_summary(self) -> None:
         """Record skip: don't re-prompt until interval more words."""
         wc = sum(len(m["content"].split()) for m in self._history)
-        self._skip_until = wc + (self._config.summary_interval or 500)
+        self._skip_until = wc + (self._config.summary_interval or 1000)
 
     async def _set_interval(self, arg: str) -> None:
         """Set the summary word-count interval on the server."""
@@ -585,6 +560,7 @@ class NixxApp(App[None]):
         self._add_message(
             "system", f"Summary interval set to [b]{data['interval_words']}[/b] words."
         )
+        self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
 
     async def _show_interval(self) -> None:
         """Show the current summary word-count interval."""
@@ -597,6 +573,34 @@ class NixxApp(App[None]):
             self._add_message("system", f"[red]Error: {exc}[/red]")
             return
         self._add_message("system", f"Summary interval: [b]{data['interval_words']}[/b] words.")
+
+    async def _update_context_bar(self) -> None:
+        """Fetch token usage from the server and update the context gauge."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{self._base_url}/v1/debug/context")
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception:
+            return
+        usage = data.get("token_usage", {})
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        context_length = usage.get("context_length", 0)
+        if context_length > 0:
+            self.query_one(ContextBar).set_usage(prompt_tokens, context_length)
+
+    async def _update_summary_bar(self) -> None:
+        """Fetch summary progress from the server and update the gauge."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{self._base_url}/v1/episodic/status")
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception:
+            return
+        current = data.get("current_words", 0)
+        interval = data.get("interval_words", 500)
+        self.query_one(SummaryBar).set_progress(current, interval)
 
     async def _check_summary_due(self) -> None:
         """Check if a summary is due and prompt the user if so."""
@@ -619,54 +623,9 @@ class NixxApp(App[None]):
         if data.get("summary_due"):
             self._prompt_for_tags()
 
-    async def _list_summaries(self) -> None:
-        """List all episodic summaries."""
-        self._add_message("system", "Fetching summaries\u2026")
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(f"{self._base_url}/v1/episodic/summaries")
-                resp.raise_for_status()
-                data = resp.json()
-        except httpx.ConnectError:
-            self._add_message("system", "[red]Cannot reach server.[/red]")
-            return
-        except Exception as exc:
-            self._add_message("system", f"[red]Error: {exc}[/red]")
-            return
-
-        summaries = data.get("summaries", [])
-        if not summaries:
-            self._add_message("system", "[dim]No summaries yet.[/dim]")
-            return
-
-        text = f"[b]{data['count']} episodic summaries:[/b]\n"
-        for s in summaries:
-            sid = s["id"]
-            buf_range = f"{s['start_buffer_id']}\u2013{s['end_buffer_id']}"
-            tags = ", ".join(s.get("tags", []))
-            entities = s.get("entities", {})
-            if isinstance(entities, str):
-                try:
-                    entities = json.loads(entities)
-                except (json.JSONDecodeError, TypeError):
-                    entities = {}
-            entity_parts = []
-            for cat, items in entities.items():
-                if items:
-                    entity_parts.append(f"{cat}: {', '.join(items)}")
-            entity_str = "; ".join(entity_parts) if entity_parts else "none"
-            snippet = s["content"][:120].replace("\n", " ")
-
-            text += f"\n[cyan]#{sid}[/] [dim](buffer {buf_range})[/dim]\n"
-            if tags:
-                text += f"  [dim]tags: {tags}[/dim]\n"
-            text += f"  [dim]entities: {entity_str}[/dim]\n"
-            text += f"  {snippet}\u2026\n"
-        self._add_message("system", text.strip())
-
     async def _search_episodic(self, query: str) -> None:
         """Search episodic memory and display results."""
-        self._add_message("system", f"Searching episodic memory: [b]{query}[/b]\u2026")
+        self._add_message("system", f"Searching transcript: [b]{query}[/b]\u2026")
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
@@ -684,32 +643,76 @@ class NixxApp(App[None]):
 
         results = data.get("results", [])
         if not results:
-            self._add_message("system", "[dim]No episodic hits.[/dim]")
+            self._add_message("system", "[dim]No transcript hits.[/dim]")
             return
 
-        text = f"[b]{len(results)} episodic hits:[/b]\n"
+        text = f"[b]{len(results)} transcript hits:[/b]\n"
         for r in results:
-            if r["type"] == "summary":
-                score = r.get("similarity", 0)
-                bar = "\u2588" * int(score * 10)
-                tags = ", ".join(r.get("tags", []))
-                buf_range = f"{r['start_buffer_id']}\u2013{r['end_buffer_id']}"
-                text += (
-                    f"\n[cyan]summary[/] [{score:.3f}] {bar} " f"[dim](buffer {buf_range})[/dim]\n"
+            rank = r.get("rank", 0)
+            role = r.get("role", "?")
+            buf_id = r.get("buffer_id", "?")
+            snippet = r["content"][:150].replace("\n", " ")
+            text += (
+                f"\n[cyan]#{buf_id}[/] [{role}] " f"[dim](rank {rank:.3f})[/dim]\n" f"  {snippet}\n"
+            )
+        text += "\n[dim]Use /transcript <id> to view context[/dim]"
+        self._add_message("system", text.strip())
+
+    async def _view_transcript(self, start_id: str, end_id: str | None = None) -> None:
+        """Fetch and display a range of transcript messages."""
+        try:
+            sid = int(start_id)
+        except ValueError:
+            self._add_message("system", "[red]Invalid start ID[/red]")
+            return
+        eid = None
+        if end_id is not None:
+            try:
+                eid = int(end_id)
+            except ValueError:
+                self._add_message("system", "[red]Invalid end ID[/red]")
+                return
+
+        params: dict[str, int] = {"start_id": sid}
+        if eid is not None:
+            params["end_id"] = eid
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(
+                    f"{self._base_url}/v1/episodic/transcript",
+                    params=params,
                 )
-                if tags:
-                    text += f"  [dim]tags: {tags}[/dim]\n"
-                text += f"  {r['content'][:200]}\n"
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.ConnectError:
+            self._add_message("system", "[red]Cannot reach server.[/red]")
+            return
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+
+        entries = data.get("entries", [])
+        if not entries:
+            self._add_message("system", "[dim]No transcript entries found.[/dim]")
+            return
+
+        text = f"[b]Transcript #{sid}"
+        if eid is not None:
+            text += f"\u2013{eid}"
+        text += f" ({len(entries)} messages):[/b]\n"
+        for e in entries:
+            role = e.get("role", "?")
+            content = e.get("content", "")
+            buf_id = e.get("id", "?")
+            # Color by role
+            if role == "user":
+                role_tag = "[green]user[/]"
+            elif role == "assistant":
+                role_tag = "[yellow]assistant[/]"
             else:
-                rank = r.get("rank", 0)
-                role = r.get("role", "?")
-                buf_id = r.get("buffer_id", "?")
-                snippet = r["content"][:150].replace("\n", " ")
-                text += (
-                    f"\n[yellow]transcript[/] [rank {rank:.3f}] "
-                    f"[dim]({role}, buffer #{buf_id})[/dim]\n"
-                    f"  {snippet}\n"
-                )
+                role_tag = f"[dim]{role}[/]"
+            text += f"\n[dim]#{buf_id}[/] {role_tag}\n{content}\n"
         self._add_message("system", text.strip())
 
     async def _stream_response(self, msg: Message) -> None:
@@ -737,13 +740,13 @@ class NixxApp(App[None]):
                         except json.JSONDecodeError:
                             continue
                         if "error" in chunk:
-                            msg.append(f"\n[red]{chunk['error']['message']}[/red]")
+                            msg.append(f"\n[red]{escape_markup(chunk['error']['message'])}[/red]")
                             break
                         delta = chunk.get("choices", [{}])[0].get("delta", {})
                         token = delta.get("content", "")
                         if token:
                             accumulated += token
-                            msg.append(token)
+                            msg.append(escape_markup(token))
                             self.query_one("#messages", ScrollableContainer).scroll_end(
                                 animate=False
                             )
@@ -751,7 +754,7 @@ class NixxApp(App[None]):
             msg.update("[red]Cannot reach server. Is `nixx serve` running?[/red]")
             return
         except Exception as exc:
-            msg.update(f"[red]Error: {exc}[/red]")
+            msg.update(f"[red]Error: {escape_markup(str(exc))}[/red]")
             return
 
         if accumulated:
@@ -760,6 +763,8 @@ class NixxApp(App[None]):
             msg.render_markdown()
             # Check if episodic summary is due
             self.run_worker(self._check_summary_due(), exclusive=False, thread=False)
+            self.run_worker(self._update_context_bar(), exclusive=False, thread=False)
+            self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
 
     def action_clear(self) -> None:
         self._history.clear()
@@ -768,6 +773,31 @@ class NixxApp(App[None]):
         container = self.query_one("#messages", ScrollableContainer)
         container.remove_children()
         self._add_message("system", "Conversation cleared.")
+        self.query_one(ContextBar).clear_usage()
+        self.query_one(SummaryBar).clear_progress()
+
+    def action_toggle_recall(self) -> None:
+        """Toggle episodic recall on/off via the server."""
+        switch = self.query_one("#recall-switch", Switch)
+        switch.toggle()
+
+    def on_switch_changed(self, event: Switch.Changed) -> None:
+        if event.switch.id == "recall-switch":
+            self.run_worker(self._set_recall(event.value), exclusive=False, thread=False)
+
+    async def _set_recall(self, enabled: bool) -> None:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    f"{self._base_url}/v1/episodic/config",
+                    json={"recall_enabled": enabled},
+                )
+                resp.raise_for_status()
+        except Exception as exc:
+            self._add_message("system", f"[red]Error toggling recall: {exc}[/red]")
+            return
+        state = "[green]on[/green]" if enabled else "[red]off[/red]"
+        self._add_message("system", f"Episodic recall: {state}")
 
     async def _clear_session(self) -> None:
         """Write a session marker to the server buffer."""
