@@ -1,0 +1,2147 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Building a self-hosted personal knowledge base and memory system">
+      
+      
+      
+        <link rel="canonical" href="https://gperdrizet.github.io/nixx/knowledge-graph/">
+      
+      
+        <link rel="prev" href="../stack/">
+      
+      
+        <link rel="next" href="../pgweb-guide/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
+    
+    
+      
+        <title>Knowledge graph - Nixx</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="teal">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#knowledge-graph-architecture" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Nixx" class="md-header__button md-logo" aria-label="Nixx" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Nixx
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Knowledge graph
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/gperdrizet/nixx" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    gperdrizet/nixx
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Nixx" class="md-nav__button md-logo" aria-label="Nixx" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Nixx
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/gperdrizet/nixx" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    gperdrizet/nixx
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build log
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Build log
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-log/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-log/2026-03-18-tool-call-fixes-and-intent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2026-03-18 - Tool call fixes and intent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-log/2026-03-15-llm-backend-and-tui-overhaul/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2026-03-15 - LLM backend and TUI overhaul
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-log/2026-03-15-episodic-memory-and-identity/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2026-03-15 - Episodic memory and identity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-log/2026-03-09-infrastructure-and-docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2026-03-09 - Infrastructure and docs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-log/2026-03-07-tui-and-memory-architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2026-03-07 - TUI and memory architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-log/2026-03-03-memory-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2026-03-03 - Memory system
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-log/2026-03-02-first-working-server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2026-03-02 - First working server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-log/2026-02-24-project-kickoff/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2026-02-24 - Project kickoff
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    
+  
+  
+    <li class="md-nav__item">
+      <a href="../blog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Blog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../stack/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stack
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Knowledge graph
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Knowledge graph
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#vision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vision
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-state-march-8-2026" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current State (March 8, 2026)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-bigger-picture-knowledge-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Bigger Picture: Knowledge Graph
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Bigger Picture: Knowledge Graph">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#source-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Source Types
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Source Types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-conversations-buffer-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Conversations (buffer sources)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-papers-planned" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Papers (planned)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-personal-notes-planned" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Personal Notes (planned)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-code-planned" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Code (planned)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-documentation-planned-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Documentation (planned improvements)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema Extensions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Schema Extensions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sources-table-additions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sources table additions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-tables-for-specialized-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New tables for specialized data
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#projects-the-grouping-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Projects: The Grouping Layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#retrieval-hybrid-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Retrieval: Hybrid Search
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tool-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#jabref-bibliography-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JabRef (bibliography management)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#logseq-note-taking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Logseq (note-taking)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#github-code-hosting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GitHub (code hosting)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-roadmap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation Roadmap
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Implementation Roadmap">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-foundation-complete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1: Foundation (complete)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-paper-support-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2: Paper Support (next)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-logseq-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3: Logseq Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-github-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 4: GitHub Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-5-hybrid-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 5: Hybrid Search
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-6-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 6: Projects
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-7-advanced-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 7: Advanced Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design Principles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open Questions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pgweb-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    pgweb
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SQL queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../phone-access/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phone access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#vision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vision
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-state-march-8-2026" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current State (March 8, 2026)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-bigger-picture-knowledge-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Bigger Picture: Knowledge Graph
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Bigger Picture: Knowledge Graph">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#source-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Source Types
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Source Types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-conversations-buffer-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Conversations (buffer sources)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-papers-planned" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Papers (planned)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-personal-notes-planned" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Personal Notes (planned)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-code-planned" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Code (planned)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-documentation-planned-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Documentation (planned improvements)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schema Extensions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Schema Extensions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sources-table-additions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sources table additions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-tables-for-specialized-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New tables for specialized data
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#projects-the-grouping-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Projects: The Grouping Layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#retrieval-hybrid-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Retrieval: Hybrid Search
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tool-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tool Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#jabref-bibliography-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JabRef (bibliography management)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#logseq-note-taking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Logseq (note-taking)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#github-code-hosting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GitHub (code hosting)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-roadmap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation Roadmap
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Implementation Roadmap">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-foundation-complete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1: Foundation (complete)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-paper-support-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2: Paper Support (next)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-logseq-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3: Logseq Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-github-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 4: GitHub Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-5-hybrid-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 5: Hybrid Search
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-6-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 6: Projects
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-7-advanced-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 7: Advanced Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design Principles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open Questions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="knowledge-graph-architecture">Knowledge graph architecture<a class="headerlink" href="#knowledge-graph-architecture" title="Permanent link">&para;</a></h1>
+<h2 id="vision">Vision<a class="headerlink" href="#vision" title="Permanent link">&para;</a></h2>
+<p>Nixx is evolving from a three-tier memory system (buffer → sources → memories) into a unified <strong>personal knowledge graph</strong> that integrates with your existing tools and workflows.</p>
+<p>The goal: one interface to all your knowledge - research papers, personal notes, code, documentation - with LLM-powered semantic search and retrieval.</p>
+<h2 id="current-state-march-8-2026">Current State (March 8, 2026)<a class="headerlink" href="#current-state-march-8-2026" title="Permanent link">&para;</a></h2>
+<p><strong>What works today:</strong>
+- Three-tier memory: buffer (raw conversation) → sources (meaningful units) → memories (embedded chunks)
+- Conversation archival via <code>/source "name"</code> command
+- Document ingestion: <code>nixx ingest file.md</code> or <code>nixx ingest https://url</code>
+- Semantic recall: top-k cosine similarity search over all memory embeddings
+- Direct lookup: <code>/lookup "name"</code> to retrieve full source content
+- Source types: <code>buffer</code> (conversations), <code>document</code> (local files), <code>web</code> (URLs)</p>
+<p><strong>Schema:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">buffer</span><span class="w">       </span><span class="c1">-- all messages (user + assistant), append-only tape</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">sources</span><span class="w">      </span><span class="c1">-- meaningful units: conversations, docs, web pages, papers, repos</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">memories</span><span class="w">     </span><span class="c1">-- embedded chunks with metadata (chunk index, source_id FK)</span>
+</code></pre></div></p>
+<h2 id="the-bigger-picture-knowledge-graph">The Bigger Picture: Knowledge Graph<a class="headerlink" href="#the-bigger-picture-knowledge-graph" title="Permanent link">&para;</a></h2>
+<h3 id="source-types">Source Types<a class="headerlink" href="#source-types" title="Permanent link">&para;</a></h3>
+<p>Each source type needs specialized handling:</p>
+<h4 id="1-conversations-buffer-sources">1. Conversations (buffer sources)<a class="headerlink" href="#1-conversations-buffer-sources" title="Permanent link">&para;</a></h4>
+<p><strong>Current:</strong> ✅ Working
+- Stored in <code>buffer</code> table as raw messages
+- <code>/source "name"</code> creates a source spanning buffer range
+- Transcript chunked and embedded verbatim (no LLM summarization)
+- Use case: "What did we decide about the memory architecture?"</p>
+<h4 id="2-papers-planned">2. Papers (planned)<a class="headerlink" href="#2-papers-planned" title="Permanent link">&para;</a></h4>
+<p><strong>Status:</strong> 🚧 Design phase
+- <strong>Source:</strong> PDF files, managed in JabRef reference library
+- <strong>Storage:</strong> 
+  - Full PDF stored in filesystem (<code>data/papers/</code>)
+  - Bibliographic metadata in <code>sources</code>: authors, year, journal, DOI, abstract
+  - Full text extracted and chunked → <code>memories</code>
+  - Summary/abstract embedded separately for quick recall
+- <strong>Bidirectional sync:</strong> 
+  - Papers added to JabRef → auto-ingested to nixx
+  - Papers referenced in conversation → optionally add to JabRef
+- <strong>Retrieval modes:</strong>
+  - Semantic: "papers about transformer attention mechanisms"
+  - Metadata: "papers by Vaswani from 2017"
+  - Citation graph: "papers citing Attention Is All You Need"
+- <strong>Ingestion:</strong>
+  - <code>nixx ingest paper.pdf --source=jabref --doi=10.xxxx</code>
+  - Extract text via <code>pypdf</code> or <code>pdfplumber</code>
+  - Parse citations via <code>anystyle</code> or <code>grobid</code>
+  - Store full-text searchable (PostgreSQL tsvector) + embeddings</p>
+<h4 id="3-personal-notes-planned">3. Personal Notes (planned)<a class="headerlink" href="#3-personal-notes-planned" title="Permanent link">&para;</a></h4>
+<p><strong>Status:</strong> 🚧 Design phase
+- <strong>Source:</strong> Logseq markdown graph (<code>~/logseq/</code>)
+- <strong>Storage:</strong>
+  - Watch filesystem for changes (inotify)
+  - Parse markdown + Logseq-specific syntax (properties, queries, links)
+  - Preserve graph structure: <code>[[page links]]</code>, block references <code>((uuid))</code>
+  - Each page/journal entry → one source
+  - Blocks embedded individually with context (parent page, hierarchy)
+- <strong>Bidirectional sync:</strong>
+  - Logseq changes → auto-update nixx
+  - Conversation outcomes → optionally create Logseq page/journal entry
+- <strong>Graph preservation:</strong>
+  - Store page links in <code>sources</code> metadata or separate <code>links</code> table
+  - Enable queries like "all notes linking to project X"
+  - Visualize knowledge graph (optional, via graphviz or d3.js)
+- <strong>Ingestion:</strong>
+  - Initial: <code>nixx ingest logseq ~/logseq/</code>
+  - Continuous: filesystem watcher updates on save
+  - Respect <code>.gitignore</code> and Logseq config</p>
+<h4 id="4-code-planned">4. Code (planned)<a class="headerlink" href="#4-code-planned" title="Permanent link">&para;</a></h4>
+<p><strong>Status:</strong> 🚧 Design phase
+- <strong>Source:</strong> GitHub repositories (owned + referenced)
+- <strong>Storage:</strong>
+  - Clone to <code>data/repos/&lt;owner&gt;/&lt;repo&gt;</code>
+  - README, CONTRIBUTING, docs/ → embedded in <code>memories</code>
+  - Code files → indexed but <strong>not fully embedded</strong> (too large, context changes fast)
+  - Use AST parsing + symbol extraction for semantic code search
+  - Track commit history, branches, issues metadata
+- <strong>Two categories:</strong>
+  - <strong>My repos:</strong> bidirectional (push changes, create issues)
+  - <strong>Referenced repos:</strong> read-only (dependencies, examples, inspiration)
+- <strong>Retrieval modes:</strong>
+  - Semantic: "how does FastAPI handle dependency injection?"
+  - Symbol: "find all usages of create_source function"
+  - Git history: "when did we add pgvector support?"
+- <strong>Ingestion:</strong>
+  - <code>nixx ingest github yourusername/repo</code> (my repo)
+  - <code>nixx ingest github fastapi/fastapi --readonly</code> (reference)
+  - Periodic <code>git pull</code> for updates
+- <strong>Code-specific indexing:</strong>
+  - Use tree-sitter for language-agnostic AST parsing
+  - Extract functions, classes, imports → searchable symbols table
+  - README/docs embedded, code stays in filesystem with grep/ripgrep access</p>
+<h4 id="5-documentation-planned-improvements">5. Documentation (planned improvements)<a class="headerlink" href="#5-documentation-planned-improvements" title="Permanent link">&para;</a></h4>
+<p><strong>Current:</strong> ✅ Basic ingestion works (<code>nixx ingest https://url</code>)
+<strong>Improvements needed:</strong>
+- <strong>Site mapping:</strong> Crawl entire doc site (e.g., all of docs.pydantic.dev)
+- <strong>Update tracking:</strong> Re-ingest on changes (check etag/last-modified)
+- <strong>Link preservation:</strong> Store internal links between doc pages
+- <strong>Navigation:</strong> "Show me the FastAPI tutorial, section 3"
+- <strong>Ingestion:</strong>
+  - <code>nixx ingest docs https://docs.pydantic.dev --recursive</code> (crawl site)
+  - <code>nixx ingest docs https://textual.textualize.io --depth=2</code> (limit depth)</p>
+<h3 id="schema-extensions">Schema Extensions<a class="headerlink" href="#schema-extensions" title="Permanent link">&para;</a></h3>
+<p>Current schema supports basic source types. Extensions needed:</p>
+<h4 id="sources-table-additions">Sources table additions<a class="headerlink" href="#sources-table-additions" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">ALTER</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">sources</span><span class="w"> </span><span class="k">ADD</span><span class="w"> </span><span class="k">COLUMN</span><span class="w"> </span><span class="n">url</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">;</span><span class="w">              </span><span class="c1">-- for web/docs</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">ALTER</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">sources</span><span class="w"> </span><span class="k">ADD</span><span class="w"> </span><span class="k">COLUMN</span><span class="w"> </span><span class="n">filepath</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">;</span><span class="w">         </span><span class="c1">-- for local files</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">ALTER</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">sources</span><span class="w"> </span><span class="k">ADD</span><span class="w"> </span><span class="k">COLUMN</span><span class="w"> </span><span class="n">doi</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">;</span><span class="w">              </span><span class="c1">-- for papers</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">ALTER</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">sources</span><span class="w"> </span><span class="k">ADD</span><span class="w"> </span><span class="k">COLUMN</span><span class="w"> </span><span class="n">metadata</span><span class="w"> </span><span class="n">JSONB</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;{}&#39;</span><span class="p">;</span><span class="w">  </span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1">-- metadata examples:</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1">--   papers: {authors: [], year: int, journal: str, cited_by_count: int}</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1">--   repos: {owner: str, stars: int, language: str, last_commit: timestamp}</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1">--   notes: {links: [page names], tags: [str]}</span>
+</code></pre></div>
+<h4 id="new-tables-for-specialized-data">New tables for specialized data<a class="headerlink" href="#new-tables-for-specialized-data" title="Permanent link">&para;</a></h4>
+<p><strong>papers:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">papers</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="n">BIGSERIAL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="n">source_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">sources</span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="n">doi</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">UNIQUE</span><span class="p">,</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="n">arxiv_id</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="n">title</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="n">authors</span><span class="w"> </span><span class="n">JSONB</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">  </span><span class="c1">-- [{name: str, affiliation: str}]</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="k">year</span><span class="w"> </span><span class="nb">INTEGER</span><span class="p">,</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span><span class="n">journal</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="n">abstract</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="n">pdf_path</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">    </span><span class="n">citations</span><span class="w"> </span><span class="n">JSONB</span><span class="p">,</span><span class="w">  </span><span class="c1">-- [{doi: str, title: str}] extracted from PDF</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">    </span><span class="n">cited_by_count</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">    </span><span class="n">created_at</span><span class="w"> </span><span class="n">TIMESTAMPTZ</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">NOW</span><span class="p">()</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="p">);</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">papers_doi_idx</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">papers</span><span class="p">(</span><span class="n">doi</span><span class="p">);</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">papers_year_idx</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">papers</span><span class="p">(</span><span class="k">year</span><span class="p">);</span>
+</code></pre></div></p>
+<p><strong>repos:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">repos</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">   </span><span class="n">id</span><span class="w"> </span><span class="n">BIGSERIAL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="n">source_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">sources</span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="k">owner</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="n">url</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">    </span><span class="n">clone_path</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">  </span><span class="c1">-- local filesystem path</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">    </span><span class="n">is_owned</span><span class="w"> </span><span class="nb">BOOLEAN</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="k">FALSE</span><span class="p">,</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">    </span><span class="k">language</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">    </span><span class="n">stars</span><span class="w"> </span><span class="nb">INTEGER</span><span class="p">,</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">    </span><span class="n">last_commit</span><span class="w"> </span><span class="n">TIMESTAMPTZ</span><span class="p">,</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">    </span><span class="n">last_synced</span><span class="w"> </span><span class="n">TIMESTAMPTZ</span><span class="p">,</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">    </span><span class="n">created_at</span><span class="w"> </span><span class="n">TIMESTAMPTZ</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">NOW</span><span class="p">(),</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">    </span><span class="k">UNIQUE</span><span class="p">(</span><span class="k">owner</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">)</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="p">);</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="c1">-- Code symbols (functions, classes) extracted via AST parsing</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">symbols</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="n">BIGSERIAL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a><span class="w">    </span><span class="n">repo_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">repos</span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">,</span>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a><span class="w">    </span><span class="n">kind</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">  </span><span class="c1">-- function, class, method, variable</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a><span class="w">    </span><span class="n">file_path</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a><span class="w">    </span><span class="n">line_number</span><span class="w"> </span><span class="nb">INTEGER</span><span class="p">,</span>
+<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a><span class="w">    </span><span class="n">signature</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span><span class="w">  </span><span class="c1">-- full function/class signature</span>
+<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a><span class="w">    </span><span class="n">docstring</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a><span class="w">    </span><span class="n">created_at</span><span class="w"> </span><span class="n">TIMESTAMPTZ</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">NOW</span><span class="p">()</span>
+<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a><span class="p">);</span>
+<a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">symbols_name_idx</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">symbols</span><span class="p">(</span><span class="n">name</span><span class="p">);</span>
+<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">symbols_repo_file_idx</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">symbols</span><span class="p">(</span><span class="n">repo_id</span><span class="p">,</span><span class="w"> </span><span class="n">file_path</span><span class="p">);</span>
+</code></pre></div></p>
+<p><strong>notes (Logseq):</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">notes</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="n">BIGSERIAL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="n">source_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">sources</span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">,</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="n">page_title</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">UNIQUE</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="n">filepath</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="n">links</span><span class="w"> </span><span class="n">JSONB</span><span class="p">,</span><span class="w">  </span><span class="c1">-- [page titles] this note links to</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="n">tags</span><span class="w"> </span><span class="n">JSONB</span><span class="p">,</span><span class="w">  </span><span class="c1">-- [tag names]</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">    </span><span class="n">properties</span><span class="w"> </span><span class="n">JSONB</span><span class="p">,</span><span class="w">  </span><span class="c1">-- Logseq page properties</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span><span class="n">last_modified</span><span class="w"> </span><span class="n">TIMESTAMPTZ</span><span class="p">,</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="n">created_at</span><span class="w"> </span><span class="n">TIMESTAMPTZ</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">NOW</span><span class="p">()</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="p">);</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">notes_page_title_idx</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">notes</span><span class="p">(</span><span class="n">page_title</span><span class="p">);</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="c1">-- Page/block links for graph traversal</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">note_links</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">    </span><span class="n">from_note_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">notes</span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">,</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">    </span><span class="n">to_note_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">notes</span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">,</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">    </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="p">(</span><span class="n">from_note_id</span><span class="p">,</span><span class="w"> </span><span class="n">to_note_id</span><span class="p">)</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="p">);</span>
+</code></pre></div></p>
+<h3 id="projects-the-grouping-layer">Projects: The Grouping Layer<a class="headerlink" href="#projects-the-grouping-layer" title="Permanent link">&para;</a></h3>
+<p><strong>Concept:</strong> A project is a logical grouping of related sources and conversations.</p>
+<p>Example project: "nixx development"
+- Sources: nixx README, architecture docs, FastAPI docs, Textual docs, pydantic-settings docs
+- Conversations: All nixx-related chat sessions
+- Repos: gperdrizet/nixx, related libraries
+- Papers: Retrieval-augmented generation papers, vector database research</p>
+<p><strong>Schema:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">projects</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="n">BIGSERIAL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">UNIQUE</span><span class="p">,</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="n">description</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="n">created_at</span><span class="w"> </span><span class="n">TIMESTAMPTZ</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">NOW</span><span class="p">()</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">);</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">project_sources</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="n">project_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">projects</span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">,</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="n">source_id</span><span class="w"> </span><span class="nb">BIGINT</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">sources</span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">,</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">    </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="p">(</span><span class="n">project_id</span><span class="p">,</span><span class="w"> </span><span class="n">source_id</span><span class="p">)</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="p">);</span>
+</code></pre></div></p>
+<p><strong>Usage:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Create project</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>nixx<span class="w"> </span>project<span class="w"> </span>create<span class="w"> </span><span class="s2">&quot;nixx development&quot;</span><span class="w"> </span>--desc<span class="o">=</span><span class="s2">&quot;Building the personal knowledge graph&quot;</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Add sources to project</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>nixx<span class="w"> </span>project<span class="w"> </span>add-source<span class="w"> </span><span class="s2">&quot;nixx development&quot;</span><span class="w"> </span>--source-id<span class="o">=</span><span class="m">3</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>nixx<span class="w"> </span>project<span class="w"> </span>add-source<span class="w"> </span><span class="s2">&quot;nixx development&quot;</span><span class="w"> </span>--name<span class="o">=</span><span class="s2">&quot;FastAPI docs&quot;</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># Conversation in project context</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>nixx<span class="w"> </span>chat<span class="w"> </span>--project<span class="o">=</span><span class="s2">&quot;nixx development&quot;</span><span class="w">  </span><span class="c1"># recall scoped to project sources</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="c1"># List project sources</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>nixx<span class="w"> </span>project<span class="w"> </span>show<span class="w"> </span><span class="s2">&quot;nixx development&quot;</span>
+</code></pre></div></p>
+<h3 id="retrieval-hybrid-search">Retrieval: Hybrid Search<a class="headerlink" href="#retrieval-hybrid-search" title="Permanent link">&para;</a></h3>
+<p>Combine multiple search strategies for better results:</p>
+<ol>
+<li><strong>Semantic (vector search)</strong> - current implementation</li>
+<li>Embed query → cosine similarity against <code>memories.embedding</code></li>
+<li>Good for fuzzy concept matching</li>
+<li>
+<p>Works across all source types</p>
+</li>
+<li>
+<p><strong>Keyword (full-text search)</strong> - planned</p>
+</li>
+<li>PostgreSQL <code>tsvector</code> + <code>ts_rank</code></li>
+<li>Add <code>ALTER TABLE memories ADD COLUMN content_tsvector tsvector;</code></li>
+<li>Update trigger to keep tsvector synced with content</li>
+<li>
+<p>Query: <code>SELECT * FROM memories WHERE content_tsvector @@ to_tsquery('pydantic &amp; settings')</code></p>
+</li>
+<li>
+<p><strong>Metadata filters</strong> - partially implemented</p>
+</li>
+<li>Source type: <code>sources.type IN ('paper', 'web')</code></li>
+<li>Date range: <code>sources.created_at &gt; '2026-01-01'</code></li>
+<li>Project: <code>sources.id IN (SELECT source_id FROM project_sources WHERE project_id = ?)</code></li>
+<li>
+<p>Paper year: <code>papers.year BETWEEN 2020 AND 2025</code></p>
+</li>
+<li>
+<p><strong>Structured queries</strong> - planned</p>
+</li>
+<li>Papers: by author, DOI, citation count</li>
+<li>Repos: by language, stars, owner</li>
+<li>Notes: by tags, page links</li>
+<li>Code: by symbol name, file path</li>
+</ol>
+<p><strong>Hybrid ranking:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">hybrid_search</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">filters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">top_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">):</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="c1"># Semantic score (0-1, cosine similarity)</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">semantic_results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">vector_search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="c1"># Keyword score (0-1, normalized ts_rank)</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">keyword_results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">fulltext_search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="c1"># Combine with weighted sum</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="n">combined</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">semantic_results</span><span class="p">:</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>        <span class="n">combined</span><span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;semantic&quot;</span><span class="p">:</span> <span class="n">r</span><span class="o">.</span><span class="n">score</span><span class="p">,</span> <span class="s2">&quot;keyword&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">r</span><span class="o">.</span><span class="n">content</span><span class="p">}</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">keyword_results</span><span class="p">:</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>        <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">id</span> <span class="ow">in</span> <span class="n">combined</span><span class="p">:</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>            <span class="n">combined</span><span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">id</span><span class="p">][</span><span class="s2">&quot;keyword&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">score</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>        <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>            <span class="n">combined</span><span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;semantic&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;keyword&quot;</span><span class="p">:</span> <span class="n">r</span><span class="o">.</span><span class="n">score</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">r</span><span class="o">.</span><span class="n">content</span><span class="p">}</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>    <span class="c1"># Weighted ranking: 60% semantic, 40% keyword</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">combined</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>        <span class="n">item</span><span class="p">[</span><span class="s2">&quot;score&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.6</span> <span class="o">*</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;semantic&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mf">0.4</span> <span class="o">*</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;keyword&quot;</span><span class="p">]</span>
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>
+<a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>    <span class="c1"># Sort and return top-k</span>
+<a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a>    <span class="n">ranked</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">combined</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;score&quot;</span><span class="p">],</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a>    <span class="k">return</span> <span class="n">ranked</span><span class="p">[:</span><span class="n">top_k</span><span class="p">]</span>
+</code></pre></div></p>
+<h3 id="tool-integration">Tool Integration<a class="headerlink" href="#tool-integration" title="Permanent link">&para;</a></h3>
+<h4 id="jabref-bibliography-management">JabRef (bibliography management)<a class="headerlink" href="#jabref-bibliography-management" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Export BibTeX:</strong> JabRef can auto-export to <code>.bib</code> file on save</li>
+<li><strong>Watch file:</strong> Nixx monitors <code>~/Documents/library.bib</code> for changes</li>
+<li><strong>Parse BibTeX:</strong> Python <code>bibtexparser</code> library</li>
+<li><strong>PDF linking:</strong> JabRef stores PDF path in <code>file</code> field → nixx ingests PDF</li>
+<li><strong>Sync flow:</strong></li>
+<li>Add paper to JabRef with PDF</li>
+<li>JabRef exports updated <code>.bib</code></li>
+<li>Nixx detects change, parses new entry</li>
+<li>Nixx ingests PDF, stores metadata, embeds chunks</li>
+<li>Paper now searchable in nixx</li>
+</ul>
+<h4 id="logseq-note-taking">Logseq (note-taking)<a class="headerlink" href="#logseq-note-taking" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Filesystem sync:</strong> Logseq stores everything as markdown in <code>~/logseq/</code></li>
+<li><strong>Watch directory:</strong> Python <code>watchdog</code> library for inotify events</li>
+<li><strong>Parse markdown:</strong> <code>markdown-it-py</code> + custom Logseq syntax parser</li>
+<li><strong>Graph preservation:</strong> Extract <code>[[page links]]</code> and <code>((block refs))</code></li>
+<li><strong>Sync flow:</strong></li>
+<li>Edit page in Logseq, save</li>
+<li>Nixx detects file change</li>
+<li>Parse markdown, update <code>notes</code> table</li>
+<li>Update <code>note_links</code> graph</li>
+<li>Re-embed changed blocks in <code>memories</code></li>
+</ul>
+<h4 id="github-code-hosting">GitHub (code hosting)<a class="headerlink" href="#github-code-hosting" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>API access:</strong> PyGithub or direct REST calls</li>
+<li><strong>Clone repos:</strong> <code>git clone</code> to <code>data/repos/</code></li>
+<li><strong>Update check:</strong> <code>git fetch</code> periodically, compare commit SHAs</li>
+<li><strong>Sync flow:</strong></li>
+<li><code>nixx ingest github owner/repo</code></li>
+<li>Clone to local filesystem</li>
+<li>Extract README → embed in memories</li>
+<li>Parse code files via tree-sitter → symbols table</li>
+<li>Track last commit SHA</li>
+<li>Periodic update: <code>git pull</code>, re-index changed files</li>
+</ul>
+<h2 id="implementation-roadmap">Implementation Roadmap<a class="headerlink" href="#implementation-roadmap" title="Permanent link">&para;</a></h2>
+<h3 id="phase-1-foundation-complete">Phase 1: Foundation (complete)<a class="headerlink" href="#phase-1-foundation-complete" title="Permanent link">&para;</a></h3>
+<ul>
+<li>✅ Three-tier memory system</li>
+<li>✅ Conversation sources</li>
+<li>✅ Document/web ingestion</li>
+<li>✅ Semantic recall</li>
+<li>✅ Direct source lookup</li>
+<li>✅ TUI commands: <code>/source</code>, <code>/sources</code>, <code>/lookup</code></li>
+</ul>
+<h3 id="phase-2-paper-support-next">Phase 2: Paper Support (next)<a class="headerlink" href="#phase-2-paper-support-next" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Add <code>papers</code> table schema</li>
+<li>PDF text extraction (pypdf or pdfplumber)</li>
+<li>BibTeX parser</li>
+<li>JabRef <code>.bib</code> file watcher</li>
+<li>Ingestion: <code>nixx ingest paper path/to/paper.pdf --bibtex=entry.bib</code></li>
+<li>Metadata-based search: author, year, DOI</li>
+<li>TUI command: <code>/papers</code> (list), <code>/paper &lt;doi&gt;</code> (lookup)</li>
+</ol>
+<h3 id="phase-3-logseq-integration">Phase 3: Logseq Integration<a class="headerlink" href="#phase-3-logseq-integration" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Add <code>notes</code> and <code>note_links</code> tables</li>
+<li>Markdown parser with Logseq syntax support</li>
+<li>Filesystem watcher for <code>~/logseq/</code></li>
+<li>Graph structure preservation</li>
+<li>Bidirectional sync (optional): conversation → create Logseq page</li>
+<li>TUI command: <code>/notes</code> (list), <code>/note "page title"</code> (lookup)</li>
+</ol>
+<h3 id="phase-4-github-integration">Phase 4: GitHub Integration<a class="headerlink" href="#phase-4-github-integration" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Add <code>repos</code> and <code>symbols</code> tables</li>
+<li>Git clone + periodic pull</li>
+<li>Tree-sitter for AST parsing</li>
+<li>Symbol extraction (functions, classes)</li>
+<li>README embedding, code indexing (not embedding)</li>
+<li>TUI commands: <code>/repos</code>, <code>/code &lt;symbol&gt;</code>, <code>/repo &lt;owner/name&gt;</code></li>
+</ol>
+<h3 id="phase-5-hybrid-search">Phase 5: Hybrid Search<a class="headerlink" href="#phase-5-hybrid-search" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Add <code>content_tsvector</code> to memories</li>
+<li>Implement full-text search (ts_query)</li>
+<li>Hybrid ranking (combine vector + keyword)</li>
+<li>Advanced filters (type, date, project, metadata)</li>
+<li>TUI: Enhanced <code>/recall</code> with filters</li>
+</ol>
+<h3 id="phase-6-projects">Phase 6: Projects<a class="headerlink" href="#phase-6-projects" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Add <code>projects</code> and <code>project_sources</code> tables</li>
+<li>CLI: <code>nixx project create/add-source/show</code></li>
+<li>Scoped recall: <code>nixx chat --project="name"</code></li>
+<li>Project-aware source listing</li>
+</ol>
+<h3 id="phase-7-advanced-features">Phase 7: Advanced Features<a class="headerlink" href="#phase-7-advanced-features" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Citation graph visualization (papers citing papers)</li>
+<li>Note graph visualization (Logseq page links)</li>
+<li>Smart suggestions: "You're working on X, these papers/notes might help"</li>
+<li>Tool calling: Nixx can autonomously look up sources mid-conversation</li>
+<li>Self-modification: Nixx writes code, creates PRs to her own repo</li>
+</ul>
+<h2 id="design-principles">Design Principles<a class="headerlink" href="#design-principles" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Local-first:</strong> All data stored locally, no cloud dependencies</li>
+<li><strong>Incremental:</strong> Build on the working foundation, don't rewrite</li>
+<li><strong>Tool-agnostic interface:</strong> JabRef/Logseq/GitHub are plugins, not core dependencies</li>
+<li><strong>Bidirectional when useful:</strong> Sync from tools → nixx (always), nixx → tools (optional)</li>
+<li><strong>Preserve source truth:</strong> Don't modify original files (JabRef library, Logseq notes, GitHub repos)</li>
+<li><strong>Semantic + structured:</strong> Vector search for discovery, SQL for precise lookup</li>
+<li><strong>Scale-aware:</strong> Embeddings for summaries/abstracts, not all code; use targeted indexing</li>
+<li><strong>Testable:</strong> Every integration lives in <code>nixx/integrations/&lt;tool&gt;/</code>, mocked in tests</li>
+</ol>
+<h2 id="open-questions">Open Questions<a class="headerlink" href="#open-questions" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Storage:</strong> PostgreSQL + filesystem, or separate document store (e.g., Meilisearch)?</li>
+<li><strong>PDF extraction:</strong> pypdf vs pdfplumber vs commercial API (GROBID)?</li>
+<li><strong>Code embeddings:</strong> Skip entirely, or embed docstrings/comments only?</li>
+<li><strong>Logseq sync frequency:</strong> Real-time (inotify) or periodic (every N minutes)?</li>
+<li><strong>Citation parsing:</strong> Extract from PDFs (anystyle) or require DOI lookup (Crossref API)?</li>
+<li><strong>Graph storage:</strong> SQL (current approach) or dedicated graph DB (Neo4j, dgraph)?</li>
+<li><strong>Update strategy:</strong> Full re-index on change, or incremental updates?</li>
+</ol>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://www.zotero.org/support/dev/client_coding/architecture">Zotero architecture</a> - similar problem (papers + notes)</li>
+<li><a href="https://blacksmithgu.github.io/obsidian-dataview/">Obsidian Dataview</a> - note graph queries</li>
+<li><a href="https://sourcegraph.com/">Sourcegraph</a> - code search at scale</li>
+<li><a href="https://api.semanticscholar.org/">Semantic Scholar API</a> - paper metadata + citations</li>
+<li><a href="https://tree-sitter.github.io/tree-sitter/">tree-sitter</a> - AST parsing for code indexing</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
