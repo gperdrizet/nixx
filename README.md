@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/gperdrizet/nixx/actions/workflows/ci.yml/badge.svg)](https://github.com/gperdrizet/nixx/actions/workflows/ci.yml)
 
+[![Deploy docs](https://github.com/gperdrizet/nixx/actions/workflows/docs.yml/badge.svg)](https://github.com/gperdrizet/nixx/actions/workflows/docs.yml)
+
 Self-hosted personal knowledge base and memory system using vector search and semantic networks.
 
 Nixx is an open-source, local-first system designed to provide unified context across all your projects, workspaces, and conversations. Instead of fragmenting your interactions across isolated chat sessions and workspaces, Nixx maintains persistent memory and understands the connections between you and your work.
@@ -39,23 +41,23 @@ Nixx is an open-source, local-first system designed to provide unified context a
                 └───────┬──────────┬───────┘
                         │          │
            ┌────────────▼─┐  ┌─────▼────────────────────────────────┐
-           │  LLM Backend  │  │           Memory System               │
-           │  (llama.cpp)  │  │          (PostgreSQL + pgvector)      │
-           └───────────────┘  │                                      │
-                              │  ┌─────────────────────────────────┐ │
-                              │  │       Episodic memory           │ │
-                              │  │  conversation buffer (FTS)      │ │
-                              │  │  periodic LLM summaries         │ │
-                              │  │  vector embeddings + tags       │ │
-                              │  └─────────────────────────────────┘ │
-                              │                                      │
-                              │  ┌─────────────────────────────────┐ │
-                              │  │   Semantic memory  (planned)    │ │
-                              │  │  ingested docs, notes, papers   │ │
-                              │  │  chunked + embedded for recall  │ │
-                              │  │  knowledge graph (future)       │ │
-                              │  └─────────────────────────────────┘ │
-                              └──────────────────────────────────────┘
+           │ LLM Backend  │  │           Memory System              │
+           │  (llama.cpp) │  │       (PostgreSQL + pgvector)        │
+           └──────────────┘  │                                      │
+                             │  ┌─────────────────────────────────┐ │
+                             │  │       Episodic memory           │ │
+                             │  │  conversation buffer (FTS)      │ │
+                             │  │  periodic LLM summaries         │ │
+                             │  │  vector embeddings + tags       │ │
+                             │  └─────────────────────────────────┘ │
+                             │                                      │
+                             │  ┌─────────────────────────────────┐ │
+                             │  │  Semantic memory  (planned)     │ │
+                             │  │  ingested docs, notes, papers   │ │
+                             │  │  chunked + embedded for recall  │ │
+                             │  │  knowledge graph (future)       │ │
+                             │  └─────────────────────────────────┘ │
+                             └──────────────────────────────────────┘
 ```
 
 ## Why this matters

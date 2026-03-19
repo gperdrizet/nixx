@@ -57,11 +57,11 @@ Processes, modules, and communication paths as they exist today.
 │                               │ recall_episodic · check_summary  │  │
 │                               └──────────┬───────────────────┬───┘  │
 │  ┌──────────────────────────┐            │ embed             │ SQL  │
-│  │ OpenAIClient (chat)      │◀───┐      │           asyncpg │      │
-│  │ chat_stream              │    │      │          pgvector │      │
-│  └──────────────┬───────────┘    │      │                   │      │
-│  ┌──────────────────────────┐    │      │                   │      │
-│  │ OpenAIClient (embed)     │◀───┴──────┘                   │      │
+│  │ OpenAIClient (chat)      │◀───┐       │           asyncpg │      │
+│  │ chat_stream              │    │       │          pgvector │      │
+│  └──────────────┬───────────┘    │       │                   │      │
+│  ┌──────────────────────────┐    │       │                   │      │
+│  │ OpenAIClient (embed)     │◀───┴───────┘                   │      │
 │  │ embed                    │                                │      │
 │  └──────────────┬───────────┘                                │      │
 └─────────────────│────────────────────────────────────────────┬─│────┘
@@ -187,10 +187,10 @@ Where data lives, what it contains, and how it flows between structures.
   │  Indexes: buffer_tsv_gin (GIN on tsv)                                   │
   └────────────────────────────────────┬────────────────────────────────────┘
                                        │
-              when unsummarized word    │  LLM summarizes + extracts entities
-              count reaches N words     │  summary is embedded via mxbai-embed-large
-              (NIXX_SUMMARY_INTERVAL)   │  tags provided by user
-              or /summary at any time   │
+              when unsummarized word   │  LLM summarizes + extracts entities
+              count reaches N words    │  summary is embedded via mxbai-embed-large
+              (NIXX_SUMMARY_INTERVAL)  │  tags provided by user
+              or /summary at any time  │
                                        ▼
   summaries · embedded episodic summaries
 
@@ -223,7 +223,7 @@ Where data lives, what it contains, and how it flows between structures.
   │  ──────────── ─────────────── ──────────── ──────────────────────────── │
   │  id           bigint          PK           auto-increment               │
   │  name         text                         user-provided label          │
-  │  type         text                         buffer | document | repo | web│
+  │  type         text                         buffer|document|repo|web     │
   │  summary      text                         LLM-generated summary        │
   │  start_id     bigint          FK buffer    first buffer row (if buffer) │
   │  end_id       bigint          FK buffer    last buffer row  (if buffer) │
