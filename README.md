@@ -1,8 +1,6 @@
 # Nixx
 
-[![CI](https://github.com/gperdrizet/nixx/actions/workflows/ci.yml/badge.svg)](https://github.com/gperdrizet/nixx/actions/workflows/ci.yml)
-
-[![Deploy docs](https://github.com/gperdrizet/nixx/actions/workflows/docs.yml/badge.svg)](https://github.com/gperdrizet/nixx/actions/workflows/docs.yml)
+[![CI](https://github.com/gperdrizet/nixx/actions/workflows/ci.yml/badge.svg)](https://github.com/gperdrizet/nixx/actions/workflows/ci.yml)[![Deploy docs](https://github.com/gperdrizet/nixx/actions/workflows/docs.yml/badge.svg)](https://github.com/gperdrizet/nixx/actions/workflows/docs.yml)
 
 Self-hosted personal knowledge base and memory system using vector search and semantic networks.
 
