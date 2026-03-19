@@ -20,8 +20,9 @@ The goal is to eliminate context fragmentation - no more isolated conversations 
 
 ## Follow along
 
-- [Build logs](build-log/) (development notes)
-- [Architecture docs](architecture.md)
+- [Build log](build-log/index.md) - raw daily development notes
+- [Blog](blog/index.md) - polished write-ups
+- [Architecture](architecture.md)
 
 ## Documentation
 

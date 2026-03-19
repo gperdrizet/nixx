@@ -51,7 +51,7 @@ Tool config lives in [pyproject.toml](../pyproject.toml) (line length 100, `py31
 
 **Behavior model**: Nixx is suggestion-only - it never acts autonomously. Always ask before making changes to user data or system state.
 
-**Docs**: Raw daily build logs go in `docs/build-log/YYYY-MM-DD-title.md`. Polished posts are published to `docs/blog/` with a 1-week delay. Build logs are immutable historical records - never retroactively correct a plan or decision that changed later. Note plan changes in the log for the day they happened.
+**Docs**: Raw daily build logs go in `docs/build-log/YYYY-MM-DD-title.md` and publish immediately. Polished posts go in `docs/blog/posts/YYYY-MM-DD-title.md` and require `date: YYYY-MM-DD` YAML front matter (used by the MkDocs Material blog plugin). Build logs are immutable historical records - never retroactively correct a plan or decision that changed later. Note plan changes in the log for the day they happened.
 
 ## Style
 
