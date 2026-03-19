@@ -1238,11 +1238,11 @@
 <a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>│                               │ recall_episodic · check_summary  │  │
 <a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a>│                               └──────────┬───────────────────┬───┘  │
 <a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a>│  ┌──────────────────────────┐            │ embed             │ SQL  │
-<a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a>│  │ OpenAIClient (chat)      │◀───┐      │           asyncpg │      │
-<a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a>│  │ chat_stream              │    │      │          pgvector │      │
-<a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a>│  └──────────────┬───────────┘    │      │                   │      │
-<a id="__codelineno-0-56" name="__codelineno-0-56" href="#__codelineno-0-56"></a>│  ┌──────────────────────────┐    │      │                   │      │
-<a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a>│  │ OpenAIClient (embed)     │◀───┴──────┘                   │      │
+<a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a>│  │ OpenAIClient (chat)      │◀───┐       │           asyncpg │      │
+<a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a>│  │ chat_stream              │    │       │          pgvector │      │
+<a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a>│  └──────────────┬───────────┘    │       │                   │      │
+<a id="__codelineno-0-56" name="__codelineno-0-56" href="#__codelineno-0-56"></a>│  ┌──────────────────────────┐    │       │                   │      │
+<a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a>│  │ OpenAIClient (embed)     │◀───┴───────┘                   │      │
 <a id="__codelineno-0-58" name="__codelineno-0-58" href="#__codelineno-0-58"></a>│  │ embed                    │                                │      │
 <a id="__codelineno-0-59" name="__codelineno-0-59" href="#__codelineno-0-59"></a>│  └──────────────┬───────────┘                                │      │
 <a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a>└─────────────────│────────────────────────────────────────────┬─│────┘
@@ -1353,10 +1353,10 @@ to keep and how to label it.</p>
 <a id="__codelineno-1-47" name="__codelineno-1-47" href="#__codelineno-1-47"></a>  │  Indexes: buffer_tsv_gin (GIN on tsv)                                   │
 <a id="__codelineno-1-48" name="__codelineno-1-48" href="#__codelineno-1-48"></a>  └────────────────────────────────────┬────────────────────────────────────┘
 <a id="__codelineno-1-49" name="__codelineno-1-49" href="#__codelineno-1-49"></a>                                       │
-<a id="__codelineno-1-50" name="__codelineno-1-50" href="#__codelineno-1-50"></a>              when unsummarized word    │  LLM summarizes + extracts entities
-<a id="__codelineno-1-51" name="__codelineno-1-51" href="#__codelineno-1-51"></a>              count reaches N words     │  summary is embedded via mxbai-embed-large
-<a id="__codelineno-1-52" name="__codelineno-1-52" href="#__codelineno-1-52"></a>              (NIXX_SUMMARY_INTERVAL)   │  tags provided by user
-<a id="__codelineno-1-53" name="__codelineno-1-53" href="#__codelineno-1-53"></a>              or /summary at any time   │
+<a id="__codelineno-1-50" name="__codelineno-1-50" href="#__codelineno-1-50"></a>              when unsummarized word   │  LLM summarizes + extracts entities
+<a id="__codelineno-1-51" name="__codelineno-1-51" href="#__codelineno-1-51"></a>              count reaches N words    │  summary is embedded via mxbai-embed-large
+<a id="__codelineno-1-52" name="__codelineno-1-52" href="#__codelineno-1-52"></a>              (NIXX_SUMMARY_INTERVAL)  │  tags provided by user
+<a id="__codelineno-1-53" name="__codelineno-1-53" href="#__codelineno-1-53"></a>              or /summary at any time  │
 <a id="__codelineno-1-54" name="__codelineno-1-54" href="#__codelineno-1-54"></a>                                       ▼
 <a id="__codelineno-1-55" name="__codelineno-1-55" href="#__codelineno-1-55"></a>  summaries · embedded episodic summaries
 <a id="__codelineno-1-56" name="__codelineno-1-56" href="#__codelineno-1-56"></a>
@@ -1389,7 +1389,7 @@ to keep and how to label it.</p>
 <a id="__codelineno-1-83" name="__codelineno-1-83" href="#__codelineno-1-83"></a>  │  ──────────── ─────────────── ──────────── ──────────────────────────── │
 <a id="__codelineno-1-84" name="__codelineno-1-84" href="#__codelineno-1-84"></a>  │  id           bigint          PK           auto-increment               │
 <a id="__codelineno-1-85" name="__codelineno-1-85" href="#__codelineno-1-85"></a>  │  name         text                         user-provided label          │
-<a id="__codelineno-1-86" name="__codelineno-1-86" href="#__codelineno-1-86"></a>  │  type         text                         buffer | document | repo | web│
+<a id="__codelineno-1-86" name="__codelineno-1-86" href="#__codelineno-1-86"></a>  │  type         text                         buffer|document|repo|web     │
 <a id="__codelineno-1-87" name="__codelineno-1-87" href="#__codelineno-1-87"></a>  │  summary      text                         LLM-generated summary        │
 <a id="__codelineno-1-88" name="__codelineno-1-88" href="#__codelineno-1-88"></a>  │  start_id     bigint          FK buffer    first buffer row (if buffer) │
 <a id="__codelineno-1-89" name="__codelineno-1-89" href="#__codelineno-1-89"></a>  │  end_id       bigint          FK buffer    last buffer row  (if buffer) │
