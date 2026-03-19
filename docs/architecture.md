@@ -14,33 +14,38 @@ Processes, modules, and communication paths as they exist today.
                 └───────────────────┬─────────────────────┘
                                     │  POST /v1/chat/completions  (HTTP + SSE)
                                     │  GET  /v1/debug/context
-                                    │  GET  /v1/sources
-                                    │  GET  /v1/sources/{id}
-                                    │  GET  /v1/sources/{id}/content
                                     │  GET  /v1/buffer/session
                                     │  POST /v1/buffer/clear
                                     │  GET  /v1/episodic/status
+                                    │  POST /v1/episodic/config
                                     │  POST /v1/episodic/summary
                                     │  POST /v1/episodic/search
                                     │  GET  /v1/episodic/transcript
+                                    │  GET  /v1/intent
+                                    │  POST /v1/intent
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  nixx serve · Python · Uvicorn + FastAPI                            │
 │                                                                     │
 │  ┌───────────────────────────┐    ┌──────────────────────────────┐  │
 │  │ POST /v1/chat/completions │    │ prompts.py                   │  │
-│  │ POST /v1/completions      │    │ SYSTEM_PROMPT                │  │
+│  │ POST /v1/ingest           │    │ SYSTEM_PROMPT                │  │
 │  │ POST /v1/sources          │───▶│                              │  │
-│  │ POST /v1/ingest           │    └──────────────────────────────┘  │
-│  │ GET  /v1/sources          │                                      │
+│  │ GET  /v1/sources          │    └──────────────────────────────┘  │
 │  │ GET  /v1/sources/{id}     │                                      │
-│  │ GET  /v1/sources/{id}/... │                                      │
-│  │ GET  /v1/buffer/session   │                                      │
-│  │ POST /v1/buffer/clear     │                                      │
-│  │ GET  /v1/episodic/status  │                                      │
-│  │ POST /v1/episodic/summary │                                      │
-│  │ POST /v1/episodic/search  │                                      │
+│  │ GET  /v1/sources/{id}/... │    ┌──────────────────────────────┐  │
+│  │ GET  /v1/buffer/session   │    │ ToolRegistry                 │  │
+│  │ POST /v1/buffer/clear     │    │ read_file · write_file       │  │
+│  │ GET  /v1/episodic/status  │    │ list_dir · delete_file       │  │
+│  │ POST /v1/episodic/config  │    │ search_transcript            │  │
+│  │ POST /v1/episodic/summary │    │ view_transcript              │  │
+│  │ POST /v1/episodic/search  │    └──────────────────────────────┘  │
 │  │ GET  /v1/episodic/trans.. │                                      │
+│  │ GET  /v1/episodic/summ..  │                                      │
+│  │ GET  /v1/intent           │                                      │
+│  │ POST /v1/intent           │                                      │
+│  │ DELETE /v1/intent         │                                      │
+│  │ POST /v1/intent/derive    │                                      │
 │  │ GET  /v1/debug/context    │                                      │
 │  │ GET  /health              │                                      │
 │  └─────────────┬─────────────┘                                      │
@@ -96,10 +101,10 @@ searchable two ways:
   windows. For "what have we discussed about memory systems" style queries where you have
   a topic but not exact words.
 
-Episodic memory is automatic. Every message goes into the buffer. Every N user messages
-(configurable via `NIXX_SUMMARY_INTERVAL`, default 10), nixx prompts for tags, generates
-a summary with entity extraction, embeds it, and stores it. The user can defer the prompt
-with `/skip` or trigger one manually with `/summary`.
+Episodic memory is automatic. Every message goes into the buffer. When the amount of
+unsummarized buffer content reaches N words (configurable via `NIXX_SUMMARY_INTERVAL`,
+default 1000), nixx prompts for tags, generates a summary with entity extraction, embeds
+it, and stores it. The user can trigger a summary manually at any time with `/summary`.
 
 ### Semantic memory (deliberate, curated)
 
@@ -118,9 +123,10 @@ to keep and how to label it.
 
 On each chat turn, the server:
 1. Embeds the user's latest message
-2. Searches `memories` (semantic) by cosine similarity
-3. Formats relevant hits as context injected into the system prompt
-4. Sends the augmented prompt + conversation history to the LLM
+2. Searches `summaries` (episodic) by cosine similarity, filtering hits below a 0.4 threshold
+3. Formats relevant summaries as a context block injected into the system prompt
+4. Appends the current intent block (if set) to the system prompt
+5. Sends the augmented prompt + conversation history to the LLM
 
 Episodic search (`/search` in the TUI) queries both the buffer (full-text) and summaries
 (vector) and returns combined results.
@@ -148,7 +154,7 @@ Where data lives, what it contains, and how it flows between structures.
                                ▼
   assembled by server per turn
   ┌──────────────────────────────────────────────────────────────────┐
-  │  system  ── SYSTEM_PROMPT + recalled memory bullets              │
+  │  system  ── SYSTEM_PROMPT + ## Current Intent + recalled summaries│
   │  user    ── turn 1                                               │
   │  asst.   ── turn 1 response                                      │
   │  ...                                                             │
@@ -181,10 +187,10 @@ Where data lives, what it contains, and how it flows between structures.
   │  Indexes: buffer_tsv_gin (GIN on tsv)                                   │
   └────────────────────────────────────┬────────────────────────────────────┘
                                        │
-              every N user messages     │  LLM summarizes + extracts entities
-              nixx prompts for tags     │  summary is embedded via mxbai-embed-large
-              user can /skip or         │  tags provided by user
-              trigger with /summary     │
+              when unsummarized word    │  LLM summarizes + extracts entities
+              count reaches N words     │  summary is embedded via mxbai-embed-large
+              (NIXX_SUMMARY_INTERVAL)   │  tags provided by user
+              or /summary at any time   │
                                        ▼
   summaries · embedded episodic summaries
 
@@ -242,14 +248,48 @@ Where data lives, what it contains, and how it flows between structures.
   │  Indexes: memories_embedding_hnsw (HNSW on embedding)                   │
   └─────────────────────────────────────────────────────────────────────────┘
        ▲  semantic recall: cosine similarity search via pgvector
-       │  recalled per turn and injected into the system prompt
+       │  queryable via /v1/sources endpoints (not auto-injected per turn)
 ```
+
+## Intent system
+
+Nixx tracks the user's current work intent as a persistent string, stored in server
+process state. Intent is:
+
+- Derived automatically every N messages (`NIXX_INTENT_INTERVAL`, default 10), by asking
+  the LLM to infer what the user is working on from the last N messages
+  (`NIXX_INTENT_LOOKBACK`, default 10)
+- Settable and clearable manually via `POST /v1/intent` and `DELETE /v1/intent`
+- Injected into every system prompt as a `## Current Intent` block
+
+This makes nixx context-aware across context window boundaries - the intent string
+persists even when the conversation history is truncated.
+
+---
+
+## TUI slash commands
+
+All slash commands are processed locally before sending to the LLM:
+
+| Command | Description |
+|---------|--------------|
+| `/help` | List available commands |
+| `/context` | Show current system prompt context (recalled summaries + intent) |
+| `/summary` | Trigger an episodic summary immediately |
+| `/search [query]` | Search the episodic buffer and summaries |
+| `/transcript <id> [end_id]` | View buffer entries from id to end_id |
+| `/clear` | Clear the in-process conversation history |
+| `/interval [n]` | Show or set the summary word-count threshold |
+| `/recall` | Toggle episodic recall injection on/off |
+| `/intent [text]` | Show or set the current intent string |
+
+---
 
 ## Design principles
 
 1. **API-first**: OpenAI compatibility enables frontend flexibility
 2. **Local-first**: All data and inference on user's hardware
-3. **Privacy-focused**: Encrypted storage, no external dependencies
+3. **Privacy-focused**: No external dependencies, all data stays on your hardware
 4. **Modular**: Swappable components (vector DBs, LLM backends, frontends)
 5. **Generalizable**: Config-driven for any user's setup
 6. **Extensible**: Modify, add, improve
