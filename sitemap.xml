@@ -2,70 +2,74 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://gperdrizet.github.io/nixx/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/architecture/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/knowledge-graph/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/pgweb-guide/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/phone-access/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/queries/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/stack/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/blog/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/build-log/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/build-log/2026-02-24-project-kickoff/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/build-log/2026-03-02-first-working-server/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/build-log/2026-03-03-memory-system/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/build-log/2026-03-07-tui-and-memory-architecture/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/build-log/2026-03-09-infrastructure-and-docs/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/build-log/2026-03-15-episodic-memory-and-identity/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/build-log/2026-03-15-llm-backend-and-tui-overhaul/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
     </url>
     <url>
          <loc>https://gperdrizet.github.io/nixx/build-log/2026-03-18-tool-call-fixes-and-intent/</loc>
-         <lastmod>2026-03-19</lastmod>
+         <lastmod>2026-03-20</lastmod>
+    </url>
+    <url>
+         <loc>https://gperdrizet.github.io/nixx/build-log/2026-03-20-semantic-memory-and-graph-design/</loc>
+         <lastmod>2026-03-20</lastmod>
     </url>
 </urlset>
