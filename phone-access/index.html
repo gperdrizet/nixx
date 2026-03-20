@@ -1122,7 +1122,7 @@
 <ul>
 <li><strong>Connection refused</strong>: Check SSH is running (<code>systemctl status ssh</code>) and you have the right port (4444)</li>
 <li><strong>Permission denied</strong>: Key not copied correctly. Re-run <code>ssh-copy-id</code> from Termux</li>
-<li><strong>nixx: command not found</strong>: The alias needs to be in <code>~/.bashrc</code>: <code>alias nixx='~/nixx/venv/bin/nixx'</code></li>
+<li><strong>nixx: command not found</strong>: The alias needs to be in <code>~/.bashrc</code>: <code>alias nixx='~/nixx/.venv/bin/nixx'</code></li>
 <li><strong>"All connection attempts failed"</strong>: nixx server is not running. <code>sudo systemctl start nixx-server</code></li>
 </ul>
 
