@@ -128,6 +128,34 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
             );
         """)
 
+        # ── Knowledge graph: source_projects and source_edges ──
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS source_projects (
+                source_id   BIGINT  NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+                project     TEXT    NOT NULL,
+                PRIMARY KEY (source_id, project)
+            );
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS source_edges (
+                from_id         BIGINT      NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+                to_id           BIGINT      NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+                relation        TEXT        NOT NULL,
+                weight          FLOAT       NOT NULL DEFAULT 0.1,
+                activations     INT         NOT NULL DEFAULT 0,
+                last_activated  TIMESTAMPTZ,
+                created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (from_id, to_id)
+            );
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS source_edges_to_idx
+            ON source_edges (to_id);
+        """)
+
         # ── Indexes ──
 
         # HNSW index for fast approximate nearest-neighbour search.

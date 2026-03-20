@@ -4,6 +4,7 @@ Raw daily notes from the development of nixx. Published as written - no editing.
 
 | Date | Entry |
 |------|-------|
+| 2026-03-20 | [Semantic memory and graph design](2026-03-20-semantic-memory-and-graph-design.md) |
 | 2026-03-18 | [Tool call fixes and intent](2026-03-18-tool-call-fixes-and-intent.md) |
 | 2026-03-15 | [LLM backend and TUI overhaul](2026-03-15-llm-backend-and-tui-overhaul.md) |
 | 2026-03-15 | [Episodic memory and identity](2026-03-15-episodic-memory-and-identity.md) |
