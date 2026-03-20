@@ -50,5 +50,5 @@ All slash commands work: `/sources`, `/lookup`, `/source`, `/context`.
 
 - **Connection refused**: Check SSH is running (`systemctl status ssh`) and you have the right port (4444)
 - **Permission denied**: Key not copied correctly. Re-run `ssh-copy-id` from Termux
-- **nixx: command not found**: The alias needs to be in `~/.bashrc`: `alias nixx='~/nixx/venv/bin/nixx'`
+- **nixx: command not found**: The alias needs to be in `~/.bashrc`: `alias nixx='~/nixx/.venv/bin/nixx'`
 - **"All connection attempts failed"**: nixx server is not running. `sudo systemctl start nixx-server`

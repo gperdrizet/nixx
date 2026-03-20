@@ -14,13 +14,11 @@ Nixx is an open-source (MIT) personal memory system that:
 - Maintains unified context across all your projects
 - Integrates with your editor via OpenAI-compatible API
 - Provides a custom terminal UI for terminal-native workflows
-- Understands your hardware and infrastructure
 
 The goal is to eliminate context fragmentation - no more isolated conversations that don't know about each other.
 
 ## Follow along
 
-- [Build log](build-log/index.md) - raw daily development notes
 - [Blog](blog/index.md) - polished write-ups
 - [Architecture](architecture.md)
 
@@ -42,4 +40,4 @@ See [docs/stack.md](stack.md) for a full breakdown of every library with links t
 
 ---
 
-*Built with curiosity, coffee, and an EBay GPU.*
+*Built with curiosity, coffee, and an ebay GPU.*
