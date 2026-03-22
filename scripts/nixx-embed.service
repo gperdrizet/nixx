@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=siderealyear
+User=llama
 ExecStart=/opt/llama.cpp/build/bin/llama-server \
-    --model /home/siderealyear/nixx/models/mxbai-embed-large-v1-f16.gguf \
+    --model /opt/models/mxbai-embed-large-v1-f16.gguf \
     --port 8082 \
     --host 127.0.0.1 \
     --embedding \
