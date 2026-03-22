@@ -127,6 +127,32 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         app.state.tools = ToolRegistry(config.scratch_dir, memory=app.state.memory)
         app.state.intent = None  # Current derived/set intent
         app.state.messages_since_intent = 0  # Counter for automatic derivation
+
+        # Auto-fetch context length from the LLM server's /props endpoint.
+        try:
+            import httpx as _httpx
+
+            headers = (
+                {"Authorization": f"Bearer {config.llm_api_key}"} if config.llm_api_key else {}
+            )
+            async with _httpx.AsyncClient(timeout=5.0) as _client:
+                _resp = await _client.get(f"{config.llm_base_url}/props", headers=headers)
+                _resp.raise_for_status()
+                _n_ctx = _resp.json().get("default_generation_settings", {}).get("n_ctx")
+                if _n_ctx and isinstance(_n_ctx, int) and _n_ctx > 0:
+                    config.llm_context_length = _n_ctx
+                    print(f"nixx: context length auto-fetched: {_n_ctx}", flush=True)
+                else:
+                    print(
+                        f"nixx: /props returned unexpected n_ctx={_n_ctx!r}, using {config.llm_context_length}",
+                        flush=True,
+                    )
+        except Exception as _exc:
+            print(
+                f"nixx: could not fetch context length from LLM server ({_exc}), using {config.llm_context_length}",
+                flush=True,
+            )
+
         logger.info("Memory store ready")
         logger.info("Tool registry ready (scratch_dir=%s)", config.scratch_dir)
         yield
@@ -137,7 +163,11 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "model": config.llm_model}
+        return {
+            "status": "ok",
+            "model": config.llm_model,
+            "context_length": str(config.llm_context_length),
+        }
 
     @app.get("/v1/debug/context")
     async def debug_context() -> dict[str, Any]:
@@ -166,7 +196,9 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         recalled: list[dict] = []
         if last_user and app.state.recall_enabled:
             try:
-                recalled = await memory.recall_episodic_for_prompt(last_user, top_k=3)
+                recalled = await memory.recall_episodic_for_prompt(
+                    last_user, top_k=3, threshold=config.recall_threshold
+                )
                 context_block = memory.format_episodic_context(recalled)
             except Exception as exc:
                 logger.warning("Episodic recall failed (continuing without context): %s", exc)
@@ -386,6 +418,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             "current_words": words,
             "interval_words": config.summary_interval,
             "recall_enabled": app.state.recall_enabled,
+            "recall_threshold": config.recall_threshold,
         }
 
     @app.post("/v1/episodic/config")
@@ -398,9 +431,15 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             config.summary_interval = val
         if "recall_enabled" in request:
             app.state.recall_enabled = bool(request["recall_enabled"])
+        if "recall_threshold" in request:
+            val_f = float(request["recall_threshold"])
+            if not 0.0 <= val_f <= 1.0:
+                raise HTTPException(status_code=400, detail="recall_threshold must be 0.0–1.0")
+            config.recall_threshold = val_f
         return {
             "interval_words": config.summary_interval,
             "recall_enabled": app.state.recall_enabled,
+            "recall_threshold": config.recall_threshold,
         }
 
     @app.post("/v1/episodic/summary")
@@ -596,7 +635,8 @@ async def _chat_event_stream(
                     break
 
         except Exception as exc:
-            error = {"error": {"message": str(exc), "type": "server_error"}}
+            msg = str(exc) or f"{type(exc).__name__} (no message)"
+            error = {"error": {"message": msg, "type": "server_error"}}
             yield f"data: {json.dumps(error)}\n\n"
             yield "data: [DONE]\n\n"
             return
@@ -623,6 +663,8 @@ async def _chat_event_stream(
             )
             for tc in pending_tool_calls:
                 logger.info("Executing tool: %s", tc["name"])
+                # Signal tool execution to the client
+                yield f"data: {json.dumps({'tool_call': {'name': tc['name']}})}\n\n"
                 tool_result = await tools.execute(tc["name"], tc["arguments"])
                 messages.append(
                     {

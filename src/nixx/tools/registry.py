@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any
 from nixx.tools.base import Tool, ToolResult
 from nixx.tools.file_tools import DeleteFileTool, ListDirTool, ReadFileTool, WriteFileTool
 from nixx.tools.memory_tools import SearchTranscriptTool, ViewTranscriptTool
+from nixx.tools.read_webpage import ReadWebpageTool
+from nixx.tools.web_search import WebSearchTool
 
 if TYPE_CHECKING:
     from nixx.memory.store import MemoryStore
@@ -36,6 +38,8 @@ class ToolRegistry:
             WriteFileTool(self._scratch_dir),
             ListDirTool(self._scratch_dir),
             DeleteFileTool(self._scratch_dir),
+            WebSearchTool(),
+            ReadWebpageTool(),
         ]
 
         # Add memory tools if memory store is available

@@ -174,6 +174,28 @@ class ChatInput(TextArea):
         self.insert("\n")
 
 
+class IntentBar(Static):
+    """Displays the current intent above the input area."""
+
+    DEFAULT_CSS = """
+    IntentBar {
+        height: auto;
+        max-height: 2;
+        padding: 0 2;
+        color: $text-muted;
+        text-style: italic;
+    }
+    """
+
+    def set_intent(self, intent: str | None) -> None:
+        if intent:
+            self.update(f"[dim]intent:[/dim] {intent}")
+            self.styles.display = "block"
+        else:
+            self.update("")
+            self.styles.display = "none"
+
+
 class NixxApp(App[None]):
     """Nixx chat terminal UI."""
 
@@ -198,6 +220,9 @@ class NixxApp(App[None]):
         height: auto;
         min-height: 3;
         max-height: 10;
+    }
+    #intent-bar {
+        display: none;
     }
     #tag-row {
         height: auto;
@@ -241,6 +266,7 @@ class NixxApp(App[None]):
         self._editing_msg: Message | None = None
         self._skip_until: int | None = None
         self._summary_in_progress: bool = False
+        self._intent_bar_visible: bool = True
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -250,6 +276,7 @@ class NixxApp(App[None]):
             yield SummaryBar(id="summary-bar")
             yield Static("recall", id="recall-label")
             yield Switch(value=True, id="recall-switch")
+        yield IntentBar(id="intent-bar")
         with Vertical(id="tag-row"):
             yield Input(
                 placeholder="Tags (e.g. langchain, memory, architecture) or Enter to skip\u2026",
@@ -264,6 +291,7 @@ class NixxApp(App[None]):
         self._add_message("system", f"Connected to {self._base_url}")
         self.run_worker(self._restore_session(), exclusive=False, thread=False)
         self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
+        self.run_worker(self._fetch_and_show_intent_bar(), exclusive=False, thread=False)
 
     def _add_message(
         self, role: str, content: str = "", history_index: int | None = None
@@ -367,6 +395,14 @@ class NixxApp(App[None]):
                     self.run_worker(self._show_interval(), exclusive=False, thread=False)
             elif text == "/recall":
                 self.action_toggle_recall()
+            elif text.startswith("/threshold"):
+                arg = text[10:].strip()
+                if arg:
+                    self.run_worker(self._set_threshold(arg), exclusive=False, thread=False)
+                else:
+                    self.run_worker(self._show_threshold(), exclusive=False, thread=False)
+            elif text == "/intent-bar":
+                self._toggle_intent_bar()
             elif text.startswith("/intent"):
                 arg = text[7:].strip()
                 if arg:
@@ -468,7 +504,9 @@ class NixxApp(App[None]):
             "  /clear                  Clear conversation\n"
             "  /recall                 Toggle episodic recall on/off\n"
             "  /interval \\[words]       Show or set summary word threshold\n"
+            "  /threshold \\[0.0-1.0]    Show or set recall similarity threshold\n"
             "  /intent \\[text]          Show or set current intent\n"
+            "  /intent-bar             Toggle intent bar visibility\n"
             "\n"
             "[b]Keybindings[/b]\n"
             "  Ctrl+L                  Clear conversation\n"
@@ -642,6 +680,7 @@ class NixxApp(App[None]):
             self._add_message("system", f"[red]Error: {exc}[/red]")
             return
         self._add_message("system", f"Intent set: [b]{data['intent']}[/b]")
+        self._refresh_intent_bar(data.get("intent"))
 
     async def _show_intent(self) -> None:
         """Show the current intent/motivation."""
@@ -663,6 +702,7 @@ class NixxApp(App[None]):
             )
         else:
             self._add_message("system", "[dim]No intent set[/dim]")
+        self._refresh_intent_bar(intent)
 
     async def _update_context_bar(self) -> None:
         """Fetch token usage from the server and update the context gauge."""
@@ -678,6 +718,72 @@ class NixxApp(App[None]):
         context_length = usage.get("context_length", 0)
         if context_length > 0:
             self.query_one(ContextBar).set_usage(prompt_tokens, context_length)
+
+    def _refresh_intent_bar(self, intent: str | None) -> None:
+        """Update the intent bar with the current intent."""
+        bar = self.query_one("#intent-bar", IntentBar)
+        if self._intent_bar_visible:
+            bar.set_intent(intent)
+
+    def _toggle_intent_bar(self) -> None:
+        """Show or hide the intent bar."""
+        self._intent_bar_visible = not self._intent_bar_visible
+        bar = self.query_one("#intent-bar", IntentBar)
+        if self._intent_bar_visible:
+            self.run_worker(self._fetch_and_show_intent_bar(), exclusive=False, thread=False)
+        else:
+            bar.styles.display = "none"
+        state = "shown" if self._intent_bar_visible else "hidden"
+        self._add_message("system", f"Intent bar {state}.")
+
+    async def _fetch_and_show_intent_bar(self) -> None:
+        """Fetch current intent from server and show in bar."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{self._base_url}/v1/intent")
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception:
+            return
+        self._refresh_intent_bar(data.get("intent"))
+
+    async def _set_threshold(self, arg: str) -> None:
+        """Set the recall similarity threshold on the server."""
+        try:
+            val = float(arg)
+            if not 0.0 <= val <= 1.0:
+                raise ValueError
+        except ValueError:
+            self._add_message("system", "[red]Usage: /threshold <0.0\u20131.0>[/red]")
+            return
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"{self._base_url}/v1/episodic/config",
+                    json={"recall_threshold": val},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+        self._add_message(
+            "system", f"Recall threshold set to [b]{data['recall_threshold']:.2f}[/b]."
+        )
+
+    async def _show_threshold(self) -> None:
+        """Show the current recall similarity threshold."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{self._base_url}/v1/episodic/status")
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+        self._add_message(
+            "system", f"Recall threshold: [b]{data.get('recall_threshold', 0.4):.2f}[/b]"
+        )
 
     async def _update_summary_bar(self) -> None:
         """Fetch summary progress from the server and update the gauge."""
@@ -830,8 +936,20 @@ class NixxApp(App[None]):
                         except json.JSONDecodeError:
                             continue
                         if "error" in chunk:
-                            msg.append(f"\n[red]{escape_markup(chunk['error']['message'])}[/red]")
+                            err = chunk["error"]
+                            err_msg = (
+                                (err.get("message") or err.get("type") or repr(err))
+                                if isinstance(err, dict)
+                                else str(err)
+                            )
+                            msg.append(f"\n[red]Error: {escape_markup(err_msg)}[/red]")
                             break
+                        if "tool_call" in chunk:
+                            tool_name = chunk["tool_call"].get("name", "?")
+                            self._add_message(
+                                "system", f"[dim]calling tool: {escape_markup(tool_name)}[/dim]"
+                            )
+                            continue
                         delta = chunk.get("choices", [{}])[0].get("delta", {})
                         token = delta.get("content", "")
                         if token:
@@ -844,7 +962,8 @@ class NixxApp(App[None]):
             msg.update("[red]Cannot reach server. Is `nixx serve` running?[/red]")
             return
         except Exception as exc:
-            msg.update(f"[red]Error: {escape_markup(str(exc))}[/red]")
+            detail = str(exc) or f"({type(exc).__name__})"
+            msg.update(f"[red]Error: {escape_markup(detail)}[/red]")
             return
 
         if accumulated:
@@ -855,6 +974,7 @@ class NixxApp(App[None]):
             self.run_worker(self._check_summary_due(), exclusive=False, thread=False)
             self.run_worker(self._update_context_bar(), exclusive=False, thread=False)
             self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
+            self.run_worker(self._fetch_and_show_intent_bar(), exclusive=False, thread=False)
 
     def action_clear(self) -> None:
         self._history.clear()

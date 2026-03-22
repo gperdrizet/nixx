@@ -106,6 +106,14 @@ src/nixx/
       file.py     — FileHandler (default fallback)
       web.py      — WebHandler (BeautifulSoup, matches URLs with ://)
       registry.py — HandlerRegistry: first match wins
+  tools/
+    __init__.py
+    base.py       — ToolResult, BaseTool ABC
+    file_tools.py — ReadFileTool, WriteFileTool, ListDirTool, DeleteFileTool
+    memory_tools.py — SearchTranscriptTool, ViewTranscriptTool
+    web_search.py — WebSearchTool (DuckDuckGo HTML scraper)
+    read_webpage.py — ReadWebpageTool (httpx + BeautifulSoup, 8000 char limit)
+    registry.py   — ToolRegistry: registers tools, builds OpenAI tool defs, executes calls
   tui/
     __init__.py
     app.py        — NixxApp (Textual): full chat UI
@@ -122,12 +130,13 @@ All settings read from `.env` with `NIXX_` prefix. Key fields:
 | `host` / `port` | `127.0.0.1` / `8000` | API server bind |
 | `llm_base_url` | `http://localhost:8080` | Overridden in .env to port 8502 |
 | `llm_model` | `gpt-oss-20b` | |
-| `llm_context_length` | `8192` | Token budget for context truncation |
+| `llm_context_length` | `8192` | Auto-fetched from LLM `/props` at startup (overrides .env value). Fallback if fetch fails. |
 | `embedding_base_url` | `http://localhost:8082` | |
 | `embedding_dimensions` | `1024` | Must match the model |
 | `summary_interval` | `1000` | Words between episodic summary prompts |
 | `intent_interval` | `10` | Messages between auto intent derivation |
 | `intent_lookback` | `10` | Messages analyzed for intent |
+| `recall_threshold` | `0.4` | Minimum cosine similarity for episodic recall injection |
 | `scratch_dir` | `~/nixx_scratch` | Tool read/write sandbox |
 | `database_url` | `postgresql://nixx:changeme@localhost/nixx` | Overridden in .env |
 
@@ -141,7 +150,7 @@ at test module scope.
 All routes on the nixx server (port 8000):
 
 ```
-GET  /health
+GET  /health                     — {status, model, context_length}
 GET  /v1/debug/context          — last assembled system message + recall hits + token usage
 POST /v1/chat/completions        — OpenAI-compatible, streaming + non-streaming, tool loop
 POST /v1/ingest                  — ingest file path or URL → sources + memories
@@ -151,8 +160,8 @@ GET  /v1/sources/{id}
 GET  /v1/sources/{id}/content    — all memory chunks for a source
 GET  /v1/buffer/session          — buffer entries since last session marker
 POST /v1/buffer/clear            — write session marker (start new session)
-GET  /v1/episodic/status         — summary due? current word count, interval
-POST /v1/episodic/config         — update interval_words, recall_enabled at runtime
+GET  /v1/episodic/status         — summary due? current word count, interval, recall_threshold
+POST /v1/episodic/config         — update interval_words, recall_enabled, recall_threshold at runtime
 POST /v1/episodic/summary        — create summary now (body: {tags: []})
 POST /v1/episodic/search         — vector search summaries (body: {query, top_k})
 GET  /v1/episodic/transcript     — buffer entries for a range (?start_id=&end_id=)
@@ -173,6 +182,7 @@ Key classes:
 - `Message(Static)` — focusable message bubbles; `Enter`=edit, `Backspace`=rewind, `y`=yank to clipboard
 - `ContextBar` — token usage gauge
 - `SummaryBar` — summary word-count progress gauge
+- `IntentBar` — current intent string, hidden when no intent is set
 
 Tag input bar (`#tag-row`): appears when episodic summary is due. When auto-triggered (by
 word-count threshold), **focus stays in the chat input** - user must Tab to the tag bar. When
@@ -180,7 +190,11 @@ triggered manually via `/summary`, tag bar auto-focuses. Typing a message while 
 open dismisses it and defers the summary.
 
 TUI slash commands: `/help`, `/context`, `/summary`, `/search "q"`, `/transcript <id> [end]`,
-`/clear`, `/recall`, `/interval [n]`, `/intent [text]`.
+`/clear`, `/recall`, `/interval [n]`, `/intent [text]`, `/intent-bar` (toggle IntentBar),
+`/threshold [0.0-1.0]` (view or set recall similarity threshold).
+
+Tool call events: when nixx calls a tool mid-stream, a dim `calling tool: <name>` system
+message appears inline in the chat.
 
 ---
 
@@ -192,7 +206,7 @@ TUI slash commands: `/help`, `/context`, `/summary`, `/search "q"`, `/transcript
 2. Server tracks unsummarized word count. When it exceeds `summary_interval`, TUI prompts for tags.
 3. On confirmation: LLM generates a summary + extracts entities. Stored in `summaries` with embedding.
 4. Recall: on each chat turn, last user message is embedded → cosine similarity search over
-   `summaries` → top 3 injected into system prompt as context block.
+   `summaries` → top 3 results above `recall_threshold` injected into system prompt as context block.
 
 ### Semantic memory (deliberate)
 
@@ -222,6 +236,11 @@ LLM-callable tools, sandboxed to `scratch_dir` (`~/nixx_scratch`):
 | `delete_file` | Delete a file from scratch_dir |
 | `search_transcript` | Full-text search over buffer |
 | `view_transcript` | Retrieve buffer entries by ID range |
+| `web_search` | DuckDuckGo HTML scraper, returns top 5 results (title/URL/snippet) |
+| `read_webpage` | Fetch URL, strip HTML, return up to 8000 chars of text |
+
+Tool calls are signalled to the TUI via a `{"tool_call": {"name": "..."}}` SSE event emitted
+before execution. The TUI renders a dim inline `calling tool: <name>` message.
 
 ---
 
@@ -235,3 +254,6 @@ LLM-callable tools, sandboxed to `scratch_dir` (`~/nixx_scratch`):
   port (8502) is set in `.env`.
 - DB table for episodic summaries is `summaries` (not `episodic_summaries`).
 - `pre-commit` hook requires venv activated. Bypass with `git -c core.hooksPath=/dev/null commit`.
+- `llm_context_length` in `.env` is overridden at startup by the `/props` fetch. The running
+  value can be verified at `GET /health` (`context_length` field) or from server logs at startup.
+- `/props` returns `n_ctx` under `default_generation_settings`, not at the top level.

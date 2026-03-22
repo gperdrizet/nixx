@@ -47,6 +47,9 @@ class NixxConfig(BaseSettings):
     summary_interval: int = Field(
         default=1000, description="Word count threshold for episodic summary prompts"
     )
+    recall_threshold: float = Field(
+        default=0.4, description="Minimum cosine similarity for episodic recall injection"
+    )
 
     # Intent derivation settings
     intent_interval: int = Field(
