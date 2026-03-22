@@ -46,6 +46,7 @@ class Message(Static):
     BINDINGS = [
         Binding("enter", "edit", "Edit"),
         Binding("backspace", "rewind", "Rewind"),
+        Binding("y", "yank", "Copy"),
     ]
 
     def __init__(self, role: str, content: str = "", history_index: int | None = None) -> None:
@@ -74,6 +75,10 @@ class Message(Static):
         if self._history_index is not None:
             app: NixxApp = self.app  # type: ignore[assignment]
             app.rewind_to(self)
+
+    def action_yank(self) -> None:
+        self.app.copy_to_clipboard(self._content)
+        self.app.notify("Copied to clipboard", timeout=2)
 
 
 class ContextBar(Static):
@@ -318,6 +323,12 @@ class NixxApp(App[None]):
         chat_input = self.query_one("#input", ChatInput)
         chat_input.load_text("")
 
+        # If the tag bar is open and the user typed in chat instead, dismiss it.
+        if self.query_one("#tag-row").styles.display != "none":
+            self._hide_tag_input()
+            self._defer_summary()
+            self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
+
         if self._editing_msg is not None:
             self._do_edit(text)
             chat_input.focus()
@@ -467,6 +478,8 @@ class NixxApp(App[None]):
             "  Tab / Shift+Tab         Focus messages\n"
             "  Enter (on message)      Edit user message and regenerate\n"
             "  Backspace (on message)  Rewind to before that message\n"
+            "  y (on message)          Copy message to clipboard\n"
+            "  Ctrl+Shift+V            Paste from OS clipboard (terminal-dependent)\n"
             "  Escape                  Cancel edit\n"
             "  Ctrl+C                  Quit"
         )
@@ -503,16 +516,19 @@ class NixxApp(App[None]):
             text += f"\n\n[b]Injected context:[/b]\n[dim]{memory_ctx}[/dim]"
         self._add_message("system", text)
 
-    def _prompt_for_tags(self) -> None:
+    def _prompt_for_tags(self, autofocus: bool = True) -> None:
         """Show the tag input bar for an episodic summary."""
+        hint = "Enter comma-separated tags below, or Enter to skip."
+        if not autofocus:
+            hint = "Tab to the tag bar to add tags, or Enter in chat to skip."
         self._add_message(
             "system",
-            "[b][yellow]Time for a summary.[/yellow][/b] "
-            "Enter comma-separated tags below, or press Enter with no tags to skip.",
+            f"[b][yellow]Time for a summary.[/yellow][/b] {hint}",
         )
         tag_row = self.query_one("#tag-row")
         tag_row.styles.display = "block"
-        self.query_one("#tag-input", Input).focus()
+        if autofocus:
+            self.query_one("#tag-input", Input).focus()
 
     def _hide_tag_input(self) -> None:
         """Hide the tag input bar and return focus to chat."""
@@ -695,7 +711,7 @@ class NixxApp(App[None]):
         except Exception:
             return
         if data.get("summary_due"):
-            self._prompt_for_tags()
+            self._prompt_for_tags(autofocus=False)
 
     async def _search_episodic(self, query: str) -> None:
         """Search episodic memory and display results."""

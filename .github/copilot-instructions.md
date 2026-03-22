@@ -2,6 +2,8 @@
 
 Self-hosted personal knowledge base and memory system. Maintains persistent, unified context across all workspaces and conversations for a single user. Local-first, MIT licensed.
 
+**At the start of every session, read [docs/project-state.md](../docs/project-state.md) in full.** It contains the current state of all services, ports, DB tables, source layout, API routes, and known pitfalls. It is the authoritative snapshot of the project - prefer it over guessing or asking.
+
 See [docs/architecture.md](../docs/architecture.md) and [docs/index.md](../docs/index.md) for full design context.
 
 ## Architecture

@@ -197,4 +197,8 @@ nixx-server, pgweb, and Tailscale. Services are manually started
 (`sudo systemctl start nixx.target`), not enabled for auto-boot. Unit files live in
 `scripts/` and are symlinked into `/etc/systemd/system/`.
 
+Note: `systemctl restart nixx.target` does **not** cascade to individual services -
+a target restart only affects the target unit itself. To reload code changes, restart
+the specific service directly: `sudo systemctl restart nixx-server`.
+
 - [systemd docs](https://www.freedesktop.org/software/systemd/man/)
