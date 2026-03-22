@@ -9,7 +9,8 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
-from textual.widgets import Footer, Header, Input, Static, Switch
+from textual.message import Message as TextualMessage
+from textual.widgets import Footer, Header, Input, Static, Switch, TextArea
 
 from nixx.config import NixxConfig
 
@@ -146,6 +147,28 @@ class SummaryBar(Static):
         self.update("[dim]" + "\u2591" * 10 + " summary 0w[/dim]")
 
 
+class ChatInput(TextArea):
+    """Multi-line chat input. Enter sends the message, Shift+Enter inserts a newline."""
+
+    BINDINGS = [
+        Binding("enter", "submit", "Send", priority=True),
+        Binding("shift+enter", "newline", "New line"),
+    ]
+
+    class Submitted(TextualMessage):
+        """Posted when the user submits input."""
+
+        def __init__(self, text: str) -> None:
+            super().__init__()
+            self.text = text
+
+    def action_submit(self) -> None:
+        self.post_message(self.Submitted(self.text))
+
+    def action_newline(self) -> None:
+        self.insert("\n")
+
+
 class NixxApp(App[None]):
     """Nixx chat terminal UI."""
 
@@ -165,8 +188,11 @@ class NixxApp(App[None]):
         height: auto;
         padding: 0 1 1 1;
     }
-    Input {
+    ChatInput {
         width: 1fr;
+        height: auto;
+        min-height: 3;
+        max-height: 10;
     }
     #tag-row {
         height: auto;
@@ -225,11 +251,11 @@ class NixxApp(App[None]):
                 id="tag-input",
             )
         with Vertical(id="input-row"):
-            yield Input(placeholder="Type a message and press Enter…", id="input")
+            yield ChatInput(id="input")
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one("#input", Input).focus()
+        self.query_one("#input", ChatInput).focus()
         self._add_message("system", f"Connected to {self._base_url}")
         self.run_worker(self._restore_session(), exclusive=False, thread=False)
         self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
@@ -273,23 +299,28 @@ class NixxApp(App[None]):
         # character=None (sequence length > 1), so Input._on_key skips it as
         # non-printable. Intercept here and insert manually.
         if event.key == "space" and event.character is None:
-            if isinstance(self.focused, Input):
-                self.focused.insert_text_at_cursor(" ")
+            focused = self.focused
+            if isinstance(focused, Input):
+                focused.insert_text_at_cursor(" ")
+                event.stop()
+            elif isinstance(focused, ChatInput):
+                focused.insert(" ")
                 event.stop()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "tag-input":
             self._handle_tag_submit(event)
-            return
-        text = event.value.strip()
+
+    def on_chat_input_submitted(self, event: ChatInput.Submitted) -> None:
+        text = event.text.strip()
         if not text:
             return
-        event.input.clear()
+        chat_input = self.query_one("#input", ChatInput)
+        chat_input.load_text("")
 
         if self._editing_msg is not None:
             self._do_edit(text)
-            event.input.placeholder = "Type a message and press Enter\u2026"
-            event.input.focus()
+            chat_input.focus()
             return
 
         if text.startswith("/"):
@@ -333,7 +364,7 @@ class NixxApp(App[None]):
                     self.run_worker(self._show_intent(), exclusive=False, thread=False)
             else:
                 self._add_message("system", f"Unknown command: {text}")
-            event.input.focus()
+            chat_input.focus()
             return
         self._history.append({"role": "user", "content": text})
         self._add_message("user", text, history_index=len(self._history) - 1)
@@ -343,26 +374,25 @@ class NixxApp(App[None]):
             exclusive=False,
             thread=False,
         )
-        event.input.focus()
+        chat_input.focus()
 
     def enter_edit_mode(self, msg: Message) -> None:
-        """Load a user message into Input for editing."""
+        """Load a user message into ChatInput for editing."""
         if self._editing_msg is not None:
             return
         self._editing_msg = msg
-        inp = self.query_one("#input", Input)
-        inp.value = msg._content
-        inp.placeholder = "Editing\u2026 Enter: save & regenerate | Escape: cancel"
+        inp = self.query_one("#input", ChatInput)
+        inp.load_text(msg._content)
+        inp.move_cursor(inp.document.end)
         inp.focus()
 
     def action_cancel_edit(self) -> None:
         """Cancel edit mode and return focus to input."""
         if self._editing_msg is not None:
             self._editing_msg = None
-            inp = self.query_one("#input", Input)
-            inp.clear()
-            inp.placeholder = "Type a message and press Enter\u2026"
-        self.query_one("#input", Input).focus()
+            inp = self.query_one("#input", ChatInput)
+            inp.load_text("")
+        self.query_one("#input", ChatInput).focus()
 
     def _do_edit(self, new_text: str) -> None:
         """Apply an edit to a user message and regenerate."""
@@ -414,7 +444,7 @@ class NixxApp(App[None]):
         if self._editing_msg is not None:
             self.action_cancel_edit()
         else:
-            self.query_one("#input", Input).focus()
+            self.query_one("#input", ChatInput).focus()
 
     def _show_help(self) -> None:
         text = (
@@ -433,6 +463,7 @@ class NixxApp(App[None]):
             "  Ctrl+L                  Clear conversation\n"
             "  Ctrl+R                  Toggle episodic recall\n"
             "  Ctrl+P                  Command palette\n"
+            "  Shift+Enter             New line in input\n"
             "  Tab / Shift+Tab         Focus messages\n"
             "  Enter (on message)      Edit user message and regenerate\n"
             "  Backspace (on message)  Rewind to before that message\n"
@@ -488,7 +519,7 @@ class NixxApp(App[None]):
         tag_input = self.query_one("#tag-input", Input)
         tag_input.clear()
         self.query_one("#tag-row").styles.display = "none"
-        self.query_one("#input", Input).focus()
+        self.query_one("#input", ChatInput).focus()
 
     def _handle_tag_submit(self, event: Input.Submitted) -> None:
         """Process submission from the tag input."""
