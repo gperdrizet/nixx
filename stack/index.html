@@ -1180,6 +1180,9 @@ internet. Runs as a systemd service (<code>tailscaled</code>).</p>
 nixx-server, pgweb, and Tailscale. Services are manually started
 (<code>sudo systemctl start nixx.target</code>), not enabled for auto-boot. Unit files live in
 <code>scripts/</code> and are symlinked into <code>/etc/systemd/system/</code>.</p>
+<p>Note: <code>systemctl restart nixx.target</code> does <strong>not</strong> cascade to individual services -
+a target restart only affects the target unit itself. To reload code changes, restart
+the specific service directly: <code>sudo systemctl restart nixx-server</code>.</p>
 <ul>
 <li><a href="https://www.freedesktop.org/software/systemd/man/">systemd docs</a></li>
 </ul>
