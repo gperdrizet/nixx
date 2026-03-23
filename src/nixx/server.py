@@ -124,7 +124,10 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         app.state.memory = MemoryStore(config, pool)
         app.state.ingest = IngestPipeline(config, pool)
         app.state.recall_enabled = True
-        app.state.tools = ToolRegistry(config.scratch_dir, memory=app.state.memory)
+        app.state.intent_enabled = True
+        app.state.tools = ToolRegistry(
+            config.scratch_dir, memory=app.state.memory, searxng_url=config.searxng_url
+        )
         app.state.intent = None  # Current derived/set intent
         app.state.messages_since_intent = 0  # Counter for automatic derivation
 
@@ -205,7 +208,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
 
         # Build intent block if set
         intent_block = ""
-        if app.state.intent:
+        if app.state.intent and app.state.intent_enabled:
             intent_block = f"\n\n## Current Intent\n\n{app.state.intent}"
 
         system_content = (
@@ -419,6 +422,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             "interval_words": config.summary_interval,
             "recall_enabled": app.state.recall_enabled,
             "recall_threshold": config.recall_threshold,
+            "intent_enabled": app.state.intent_enabled,
         }
 
     @app.post("/v1/episodic/config")
@@ -436,10 +440,13 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             if not 0.0 <= val_f <= 1.0:
                 raise HTTPException(status_code=400, detail="recall_threshold must be 0.0–1.0")
             config.recall_threshold = val_f
+        if "intent_enabled" in request:
+            app.state.intent_enabled = bool(request["intent_enabled"])
         return {
             "interval_words": config.summary_interval,
             "recall_enabled": app.state.recall_enabled,
             "recall_threshold": config.recall_threshold,
+            "intent_enabled": app.state.intent_enabled,
         }
 
     @app.post("/v1/episodic/summary")

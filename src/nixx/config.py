@@ -59,6 +59,11 @@ class NixxConfig(BaseSettings):
         default=10, description="Number of recent messages to analyze for intent derivation"
     )
 
+    # Search settings
+    searxng_url: str = Field(
+        default="http://localhost:8888", description="Base URL for SearXNG instance"
+    )
+
     # Scratch directory for file operations
     scratch_dir: Path = Field(
         default=Path.home() / "nixx_scratch",

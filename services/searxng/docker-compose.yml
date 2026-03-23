@@ -1,0 +1,14 @@
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8888:8080"
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml
+      - ./limiter.toml:/etc/searxng/limiter.toml
+    environment:
+      - SEARXNG_SECRET=df0ee377e6d0d1c4cbcc24c09c11c7ad9984e186173c89545c1945f250b965d4
+      - SEARXNG_LIMITER=false
+      - SEARXNG_PUBLIC_INSTANCE=false

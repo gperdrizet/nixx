@@ -1,0 +1,13 @@
+# Disable bot detection for this private local instance
+[botdetection]
+trusted_proxies = ["127.0.0.1", "::1", "172.16.0.0/12", "192.168.0.0/16"]
+ipv4_prefix = 32
+ipv6_prefix = 128
+
+[botdetection.ip_limit]
+filter_link_local = false
+link_token = false
+
+[botdetection.ip_lists]
+pass_ip = ["127.0.0.1", "::1", "172.16.0.0/12", "192.168.0.0/16"]
+block_ip = []

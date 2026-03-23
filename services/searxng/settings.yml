@@ -1,0 +1,92 @@
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "nixx-search"
+
+server:
+  secret_key: "df0ee377e6d0d1c4cbcc24c09c11c7ad9984e186173c89545c1945f250b965d4"
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: false
+  public_instance: false
+  method: GET
+
+# Disable bot detection - private local instance
+botdetection:
+  ip_limit:
+    link_token: false
+  ip_lists:
+    pass_ip:
+      - 127.0.0.1
+      - ::1
+      - 172.16.0.0/12
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  formats:
+    - html
+    - json
+
+# Only enable general web search engines - keep it focused and reliable
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    enabled: true
+
+  - name: brave
+    engine: brave
+    shortcut: br
+    enabled: true
+
+  - name: bing
+    engine: bing
+    shortcut: bi
+    enabled: true
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+    enabled: true
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    enabled: true
+
+# Disable everything else that use_default_settings would enable
+  - name: google images
+    engine: google_images
+    disabled: true
+
+  - name: google news
+    engine: google_news
+    disabled: true
+
+  - name: google videos
+    engine: google_videos
+    disabled: true
+
+  - name: bing images
+    engine: bing_images
+    disabled: true
+
+  - name: bing news
+    engine: bing_news
+    disabled: true
+
+  - name: bing videos
+    engine: bing_videos
+    disabled: true
+
+ui:
+  static_use_hash: true
+  default_theme: simple
+  results_on_new_tab: false
+
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 20.0

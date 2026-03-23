@@ -95,7 +95,7 @@ class ContextBar(Static):
     """
 
     def __init__(self, id: str | None = None) -> None:
-        super().__init__("[dim]" + "\u2591" * 20 + " 0%[/dim]", id=id)
+        super().__init__("[dim]context " + "\u2591" * 20 + " 0% (0 / 0 tokens)[/dim]", id=id)
 
     def set_usage(self, prompt_tokens: int, context_length: int) -> None:
         if context_length <= 0:
@@ -110,12 +110,12 @@ class ContextBar(Static):
         else:
             color = "red"
         self.update(
-            f"[{color}]{bar}[/] {pct:.0%} "
-            f"[dim]({prompt_tokens:,} / {context_length:,} tokens)[/dim]"
+            f"[dim]context[/dim] [{color}]{bar}[/] {pct:.0%}"
+            f" [dim]({prompt_tokens:,} / {context_length:,} tokens)[/dim]"
         )
 
     def clear_usage(self) -> None:
-        self.update("[dim]" + "\u2591" * 20 + " 0%[/dim]")
+        self.update("[dim]context " + "\u2591" * 20 + " 0% (0 / 0 tokens)[/dim]")
 
 
 class SummaryBar(Static):
@@ -132,24 +132,27 @@ class SummaryBar(Static):
     """
 
     def __init__(self, id: str | None = None) -> None:
-        super().__init__("[dim]" + "\u2591" * 10 + " 0w[/dim]", id=id)
+        super().__init__("[dim]summary " + "\u2591" * 20 + " 0% (0 / 0 words)[/dim]", id=id)
 
     def set_progress(self, current_words: int, interval_words: int) -> None:
         if interval_words <= 0:
             return
         pct = min(current_words / interval_words, 1.0)
-        filled = int(pct * 10)
-        bar = "\u2588" * filled + "\u2591" * (10 - filled)
+        filled = int(pct * 20)
+        bar = "\u2588" * filled + "\u2591" * (20 - filled)
         if pct < 0.5:
             color = "dim"
         elif pct < 0.9:
             color = "cyan"
         else:
             color = "magenta"
-        self.update(f"[{color}]{bar}[/] [dim]summary {current_words:,}/{interval_words:,}w[/dim]")
+        self.update(
+            f"[dim]summary[/dim] [{color}]{bar}[/] {pct:.0%}"
+            f" [dim]({current_words:,} / {interval_words:,} words)[/dim]"
+        )
 
     def clear_progress(self) -> None:
-        self.update("[dim]" + "\u2591" * 10 + " summary 0w[/dim]")
+        self.update("[dim]summary " + "\u2591" * 20 + " 0% (0 / 0 words)[/dim]")
 
 
 class ChatInput(TextArea):
@@ -175,25 +178,17 @@ class ChatInput(TextArea):
 
 
 class IntentBar(Static):
-    """Displays the current intent above the input area."""
-
-    DEFAULT_CSS = """
-    IntentBar {
-        height: auto;
-        max-height: 2;
-        padding: 0 2;
-        color: $text-muted;
-        text-style: italic;
-    }
-    """
+    """Displays the current intent."""
 
     def set_intent(self, intent: str | None) -> None:
         if intent:
-            self.update(f"[dim]intent:[/dim] {intent}")
-            self.styles.display = "block"
+            # Truncate to single line - avoid wrapping
+            truncated = intent.replace("\n", " ")
+            if len(truncated) > 120:
+                truncated = truncated[:117] + "..."
+            self.update(f"intent: {truncated}")
         else:
-            self.update("")
-            self.styles.display = "none"
+            self.update("intent: -")
 
 
 class NixxApp(App[None]):
@@ -222,7 +217,9 @@ class NixxApp(App[None]):
         max-height: 10;
     }
     #intent-bar {
-        display: none;
+        display: block;
+        height: 1;
+        color: $text-muted;
     }
     #tag-row {
         height: auto;
@@ -233,21 +230,26 @@ class NixxApp(App[None]):
         width: 1fr;
         border: tall $warning;
     }
-    #status-row {
+    #status-area {
         height: auto;
-        max-height: 1;
         padding: 0 2;
     }
-    #recall-label {
+    #context-row, #summary-row {
+        height: 1;
+    }
+    #toggles-row {
+        height: 1;
+    }
+    #recall-label, #intent-label {
         width: auto;
         padding: 0 1 0 0;
-        color: $text-muted;
     }
-    #recall-switch {
+    #recall-switch, #intent-switch {
         width: auto;
         height: auto;
         min-height: 1;
         padding: 0;
+        margin-right: 2;
     }
     """
 
@@ -255,6 +257,7 @@ class NixxApp(App[None]):
         ("ctrl+c", "quit", "Quit"),
         ("ctrl+l", "clear", "Clear"),
         ("ctrl+r", "toggle_recall", "Recall"),
+        ("ctrl+i", "toggle_intent", "Intent"),
         Binding("escape", "cancel_edit", "Cancel", show=False),
     ]
 
@@ -271,12 +274,17 @@ class NixxApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         yield ScrollableContainer(id="messages", can_focus=False)
-        with Horizontal(id="status-row"):
-            yield ContextBar(id="context-bar")
-            yield SummaryBar(id="summary-bar")
-            yield Static("recall", id="recall-label")
-            yield Switch(value=True, id="recall-switch")
-        yield IntentBar(id="intent-bar")
+        with Vertical(id="status-area"):
+            with Horizontal(id="context-row"):
+                yield ContextBar(id="context-bar")
+            with Horizontal(id="summary-row"):
+                yield SummaryBar(id="summary-bar")
+            yield IntentBar(id="intent-bar")
+            with Horizontal(id="toggles-row"):
+                yield Static("recall", id="recall-label")
+                yield Switch(value=True, id="recall-switch")
+                yield Static("intent", id="intent-label")
+                yield Switch(value=True, id="intent-switch")
         with Vertical(id="tag-row"):
             yield Input(
                 placeholder="Tags (e.g. langchain, memory, architecture) or Enter to skip\u2026",
@@ -395,6 +403,8 @@ class NixxApp(App[None]):
                     self.run_worker(self._show_interval(), exclusive=False, thread=False)
             elif text == "/recall":
                 self.action_toggle_recall()
+            elif text == "/intent-toggle":
+                self.action_toggle_intent()
             elif text.startswith("/threshold"):
                 arg = text[10:].strip()
                 if arg:
@@ -503,6 +513,7 @@ class NixxApp(App[None]):
             "  /transcript <id> \\[end]  View transcript messages\n"
             "  /clear                  Clear conversation\n"
             "  /recall                 Toggle episodic recall on/off\n"
+            "  /intent-toggle          Toggle intent injection on/off\n"
             "  /interval \\[words]       Show or set summary word threshold\n"
             "  /threshold \\[0.0-1.0]    Show or set recall similarity threshold\n"
             "  /intent \\[text]          Show or set current intent\n"
@@ -511,6 +522,7 @@ class NixxApp(App[None]):
             "[b]Keybindings[/b]\n"
             "  Ctrl+L                  Clear conversation\n"
             "  Ctrl+R                  Toggle episodic recall\n"
+            "  Ctrl+I                  Toggle intent injection\n"
             "  Ctrl+P                  Command palette\n"
             "  Shift+Enter             New line in input\n"
             "  Tab / Shift+Tab         Focus messages\n"
@@ -723,6 +735,7 @@ class NixxApp(App[None]):
         """Update the intent bar with the current intent."""
         bar = self.query_one("#intent-bar", IntentBar)
         if self._intent_bar_visible:
+            bar.styles.display = "block"
             bar.set_intent(intent)
 
     def _toggle_intent_bar(self) -> None:
@@ -797,6 +810,16 @@ class NixxApp(App[None]):
         current = data.get("current_words", 0)
         interval = data.get("interval_words", 500)
         self.query_one(SummaryBar).set_progress(current, interval)
+        # Sync switch states with server truth
+        recall_on = data.get("recall_enabled", True)
+        intent_on = data.get("intent_enabled", True)
+        recall_switch = self.query_one("#recall-switch", Switch)
+        if recall_switch.value != recall_on:
+            recall_switch.value = recall_on
+        intent_switch = self.query_one("#intent-switch", Switch)
+        if intent_switch.value != intent_on:
+            intent_switch.value = intent_on
+        self._update_toggle_labels(recall_on, intent_on)
 
     async def _check_summary_due(self) -> None:
         """Check if a summary is due and prompt the user if so."""
@@ -991,9 +1014,25 @@ class NixxApp(App[None]):
         switch = self.query_one("#recall-switch", Switch)
         switch.toggle()
 
+    def action_toggle_intent(self) -> None:
+        """Toggle intent injection on/off via the server."""
+        switch = self.query_one("#intent-switch", Switch)
+        switch.toggle()
+
+    def _update_toggle_labels(self, recall_on: bool, intent_on: bool) -> None:
+        recall_markup = "[green]recall[/green]" if recall_on else "[red]recall[/red]"
+        intent_markup = "[green]intent[/green]" if intent_on else "[red]intent[/red]"
+        self.query_one("#recall-label", Static).update(recall_markup)
+        self.query_one("#intent-label", Static).update(intent_markup)
+
     def on_switch_changed(self, event: Switch.Changed) -> None:
+        recall_on = self.query_one("#recall-switch", Switch).value
+        intent_on = self.query_one("#intent-switch", Switch).value
+        self._update_toggle_labels(recall_on, intent_on)
         if event.switch.id == "recall-switch":
             self.run_worker(self._set_recall(event.value), exclusive=False, thread=False)
+        elif event.switch.id == "intent-switch":
+            self.run_worker(self._set_intent_enabled(event.value), exclusive=False, thread=False)
 
     async def _set_recall(self, enabled: bool) -> None:
         try:
@@ -1008,6 +1047,20 @@ class NixxApp(App[None]):
             return
         state = "[green]on[/green]" if enabled else "[red]off[/red]"
         self._add_message("system", f"Episodic recall: {state}")
+
+    async def _set_intent_enabled(self, enabled: bool) -> None:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    f"{self._base_url}/v1/episodic/config",
+                    json={"intent_enabled": enabled},
+                )
+                resp.raise_for_status()
+        except Exception as exc:
+            self._add_message("system", f"[red]Error toggling intent: {exc}[/red]")
+            return
+        state = "[green]on[/green]" if enabled else "[red]off[/red]"
+        self._add_message("system", f"Intent injection: {state}")
 
     async def _clear_session(self) -> None:
         """Write a session marker to the server buffer."""

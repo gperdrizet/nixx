@@ -22,9 +22,15 @@ logger = logging.getLogger(__name__)
 class ToolRegistry:
     """Registry for managing available tools."""
 
-    def __init__(self, scratch_dir: Path, memory: MemoryStore | None = None) -> None:
+    def __init__(
+        self,
+        scratch_dir: Path,
+        memory: MemoryStore | None = None,
+        searxng_url: str = "http://localhost:8888",
+    ) -> None:
         self._scratch_dir = scratch_dir
         self._memory = memory
+        self._searxng_url = searxng_url
         self._tools: dict[str, Tool] = {}
         self._register_default_tools()
 
@@ -38,7 +44,7 @@ class ToolRegistry:
             WriteFileTool(self._scratch_dir),
             ListDirTool(self._scratch_dir),
             DeleteFileTool(self._scratch_dir),
-            WebSearchTool(),
+            WebSearchTool(searxng_url=self._searxng_url),
             ReadWebpageTool(),
         ]
 
