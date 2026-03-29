@@ -144,10 +144,7 @@ class SummaryBar(Static):
     def set_progress(self, current_words: int, interval_words: int) -> None:
         if interval_words <= 0:
             return
-        if current_words <= 0:
-            self.styles.display = "none"
-            return
-        pct = min(current_words / interval_words, 1.0)
+        pct = min(current_words / interval_words, 1.0) if current_words > 0 else 0.0
         filled = int(pct * 20)
         bar = "\u2588" * filled + "\u2591" * (20 - filled)
         if pct < 0.5:
