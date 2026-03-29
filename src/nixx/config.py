@@ -35,6 +35,14 @@ class NixxConfig(BaseSettings):
     llm_context_length: int = Field(
         default=8192, description="Max context length in tokens for the LLM backend"
     )
+    max_history_tokens: int = Field(
+        default=16384,
+        description="Max tokens of conversation history to include in each request (independent of context length)",
+    )
+    llm_request_timeout: float = Field(
+        default=600.0,
+        description="Seconds to wait for the LLM to start returning tokens (covers prefill on large prompts)",
+    )
 
     # Memory settings
     embedding_base_url: str = Field(
@@ -53,7 +61,7 @@ class NixxConfig(BaseSettings):
 
     # Intent derivation settings
     intent_interval: int = Field(
-        default=10, description="Number of messages between automatic intent derivation"
+        default=5, description="Number of messages between automatic intent derivation"
     )
     intent_lookback: int = Field(
         default=10, description="Number of recent messages to analyze for intent derivation"

@@ -97,22 +97,6 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
             );
         """)
 
-        # Migrate existing memories table: add source_id, drop legacy source column.
-        await conn.execute("""
-            ALTER TABLE memories
-            ADD COLUMN IF NOT EXISTS source_id BIGINT REFERENCES sources(id) ON DELETE SET NULL;
-        """)
-        await conn.execute("""
-            DO $$ BEGIN
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name = 'memories' AND column_name = 'source'
-                ) THEN
-                    ALTER TABLE memories DROP COLUMN source;
-                END IF;
-            END $$;
-        """)
-
         # ── Episodic memory: summaries table ──
 
         await conn.execute(f"""
@@ -183,7 +167,41 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
             ON buffer USING gin (tsv);
         """)
 
+        # ── Persistent server state ──
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS state (
+                key         TEXT        PRIMARY KEY,
+                value       TEXT        NOT NULL,
+                updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """)
+
     logger.info("Database schema initialised")
+
+
+# ── State helpers ─────────────────────────────────────────────────────────────
+
+
+async def get_state(pool: asyncpg.Pool, key: str) -> str | None:  # type: ignore[type-arg]
+    """Return the value for key from persistent state, or None if not set."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT value FROM state WHERE key = $1", key)
+        return str(row["value"]) if row else None
+
+
+async def set_state(pool: asyncpg.Pool, key: str, value: str) -> None:  # type: ignore[type-arg]
+    """Upsert a key-value pair in persistent state."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO state (key, value, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            """,
+            key,
+            value,
+        )
 
 
 # ── Buffer helpers ────────────────────────────────────────────────────────────

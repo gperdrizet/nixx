@@ -10,7 +10,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.message import Message as TextualMessage
-from textual.widgets import Footer, Header, Input, Static, Switch, TextArea
+from textual.widgets import Footer, Header, Static, Switch, TextArea
 
 from nixx.config import NixxConfig
 
@@ -59,7 +59,7 @@ class Message(Static):
 
     def append(self, text: str) -> None:
         self._content += text
-        self.update(self._content)
+        self.update(escape_markup(self._content))
 
     def render_markdown(self) -> None:
         """Re-render content as markdown (for assistant messages)."""
@@ -95,7 +95,10 @@ class ContextBar(Static):
     """
 
     def __init__(self, id: str | None = None) -> None:
-        super().__init__("[dim]context " + "\u2591" * 20 + " 0% (0 / 0 tokens)[/dim]", id=id)
+        super().__init__("", id=id)
+
+    def on_mount(self) -> None:
+        self.styles.display = "none"
 
     def set_usage(self, prompt_tokens: int, context_length: int) -> None:
         if context_length <= 0:
@@ -113,9 +116,10 @@ class ContextBar(Static):
             f"[dim]context[/dim] [{color}]{bar}[/] {pct:.0%}"
             f" [dim]({prompt_tokens:,} / {context_length:,} tokens)[/dim]"
         )
+        self.styles.display = "block"
 
     def clear_usage(self) -> None:
-        self.update("[dim]context " + "\u2591" * 20 + " 0% (0 / 0 tokens)[/dim]")
+        self.styles.display = "none"
 
 
 class SummaryBar(Static):
@@ -132,10 +136,16 @@ class SummaryBar(Static):
     """
 
     def __init__(self, id: str | None = None) -> None:
-        super().__init__("[dim]summary " + "\u2591" * 20 + " 0% (0 / 0 words)[/dim]", id=id)
+        super().__init__("", id=id)
+
+    def on_mount(self) -> None:
+        self.styles.display = "none"
 
     def set_progress(self, current_words: int, interval_words: int) -> None:
         if interval_words <= 0:
+            return
+        if current_words <= 0:
+            self.styles.display = "none"
             return
         pct = min(current_words / interval_words, 1.0)
         filled = int(pct * 20)
@@ -150,9 +160,10 @@ class SummaryBar(Static):
             f"[dim]summary[/dim] [{color}]{bar}[/] {pct:.0%}"
             f" [dim]({current_words:,} / {interval_words:,} words)[/dim]"
         )
+        self.styles.display = "block"
 
     def clear_progress(self) -> None:
-        self.update("[dim]summary " + "\u2591" * 20 + " 0% (0 / 0 words)[/dim]")
+        self.styles.display = "none"
 
 
 class ChatInput(TextArea):
@@ -221,15 +232,6 @@ class NixxApp(App[None]):
         height: 1;
         color: $text-muted;
     }
-    #tag-row {
-        height: auto;
-        padding: 0 1 0 1;
-        display: none;
-    }
-    #tag-input {
-        width: 1fr;
-        border: tall $warning;
-    }
     #status-area {
         height: auto;
         padding: 0 2;
@@ -267,7 +269,6 @@ class NixxApp(App[None]):
         self._base_url = f"http://{config.host}:{config.port}"
         self._history: list[dict[str, str]] = []
         self._editing_msg: Message | None = None
-        self._skip_until: int | None = None
         self._summary_in_progress: bool = False
         self._intent_bar_visible: bool = True
 
@@ -285,11 +286,6 @@ class NixxApp(App[None]):
                 yield Switch(value=True, id="recall-switch")
                 yield Static("intent", id="intent-label")
                 yield Switch(value=True, id="intent-switch")
-        with Vertical(id="tag-row"):
-            yield Input(
-                placeholder="Tags (e.g. langchain, memory, architecture) or Enter to skip\u2026",
-                id="tag-input",
-            )
         with Vertical(id="input-row"):
             yield ChatInput(id="input")
         yield Footer()
@@ -331,6 +327,10 @@ class NixxApp(App[None]):
                 "system",
                 f"Restored {len(entries)} messages. Use Ctrl+L to clear.",
             )
+            # Update summary bar and trigger a summary if the threshold was
+            # already exceeded when the session ended.
+            await self._update_summary_bar()
+            await self._check_summary_due()
         else:
             self._show_help()
 
@@ -341,16 +341,9 @@ class NixxApp(App[None]):
         # non-printable. Intercept here and insert manually.
         if event.key == "space" and event.character is None:
             focused = self.focused
-            if isinstance(focused, Input):
-                focused.insert_text_at_cursor(" ")
-                event.stop()
-            elif isinstance(focused, ChatInput):
+            if isinstance(focused, ChatInput):
                 focused.insert(" ")
                 event.stop()
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "tag-input":
-            self._handle_tag_submit(event)
 
     def on_chat_input_submitted(self, event: ChatInput.Submitted) -> None:
         text = event.text.strip()
@@ -358,12 +351,6 @@ class NixxApp(App[None]):
             return
         chat_input = self.query_one("#input", ChatInput)
         chat_input.load_text("")
-
-        # If the tag bar is open and the user typed in chat instead, dismiss it.
-        if self.query_one("#tag-row").styles.display != "none":
-            self._hide_tag_input()
-            self._defer_summary()
-            self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
 
         if self._editing_msg is not None:
             self._do_edit(text)
@@ -376,7 +363,7 @@ class NixxApp(App[None]):
             elif text == "/context":
                 self.run_worker(self._show_context(), exclusive=False, thread=False)
             elif text == "/summary":
-                self._prompt_for_tags()
+                self.run_worker(self._create_summary(), exclusive=False, thread=False)
             elif text.startswith("/search"):
                 query = text[7:].strip().strip("\"'")
                 if query:
@@ -566,41 +553,7 @@ class NixxApp(App[None]):
             text += f"\n\n[b]Injected context:[/b]\n[dim]{memory_ctx}[/dim]"
         self._add_message("system", text)
 
-    def _prompt_for_tags(self, autofocus: bool = True) -> None:
-        """Show the tag input bar for an episodic summary."""
-        hint = "Enter comma-separated tags below, or Enter to skip."
-        if not autofocus:
-            hint = "Tab to the tag bar to add tags, or Enter in chat to skip."
-        self._add_message(
-            "system",
-            f"[b][yellow]Time for a summary.[/yellow][/b] {hint}",
-        )
-        tag_row = self.query_one("#tag-row")
-        tag_row.styles.display = "block"
-        if autofocus:
-            self.query_one("#tag-input", Input).focus()
-
-    def _hide_tag_input(self) -> None:
-        """Hide the tag input bar and return focus to chat."""
-        tag_input = self.query_one("#tag-input", Input)
-        tag_input.clear()
-        self.query_one("#tag-row").styles.display = "none"
-        self.query_one("#input", ChatInput).focus()
-
-    def _handle_tag_submit(self, event: Input.Submitted) -> None:
-        """Process submission from the tag input."""
-        text = event.value.strip()
-        event.input.clear()
-        self._hide_tag_input()
-        if not text:
-            self._add_message("system", "Summary deferred.")
-            self._defer_summary()
-            self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
-            return
-        tags = [t.strip() for t in text.split(",") if t.strip()]
-        self.run_worker(self._create_summary(tags), exclusive=False, thread=False)
-
-    async def _create_summary(self, tags: list[str]) -> None:
+    async def _create_summary(self) -> None:
         """Call the server to create an episodic summary."""
         self._summary_in_progress = True
         self._add_message("system", "Creating episodic summary\u2026")
@@ -608,7 +561,6 @@ class NixxApp(App[None]):
             async with httpx.AsyncClient(timeout=120.0) as client:
                 resp = await client.post(
                     f"{self._base_url}/v1/episodic/summary",
-                    json={"tags": tags},
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -637,11 +589,6 @@ class NixxApp(App[None]):
         )
         self._summary_in_progress = False
         self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
-
-    def _defer_summary(self) -> None:
-        """Record skip: don't re-prompt until interval more words."""
-        wc = sum(len(m["content"].split()) for m in self._history)
-        self._skip_until = wc + (self._config.summary_interval or 1000)
 
     async def _set_interval(self, arg: str) -> None:
         """Set the summary word-count interval on the server."""
@@ -822,16 +769,9 @@ class NixxApp(App[None]):
         self._update_toggle_labels(recall_on, intent_on)
 
     async def _check_summary_due(self) -> None:
-        """Check if a summary is due and prompt the user if so."""
+        """Check if a summary is due and trigger one automatically if so."""
         if self._summary_in_progress:
             return
-        if self.query_one("#tag-row").styles.display != "none":
-            return
-        if self._skip_until is not None:
-            wc = sum(len(m["content"].split()) for m in self._history)
-            if wc < self._skip_until:
-                return
-            self._skip_until = None
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(f"{self._base_url}/v1/episodic/status")
@@ -840,7 +780,7 @@ class NixxApp(App[None]):
         except Exception:
             return
         if data.get("summary_due"):
-            self._prompt_for_tags(autofocus=False)
+            self.run_worker(self._create_summary(), exclusive=False, thread=False)
 
     async def _search_episodic(self, query: str) -> None:
         """Search episodic memory and display results."""
@@ -941,7 +881,10 @@ class NixxApp(App[None]):
         }
         accumulated = ""
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            # Long read timeout: nixx-server won't send the first chunk until after LLM prefill,
+            # which can take several minutes for large prompts. Short connect/write are fine.
+            _stream_timeout = httpx.Timeout(connect=10.0, read=660.0, write=30.0, pool=5.0)
+            async with httpx.AsyncClient(timeout=_stream_timeout) as client:
                 async with client.stream(
                     "POST",
                     f"{self._base_url}/v1/chat/completions",
@@ -969,8 +912,9 @@ class NixxApp(App[None]):
                             break
                         if "tool_call" in chunk:
                             tool_name = chunk["tool_call"].get("name", "?")
-                            self._add_message(
-                                "system", f"[dim]calling tool: {escape_markup(tool_name)}[/dim]"
+                            msg.append(f"\n[dim]▸ {escape_markup(tool_name)}[/dim]\n")
+                            self.query_one("#messages", ScrollableContainer).scroll_end(
+                                animate=False
                             )
                             continue
                         delta = chunk.get("choices", [{}])[0].get("delta", {})

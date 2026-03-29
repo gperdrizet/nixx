@@ -8,6 +8,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from httpx import HTTPError as HttpError
@@ -21,18 +22,22 @@ from nixx.memory.db import (
     create_pool,
     get_buffer_entries,
     get_current_session_entries,
+    get_state,
     get_source,
     get_source_content,
     init_schema,
     list_sources,
     list_summaries,
     save_session_marker,
+    set_state,
 )
 from nixx.memory.store import MemoryStore
 from nixx.prompts import INTENT_DERIVATION_PROMPT, SYSTEM_PROMPT
 from nixx.tools import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_INTENT = "Understand the user's goals and assist them."
 
 # Token budget reserved for the LLM response and tool loop expansion.
 _RESPONSE_RESERVE = 2048
@@ -43,12 +48,15 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 3)
 
 
-def _truncate_messages(messages: list[dict[str, Any]], context_length: int) -> list[dict[str, Any]]:
+def _truncate_messages(messages: list[dict[str, Any]], context_length: int, max_history_tokens: int | None = None) -> list[dict[str, Any]]:
     """Drop oldest conversation messages to fit within the token budget.
 
     Keeps the system message (index 0) and as many recent messages as fit.
+    max_history_tokens caps conversation history independently of context_length.
     """
     budget = context_length - _RESPONSE_RESERVE
+    if max_history_tokens is not None:
+        budget = min(budget, max_history_tokens)
     if budget <= 0:
         return messages[:1]
 
@@ -97,10 +105,6 @@ class IngestRequest(BaseModel):
     name: str | None = None
 
 
-class CreateSummaryRequest(BaseModel):
-    tags: list[str] = []
-
-
 class EpisodicSearchRequest(BaseModel):
     query: str
     top_k: int = 5
@@ -128,22 +132,22 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         app.state.tools = ToolRegistry(
             config.scratch_dir, memory=app.state.memory, searxng_url=config.searxng_url
         )
-        app.state.intent = None  # Current derived/set intent
+        app.state.intent = await get_state(pool, "intent") or DEFAULT_INTENT
         app.state.messages_since_intent = 0  # Counter for automatic derivation
 
         # Auto-fetch context length from the LLM server's /props endpoint.
+        app.state.n_ctx_fetched = False
         try:
-            import httpx as _httpx
-
             headers = (
                 {"Authorization": f"Bearer {config.llm_api_key}"} if config.llm_api_key else {}
             )
-            async with _httpx.AsyncClient(timeout=5.0) as _client:
-                _resp = await _client.get(f"{config.llm_base_url}/props", headers=headers)
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                _resp = await client.get(f"{config.llm_base_url}/props", headers=headers)
                 _resp.raise_for_status()
                 _n_ctx = _resp.json().get("default_generation_settings", {}).get("n_ctx")
                 if _n_ctx and isinstance(_n_ctx, int) and _n_ctx > 0:
                     config.llm_context_length = _n_ctx
+                    app.state.n_ctx_fetched = True
                     print(f"nixx: context length auto-fetched: {_n_ctx}", flush=True)
                 else:
                     print(
@@ -162,10 +166,32 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         await pool.close()
 
     app = FastAPI(title="nixx", version="0.1.0", lifespan=lifespan)
-    llm = OpenAIClient(base_url=config.llm_base_url, api_key=config.llm_api_key)
+    llm = OpenAIClient(
+        base_url=config.llm_base_url,
+        api_key=config.llm_api_key,
+        timeout=config.llm_request_timeout,
+    )
 
     @app.get("/health")
     async def health() -> dict[str, str]:
+        # Retry /props fetch if it failed at startup (e.g. LLM server wasn't ready yet).
+        if not getattr(app.state, "n_ctx_fetched", True):
+            try:
+                _headers = (
+                    {"Authorization": f"Bearer {config.llm_api_key}"}
+                    if config.llm_api_key
+                    else {}
+                )
+                async with httpx.AsyncClient(timeout=5.0) as _client:
+                    _r = await _client.get(f"{config.llm_base_url}/props", headers=_headers)
+                    _r.raise_for_status()
+                    _n = _r.json().get("default_generation_settings", {}).get("n_ctx")
+                    if _n and isinstance(_n, int) and _n > 0:
+                        config.llm_context_length = _n
+                        app.state.n_ctx_fetched = True
+                        logger.info("nixx: context length fetched on demand: %d", _n)
+            except Exception:
+                pass
         return {
             "status": "ok",
             "model": config.llm_model,
@@ -215,8 +241,8 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             SYSTEM_PROMPT + intent_block + (f"\n\n{context_block}" if context_block else "")
         )
         messages = [{"role": "system", "content": system_content}] + messages
-        # Truncate to fit within the LLM context window.
-        messages = _truncate_messages(messages, config.llm_context_length)
+        # Truncate to fit within the LLM context window and history cap.
+        messages = _truncate_messages(messages, config.llm_context_length, config.max_history_tokens)
         prompt_token_estimate = sum(_estimate_tokens(m["content"]) + 4 for m in messages)
         app.state.last_context = {
             "base": SYSTEM_PROMPT,
@@ -450,11 +476,11 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         }
 
     @app.post("/v1/episodic/summary")
-    async def create_episode_summary(request: CreateSummaryRequest) -> dict:
+    async def create_episode_summary() -> dict:
         """Create an episodic summary of unsummarized buffer entries."""
         mem: MemoryStore = app.state.memory
         try:
-            return await mem.create_episode_summary(tags=request.tags)
+            return await mem.create_episode_summary()
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -500,15 +526,17 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         """Set the intent/motivation manually."""
         app.state.intent = request.intent
         app.state.messages_since_intent = 0  # Reset counter
+        await set_state(app.state.memory._pool, "intent", request.intent)
         logger.info("Intent set manually: %s", request.intent[:100])
         return {"intent": app.state.intent}
 
     @app.delete("/v1/intent")
     async def clear_intent() -> dict:
         """Clear the current intent."""
-        app.state.intent = None
+        app.state.intent = DEFAULT_INTENT
         app.state.messages_since_intent = 0
-        return {"intent": None}
+        await set_state(app.state.memory._pool, "intent", DEFAULT_INTENT)
+        return {"intent": app.state.intent}
 
     @app.post("/v1/intent/derive")
     async def derive_intent_endpoint() -> dict:
@@ -556,12 +584,13 @@ async def _derive_intent(app: FastAPI, llm: OpenAIClient, config: NixxConfig) ->
             config.llm_model,
             messages,
             temperature=0.3,  # Lower temperature for more focused response
-            max_tokens=150,
+            max_tokens=250,
         )
         intent = result.content.strip()
         if intent:
             app.state.intent = intent
             app.state.messages_since_intent = 0
+            await set_state(app.state.memory._pool, "intent", intent)
             logger.info("Intent derived: %s", intent[:100])
     except Exception as exc:
         logger.warning("Failed to derive intent: %s", exc)

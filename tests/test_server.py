@@ -75,6 +75,7 @@ async def test_chat_completions_model_override(config: NixxConfig, tmp_path: Pat
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         app.state.recall_enabled = True
+        app.state.intent_enabled = True
         app.state.tools = ToolRegistry(tmp_path / "scratch")
         app.state.intent = None
         app.state.messages_since_intent = 0
@@ -95,6 +96,7 @@ async def test_chat_completions_llm_error(config: NixxConfig, tmp_path: Path) ->
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         app.state.recall_enabled = True
+        app.state.intent_enabled = True
         app.state.tools = ToolRegistry(tmp_path / "scratch")
         app.state.intent = None
         app.state.messages_since_intent = 0
@@ -120,6 +122,7 @@ async def test_chat_completions_streaming(config: NixxConfig, tmp_path: Path) ->
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         app.state.recall_enabled = True
+        app.state.intent_enabled = True
         app.state.tools = ToolRegistry(tmp_path / "scratch")
         app.state.intent = None
         app.state.messages_since_intent = 0
@@ -188,6 +191,7 @@ async def test_recall_toggle_disables_context_injection(config: NixxConfig, tmp_
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         app.state.recall_enabled = True
+        app.state.intent_enabled = True
         app.state.tools = ToolRegistry(tmp_path / "scratch")
         app.state.intent = None
         app.state.messages_since_intent = 0

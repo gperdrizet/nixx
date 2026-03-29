@@ -34,10 +34,11 @@ class ChatResponse:
 class OpenAIClient:
     """Async client for llama.cpp server."""
 
-    def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 120.0) -> None:
+    def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 600.0) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
-        self._timeout = timeout
+        # Use a split timeout: short connect/write, long read to survive slow prefill on large prompts
+        self._timeout = httpx.Timeout(connect=60.0, read=timeout, write=60.0, pool=10.0)
 
     def _headers(self) -> dict[str, str]:
         headers: dict[str, str] = {"Content-Type": "application/json"}

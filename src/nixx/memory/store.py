@@ -141,8 +141,8 @@ class MemoryStore:
         words, _, _ = await count_unsummarized_words(self._pool)
         return words >= self._config.summary_interval
 
-    async def create_episode_summary(self, tags: list[str]) -> dict:
-        """Summarize unsummarized buffer entries, extract entities, embed, and store.
+    async def create_episode_summary(self) -> dict:
+        """Summarize unsummarized buffer entries, extract entities, derive tags, embed, and store.
 
         Returns a dict with id, content, tags, entities, start_buffer_id, end_buffer_id.
         """
@@ -161,14 +161,11 @@ class MemoryStore:
         end_id = int(entries[-1]["id"])
 
         transcript = "\n".join(f"{e['role'].upper()}: {e['content']}" for e in entries)
-        tag_line = ", ".join(tags) if tags else ""
-        prompt_text = transcript
-        if tag_line:
-            prompt_text += f"\n\nTags: {tag_line}"
 
-        result = await self._summarize_and_extract(prompt_text)
+        result = await self._summarize_and_extract(transcript)
         summary_text = result["summary"]
         entities = result["entities"]
+        tags = result["tags"]
 
         embedding = await self._embedder.embed(self._config.embedding_model, summary_text)
 
@@ -192,15 +189,15 @@ class MemoryStore:
         }
 
     async def _summarize_and_extract(self, transcript: str) -> dict:
-        """Ask the LLM to summarize and extract named entities in one call.
+        """Ask the LLM to summarize, extract entities, and derive tags in one call.
 
-        Returns {"summary": str, "entities": dict}.
+        Returns {"summary": str, "entities": dict, "tags": list[str]}.
         """
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "Analyze the following conversation. Return a JSON object with two keys:\n"
+                    "Analyze the following conversation. Return a JSON object with three keys:\n"
                     '1. "summary": A 2-3 sentence summary of key decisions and outcomes. '
                     "Write about the content directly, not about the conversation. "
                     'For example: "PostgreSQL supports..." not "The discussion focused on...".\n'
@@ -208,7 +205,10 @@ class MemoryStore:
                     "only include proper nouns, specific tool/library names, or "
                     "uniquely identifying terms. Skip generic words like 'database', "
                     "'system', 'code'. Maximum 2-3 entries per category. Omit empty categories. "
-                    'Categories: "tools", "people", "topics", "files", "urls".\n\n'
+                    'Categories: "tools", "people", "topics", "files", "urls".\n'
+                    '3. "tags": 3-6 short lowercase tags (single words or hyphenated phrases) '
+                    "that best characterize the conversation topic for future retrieval. "
+                    "Choose specific, meaningful tags - not generic words like 'discussion' or 'help'.\n\n"
                     "Return ONLY valid JSON, no markdown or other text."
                 ),
             },
@@ -218,12 +218,17 @@ class MemoryStore:
             result = await self._llm.chat(self._config.llm_model, messages, temperature=0.3)
             raw = result.content
             parsed = json.loads(raw)
+            tags = parsed.get("tags", [])
+            if not isinstance(tags, list):
+                tags = []
+            tags = [str(t).strip().lower() for t in tags if str(t).strip()]
             return {
                 "summary": parsed.get("summary", raw),
                 "entities": parsed.get("entities", {}),
+                "tags": tags,
             }
         except (json.JSONDecodeError, Exception):
-            return {"summary": transcript[:500], "entities": {}}
+            return {"summary": transcript[:500], "entities": {}, "tags": []}
 
     async def recall_episodic(self, query: str, top_k: int = 10) -> list[dict]:
         """Search episodic memory: keyword search on transcript buffer.

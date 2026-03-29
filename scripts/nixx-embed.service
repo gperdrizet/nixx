@@ -5,6 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=llama
+Environment=CUDA_VISIBLE_DEVICES=0
 ExecStart=/opt/llama.cpp/build/bin/llama-server \
     --model /opt/models/mxbai-embed-large-v1-f16.gguf \
     --port 8082 \
