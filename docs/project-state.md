@@ -130,7 +130,7 @@ All settings read from `.env` with `NIXX_` prefix. Key fields:
 | Setting | Default | Notes |
 |---|---|---|
 | `host` / `port` | `127.0.0.1` / `8000` | API server bind |
-| `llm_base_url` | `http://localhost:8080` | Overridden in .env to port 8502 |
+| `llm_base_url` | `http://localhost:8080` | Overridden in .env to `https://gpt.perdrizet.org` (nginx on gatekeeper → WireGuard → localhost:8502) |
 | `llm_model` | `gpt-oss-20b` | |
 | `llm_context_length` | `8192` | Auto-fetched from LLM `/props` at startup (overrides .env value). Fallback if fetch fails. |
 | `max_history_tokens` | `16384` | Max tokens of conversation history per request, independent of context length. Prevents slow prefill on long sessions. |
@@ -202,8 +202,8 @@ TUI slash commands: `/help`, `/context`, `/summary`, `/search "q"`, `/transcript
 `/clear`, `/recall`, `/interval [n]`, `/intent [text]`, `/intent-bar` (toggle IntentBar),
 `/threshold [0.0-1.0]` (view or set recall similarity threshold).
 
-Tool call events: when nixx calls a tool mid-stream, a dim `calling tool: <name>` system
-message appears inline in the chat.
+Tool call events: when nixx calls a tool mid-stream, a dim `▸ tool_name` line is appended
+inline inside the streaming assistant message (not a separate system message).
 
 ---
 
@@ -269,6 +269,9 @@ before execution. The TUI renders a dim inline `calling tool: <name>` message.
 - `pre-commit` hook requires venv activated. Bypass with `git -c core.hooksPath=/dev/null commit`.
 - `llm_context_length` in `.env` is overridden at startup by the `/props` fetch. The running
   value can be verified at `GET /health` (`context_length` field) or from server logs at startup.
+  The `/props` fetch hits `gpt.perdrizet.org` - if WireGuard is down at startup it will fail and
+  fall back to 8192. The `/health` route retries the fetch, so restarting nixx-server after
+  the tunnel is up is enough.
 - `/props` returns `n_ctx` under `default_generation_settings`, not at the top level.
 - SearXNG requires `X-Forwarded-For: 127.0.0.1` header on requests and `format=json` must be
   explicitly listed in `settings.yml` under `search.formats`. If the container is restarted after
