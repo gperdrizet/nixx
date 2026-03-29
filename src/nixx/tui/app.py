@@ -406,6 +406,18 @@ class NixxApp(App[None]):
                     self.run_worker(self._set_intent(arg), exclusive=False, thread=False)
                 else:
                     self.run_worker(self._show_intent(), exclusive=False, thread=False)
+            elif text.startswith("/grant"):
+                arg = text[6:].strip()
+                if arg:
+                    self.run_worker(self._grant_dir(arg), exclusive=False, thread=False)
+                else:
+                    self.run_worker(self._list_dirs(), exclusive=False, thread=False)
+            elif text.startswith("/revoke"):
+                arg = text[7:].strip()
+                if arg:
+                    self.run_worker(self._revoke_dir(arg), exclusive=False, thread=False)
+                else:
+                    self._add_message("system", "Usage: /revoke <directory>")
             else:
                 self._add_message("system", f"Unknown command: {text}")
             chat_input.focus()
@@ -505,6 +517,8 @@ class NixxApp(App[None]):
             "  /threshold \\[0.0-1.0]    Show or set recall similarity threshold\n"
             "  /intent \\[text]          Show or set current intent\n"
             "  /intent-bar             Toggle intent bar visibility\n"
+            "  /grant \\[dir]            List or grant directory access\n"
+            "  /revoke <dir>           Revoke directory access\n"
             "\n"
             "[b]Keybindings[/b]\n"
             "  Ctrl+L                  Clear conversation\n"
@@ -662,6 +676,67 @@ class NixxApp(App[None]):
         else:
             self._add_message("system", "[dim]No intent set[/dim]")
         self._refresh_intent_bar(intent)
+
+    async def _grant_dir(self, directory: str) -> None:
+        """Grant nixx access to a directory."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"{self._base_url}/v1/permissions/grant",
+                    json={"directory": directory},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.json().get("detail", str(exc))
+            self._add_message("system", f"[red]{detail}[/red]")
+            return
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+        self._add_message(
+            "system",
+            f"Granted: [b]{data['granted']}[/b]\n"
+            f"[dim]Allowed dirs: {', '.join(data['allowed_dirs']) or 'none'}[/dim]",
+        )
+
+    async def _revoke_dir(self, directory: str) -> None:
+        """Revoke nixx's access to a directory."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"{self._base_url}/v1/permissions/revoke",
+                    json={"directory": directory},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+        self._add_message(
+            "system",
+            f"Revoked: [b]{data['revoked']}[/b]\n"
+            f"[dim]Allowed dirs: {', '.join(data['allowed_dirs']) or 'none'}[/dim]",
+        )
+
+    async def _list_dirs(self) -> None:
+        """List allowed directories."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{self._base_url}/v1/permissions/dirs")
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+        scratch = data.get("scratch_dir", "?")
+        dirs = data.get("allowed_dirs", [])
+        text = f"[b]Scratch dir:[/b] {scratch}"
+        if dirs:
+            text += "\n[b]Granted dirs:[/b]\n" + "\n".join(f"  {d}" for d in dirs)
+        else:
+            text += "\n[dim]No additional directories granted[/dim]"
+        self._add_message("system", text)
 
     async def _update_context_bar(self) -> None:
         """Fetch token usage from the server and update the context gauge."""

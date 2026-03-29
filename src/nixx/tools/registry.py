@@ -8,9 +8,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from nixx.tools.base import Tool, ToolResult
-from nixx.tools.file_tools import DeleteFileTool, ListDirTool, ReadFileTool, WriteFileTool
+from nixx.tools.file_tools import (
+    DeleteFileTool,
+    EditFileTool,
+    ListDirTool,
+    ReadFileTool,
+    WriteFileTool,
+)
 from nixx.tools.memory_tools import SearchTranscriptTool, ViewTranscriptTool
+from nixx.tools.planning import ReadPlanTool, WritePlanTool
 from nixx.tools.read_webpage import ReadWebpageTool
+from nixx.tools.run_python import RunPythonTool
 from nixx.tools.web_search import WebSearchTool
 
 if TYPE_CHECKING:
@@ -31,8 +39,17 @@ class ToolRegistry:
         self._scratch_dir = scratch_dir
         self._memory = memory
         self._searxng_url = searxng_url
+        self._allowed_dirs: list[str] = []
         self._tools: dict[str, Tool] = {}
         self._register_default_tools()
+
+    def set_allowed_dirs(self, dirs: list[str]) -> None:
+        """Update the allowed directories list. Propagates to all file tools."""
+        self._allowed_dirs = dirs
+        # Update existing file tools
+        for tool in self._tools.values():
+            if hasattr(tool, "_allowed_dirs"):
+                tool._allowed_dirs = dirs  # type: ignore[attr-defined]
 
     def _register_default_tools(self) -> None:
         """Register the default file operation tools."""
@@ -42,8 +59,12 @@ class ToolRegistry:
         tools: list[Tool] = [
             ReadFileTool(self._scratch_dir),
             WriteFileTool(self._scratch_dir),
+            EditFileTool(self._scratch_dir),
             ListDirTool(self._scratch_dir),
             DeleteFileTool(self._scratch_dir),
+            ReadPlanTool(self._scratch_dir),
+            WritePlanTool(self._scratch_dir),
+            RunPythonTool(self._scratch_dir),
             WebSearchTool(searxng_url=self._searxng_url),
             ReadWebpageTool(),
         ]

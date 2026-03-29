@@ -111,8 +111,12 @@ src/nixx/
   tools/
     __init__.py
     base.py       — ToolResult, BaseTool ABC
-    file_tools.py — ReadFileTool, WriteFileTool, ListDirTool, DeleteFileTool
+    file_tools.py — ReadFileTool, WriteFileTool, EditFileTool, ListDirTool, DeleteFileTool
     memory_tools.py — SearchTranscriptTool, ViewTranscriptTool
+    permissions.py — Directory permission helpers (is_path_allowed, grant_dir, revoke_dir)
+    planning.py   — ReadPlanTool, WritePlanTool, get_current_plan
+    run_python.py — RunPythonTool (sandboxed subprocess, unshare -rn for network isolation)
+    shadow.py     — shadow_backup() — auto-snapshot before file modifications
     web_search.py — WebSearchTool (SearXNG JSON API, requires X-Forwarded-For header)
     read_webpage.py — ReadWebpageTool (httpx + BeautifulSoup, 8000 char limit)
     registry.py   — ToolRegistry: registers tools, builds OpenAI tool defs, executes calls
@@ -175,6 +179,9 @@ GET  /v1/intent                  — get current intent + messages_since_derivat
 POST /v1/intent                  — set intent manually (body: {intent})
 DELETE /v1/intent                — clear intent
 POST /v1/intent/derive           — trigger intent derivation immediately
+GET  /v1/permissions/dirs        — list scratch_dir + granted directories
+POST /v1/permissions/grant       — grant access to a directory (body: {directory})
+POST /v1/permissions/revoke      — revoke directory access (body: {directory})
 ```
 
 ---
@@ -200,7 +207,8 @@ inline with the LLM-derived tags and entities.
 
 TUI slash commands: `/help`, `/context`, `/summary`, `/search "q"`, `/transcript <id> [end]`,
 `/clear`, `/recall`, `/interval [n]`, `/intent [text]`, `/intent-bar` (toggle IntentBar),
-`/threshold [0.0-1.0]` (view or set recall similarity threshold).
+`/threshold [0.0-1.0]` (view or set recall similarity threshold), `/grant [dir]` (list or
+grant directory access), `/revoke <dir>` (revoke directory access).
 
 Tool call events: when nixx calls a tool mid-stream, a dim `▸ tool_name` line is appended
 inline inside the streaming assistant message (not a separate system message).
@@ -229,28 +237,37 @@ inline inside the streaming assistant message (not a separate system message).
 
 ### Intent
 
-Auto-derived every `intent_interval` (5) messages by asking LLM to analyze recent exchange.
-Injected into system prompt as `## Current Intent` block when `intent_enabled` is true.
-Default intent on cold start: `"Understand the user's goals and assist them."` Persisted across
-restarts in the `state` table (key `intent`). Can be set/cleared manually via API or `/intent`
-TUI command. Clearing resets to the default (not null).
+Auto-derived every `intent_interval` (5) messages by asking LLM to reflect on who it's being
+in the conversation (virtue-ethics framing, not task-level). Injected into system prompt as
+`## Current intent` block when `intent_enabled` is true. Default intent on cold start:
+`"Understand the user's goals and assist them."` Persisted across restarts in the `state` table
+(key `intent`). Can be set/cleared manually via API or `/intent` TUI command. Clearing resets
+to the default (not null).
 
 ---
 
 ## Tools (ToolRegistry)
 
-LLM-callable tools, sandboxed to `scratch_dir` (`~/nixx_scratch`):
+LLM-callable tools, sandboxed to `scratch_dir` (`~/nixx_scratch`) by default. Additional
+directories can be granted via `/grant <dir>` in the TUI or `POST /v1/permissions/grant`.
+Granted directories are persisted in the `state` table (key `allowed_dirs`, JSON array).
 
 | Tool | Description |
 |---|---|
-| `read_file` | Read a file from scratch_dir |
-| `write_file` | Write a file to scratch_dir |
-| `list_dir` | List scratch_dir or a subdirectory |
-| `delete_file` | Delete a file from scratch_dir |
+| `read_file` | Read a file from scratch_dir or a granted directory |
+| `write_file` | Write a file (auto shadow backup before overwrite) |
+| `edit_file` | Find-and-replace edit (old_string must appear exactly once, auto shadow backup) |
+| `list_dir` | List scratch_dir, a subdirectory, or a granted directory |
+| `delete_file` | Delete a file (auto shadow backup) |
+| `read_plan` | Read the current plan (.plan.md in scratch_dir) |
+| `write_plan` | Write/replace the current plan (injected into system prompt automatically) |
+| `run_python` | Execute Python in a sandboxed subprocess (unshare -rn for network isolation, 30s timeout) |
 | `search_transcript` | Full-text search over buffer |
 | `view_transcript` | Retrieve buffer entries by ID range |
 | `web_search` | SearXNG JSON API, top 5 results (title/URL/snippet). Requires `X-Forwarded-For: 127.0.0.1` header. SearXNG container must be running. |
 | `read_webpage` | Fetch URL, strip HTML, return up to 8000 chars of text |
+
+Shadow backups are stored at `~/.nixx/shadows/` with timestamps, preserving directory structure.
 
 Tool calls are signalled to the TUI via a `{"tool_call": {"name": "..."}}` SSE event emitted
 before execution. The TUI renders a dim inline `calling tool: <name>` message.

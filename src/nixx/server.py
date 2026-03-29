@@ -6,6 +6,7 @@ import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -34,6 +35,8 @@ from nixx.memory.db import (
 from nixx.memory.store import MemoryStore
 from nixx.prompts import INTENT_DERIVATION_PROMPT, SYSTEM_PROMPT
 from nixx.tools import ToolRegistry
+from nixx.tools.permissions import get_allowed_dirs, grant_dir, revoke_dir
+from nixx.tools.planning import get_current_plan
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +51,9 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 3)
 
 
-def _truncate_messages(messages: list[dict[str, Any]], context_length: int, max_history_tokens: int | None = None) -> list[dict[str, Any]]:
+def _truncate_messages(
+    messages: list[dict[str, Any]], context_length: int, max_history_tokens: int | None = None
+) -> list[dict[str, Any]]:
     """Drop oldest conversation messages to fit within the token budget.
 
     Keeps the system message (index 0) and as many recent messages as fit.
@@ -114,6 +119,10 @@ class SetIntentRequest(BaseModel):
     intent: str
 
 
+class DirectoryRequest(BaseModel):
+    directory: str
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 
@@ -132,6 +141,10 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         app.state.tools = ToolRegistry(
             config.scratch_dir, memory=app.state.memory, searxng_url=config.searxng_url
         )
+        # Load allowed directories from persistent state
+        allowed = await get_allowed_dirs(pool)
+        app.state.tools.set_allowed_dirs(allowed)
+
         app.state.intent = await get_state(pool, "intent") or DEFAULT_INTENT
         app.state.messages_since_intent = 0  # Counter for automatic derivation
 
@@ -178,9 +191,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         if not getattr(app.state, "n_ctx_fetched", True):
             try:
                 _headers = (
-                    {"Authorization": f"Bearer {config.llm_api_key}"}
-                    if config.llm_api_key
-                    else {}
+                    {"Authorization": f"Bearer {config.llm_api_key}"} if config.llm_api_key else {}
                 )
                 async with httpx.AsyncClient(timeout=5.0) as _client:
                     _r = await _client.get(f"{config.llm_base_url}/props", headers=_headers)
@@ -235,14 +246,25 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         # Build intent block if set
         intent_block = ""
         if app.state.intent and app.state.intent_enabled:
-            intent_block = f"\n\n## Current Intent\n\n{app.state.intent}"
+            intent_block = f"\n\n## Current intent\n\n{app.state.intent}"
+
+        # Inject current plan if one exists
+        plan_block = ""
+        plan_content = get_current_plan(config.scratch_dir)
+        if plan_content:
+            plan_block = f"\n\n## Current plan\n\n{plan_content}"
 
         system_content = (
-            SYSTEM_PROMPT + intent_block + (f"\n\n{context_block}" if context_block else "")
+            SYSTEM_PROMPT
+            + intent_block
+            + plan_block
+            + (f"\n\n{context_block}" if context_block else "")
         )
         messages = [{"role": "system", "content": system_content}] + messages
         # Truncate to fit within the LLM context window and history cap.
-        messages = _truncate_messages(messages, config.llm_context_length, config.max_history_tokens)
+        messages = _truncate_messages(
+            messages, config.llm_context_length, config.max_history_tokens
+        )
         prompt_token_estimate = sum(_estimate_tokens(m["content"]) + 4 for m in messages)
         app.state.last_context = {
             "base": SYSTEM_PROMPT,
@@ -546,6 +568,36 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             "intent": app.state.intent,
             "messages_since_derivation": app.state.messages_since_intent,
         }
+
+    # ── Directory permission endpoints ────────────────────────────────────
+
+    @app.get("/v1/permissions/dirs")
+    async def list_allowed_dirs() -> dict:
+        """List directories nixx is allowed to access beyond scratch_dir."""
+        pool = app.state.memory._pool
+        dirs = await get_allowed_dirs(pool)
+        return {"scratch_dir": str(config.scratch_dir), "allowed_dirs": dirs}
+
+    @app.post("/v1/permissions/grant")
+    async def grant_directory(request: DirectoryRequest) -> dict:
+        """Grant nixx access to a directory."""
+        pool = app.state.memory._pool
+        path = Path(request.directory).expanduser().resolve()
+        if not path.is_dir():
+            raise HTTPException(status_code=400, detail=f"Not a directory: {path}")
+        dirs = await grant_dir(pool, str(path))
+        # Update the tool registry's allowed dirs
+        app.state.tools.set_allowed_dirs(dirs)
+        return {"granted": str(path), "allowed_dirs": dirs}
+
+    @app.post("/v1/permissions/revoke")
+    async def revoke_directory(request: DirectoryRequest) -> dict:
+        """Revoke nixx's access to a directory."""
+        pool = app.state.memory._pool
+        path = Path(request.directory).expanduser().resolve()
+        dirs = await revoke_dir(pool, str(path))
+        app.state.tools.set_allowed_dirs(dirs)
+        return {"revoked": str(path), "allowed_dirs": dirs}
 
     return app
 
