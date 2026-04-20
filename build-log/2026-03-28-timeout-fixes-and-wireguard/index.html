@@ -10,29 +10,27 @@
       
       
       
-        <link rel="canonical" href="https://gperdrizet.github.io/nixx/">
+        <link rel="canonical" href="https://gperdrizet.github.io/nixx/build-log/2026-03-28-timeout-fixes-and-wireguard/">
       
       
-      
-        <link rel="next" href="blog/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Nixx</title>
+        <title>2026-03-28: timeout fixes and wireguard - Nixx</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -51,7 +49,7 @@
       
     
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -74,7 +72,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#nixx-development-blog" class="md-skip">
+        <a href="#2026-03-28-timeout-fixes-and-wireguard" class="md-skip">
           Skip to content
         </a>
       
@@ -90,7 +88,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="Nixx" class="md-header__button md-logo" aria-label="Nixx" data-md-component="logo">
+    <a href="../.." title="Nixx" class="md-header__button md-logo" aria-label="Nixx" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -110,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              2026-03-28: timeout fixes and wireguard
             
           </span>
         </div>
@@ -200,7 +198,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="Nixx" class="md-nav__button md-logo" aria-label="Nixx" data-md-component="logo">
+    <a href="../.." title="Nixx" class="md-nav__button md-logo" aria-label="Nixx" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -227,37 +225,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -273,81 +244,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#about" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        About
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-is-nixx" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What is Nixx?
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#follow-along" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Follow along
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Documentation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tech stack
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -361,7 +257,7 @@
   
   
     <li class="md-nav__item">
-      <a href="blog/" class="md-nav__link">
+      <a href="../../blog/" class="md-nav__link">
         
   
   
@@ -440,7 +336,7 @@
   
   
     <li class="md-nav__item">
-      <a href="architecture/" class="md-nav__link">
+      <a href="../../architecture/" class="md-nav__link">
         
   
   
@@ -468,7 +364,7 @@
   
   
     <li class="md-nav__item">
-      <a href="stack/" class="md-nav__link">
+      <a href="../../stack/" class="md-nav__link">
         
   
   
@@ -496,7 +392,7 @@
   
   
     <li class="md-nav__item">
-      <a href="knowledge-graph/" class="md-nav__link">
+      <a href="../../knowledge-graph/" class="md-nav__link">
         
   
   
@@ -583,7 +479,7 @@
   
   
     <li class="md-nav__item">
-      <a href="pgweb-guide/" class="md-nav__link">
+      <a href="../../pgweb-guide/" class="md-nav__link">
         
   
   
@@ -611,7 +507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="queries/" class="md-nav__link">
+      <a href="../../queries/" class="md-nav__link">
         
   
   
@@ -639,7 +535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="phone-access/" class="md-nav__link">
+      <a href="../../phone-access/" class="md-nav__link">
         
   
   
@@ -694,10 +590,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#about" class="md-nav__link">
+  <a href="#what-got-built" class="md-nav__link">
     <span class="md-ellipsis">
       
-        About
+        What got built
       
     </span>
   </a>
@@ -705,10 +601,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-is-nixx" class="md-nav__link">
+  <a href="#tui-indicator-bar-improvements" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What is Nixx?
+        TUI indicator bar improvements
       
     </span>
   </a>
@@ -716,10 +612,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#follow-along" class="md-nav__link">
+  <a href="#tool-call-display" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Follow along
+        Tool call display
       
     </span>
   </a>
@@ -727,21 +623,71 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
+  <a href="#504-gateway-timeout-root-cause-and-fix" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Documentation
+        504 gateway timeout - root cause and fix
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="504 gateway timeout - root cause and fix">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-we-thought-it-was-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What we thought it was first
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#timeout-chain-audit" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tech stack
+        Timeout chain audit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#actual-root-cause-wireguard-tunnel-was-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Actual root cause: WireGuard tunnel was down
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fix-drop-in-override-for-boot-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fix: drop-in override for boot ordering
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whats-still-pending" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's still pending
       
     </span>
   </a>
@@ -768,40 +714,106 @@
   
 
 
-<h1 id="nixx-development-blog">Nixx: development blog<a class="headerlink" href="#nixx-development-blog" title="Permanent link">&para;</a></h1>
-<p><strong>Building a self-hosted personal knowledge base and memory system using vector search and semantic networks</strong></p>
-<h2 id="about">About<a class="headerlink" href="#about" title="Permanent link">&para;</a></h2>
-<p>Nixx is a local-first personal knowledge base and memory system with persistent context across all conversations and workspaces.</p>
-<h2 id="what-is-nixx">What is Nixx?<a class="headerlink" href="#what-is-nixx" title="Permanent link">&para;</a></h2>
-<p>Nixx is an open-source (MIT) personal memory system that:</p>
-<ul>
-<li>Runs entirely on your own hardware</li>
-<li>Maintains unified context across all your projects</li>
-<li>Integrates with your editor via OpenAI-compatible API</li>
-<li>Provides a custom terminal UI for terminal-native workflows</li>
-</ul>
-<p>The goal is to eliminate context fragmentation - no more isolated conversations that don't know about each other.</p>
-<h2 id="follow-along">Follow along<a class="headerlink" href="#follow-along" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="blog/">Blog</a> - polished write-ups</li>
-<li><a href="architecture/">Architecture</a></li>
-</ul>
-<h2 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h2>
-<p><strong>Getting started:</strong>
-- <a href="quickstart/">Quickstart</a> - start nixx, open the TUI, slash commands, memory and file tools</p>
-<p><strong>Technical guides:</strong>
-- <a href="architecture/">Architecture</a> - system design, data flow, two-tier memory model
-- <a href="infrastructure/">Infrastructure</a> - hardware, CUDA setup, llama.cpp build, systemd services
-- <a href="stack/">Tech stack</a> - every library and tool with documentation links
-- <a href="knowledge-graph/">Knowledge graph</a> - planned knowledge graph architecture and roadmap
-- <a href="pgweb-guide/">pgweb guide</a> - web interface for database management
-- <a href="queries/">SQL queries</a> - common database operations
-- <a href="phone-access/">Phone access</a> - remote access via Tailscale + SSH</p>
-<h2 id="tech-stack">Tech stack<a class="headerlink" href="#tech-stack" title="Permanent link">&para;</a></h2>
-<p>Python · FastAPI · Uvicorn · asyncpg · PostgreSQL + pgvector · llama.cpp · Textual · Rich</p>
-<p>See <a href="stack/">docs/stack.md</a> for a full breakdown of every library with links to documentation.</p>
+<h1 id="2026-03-28-timeout-fixes-and-wireguard">2026-03-28: timeout fixes and wireguard<a class="headerlink" href="#2026-03-28-timeout-fixes-and-wireguard" title="Permanent link">&para;</a></h1>
+<h2 id="what-got-built">What got built<a class="headerlink" href="#what-got-built" title="Permanent link">&para;</a></h2>
+<p>Several TUI polish items carried over from the previous session, followed by a full debug session
+on persistent 504 errors from the remote LLM endpoint.</p>
 <hr />
-<p><em>Built with curiosity, coffee, and an ebay GPU.</em></p>
+<h2 id="tui-indicator-bar-improvements">TUI indicator bar improvements<a class="headerlink" href="#tui-indicator-bar-improvements" title="Permanent link">&para;</a></h2>
+<p>Both <code>ContextBar</code> and <code>SummaryBar</code> now follow a hide-until-data pattern:</p>
+<ul>
+<li><code>on_mount</code> sets <code>display: none</code></li>
+<li><code>set_usage</code> / <code>set_progress</code> makes the bar visible only when there is real data to show</li>
+<li><code>clear_usage</code> / <code>clear_progress</code> hides again</li>
+</ul>
+<p>Previously both bars were visible on startup showing zeroes or stale values. Now they only appear
+once the first real response comes back.</p>
+<p><code>_restore_session</code> was updated to call <code>_update_summary_bar()</code> and <code>_check_summary_due()</code> after
+restoring messages, so the summary bar reflects the actual word count immediately on TUI launch.
+The <code>_fetch_context_length</code> startup worker was removed entirely - the context bar now populates
+from the first real chat response.</p>
+<h2 id="tool-call-display">Tool call display<a class="headerlink" href="#tool-call-display" title="Permanent link">&para;</a></h2>
+<p>Tool calls were previously appended as a separate system message below the streaming assistant
+message, which made them appear after the reply. They now render inline inside the streaming
+message as a dim <code>▸ tool_name</code> line, inserted at the point in the stream where the tool is called.</p>
+<hr />
+<h2 id="504-gateway-timeout-root-cause-and-fix">504 gateway timeout - root cause and fix<a class="headerlink" href="#504-gateway-timeout-root-cause-and-fix" title="Permanent link">&para;</a></h2>
+<p>Reported symptom: 504 errors from <code>gpt.perdrizet.org</code> on every chat message.</p>
+<h3 id="what-we-thought-it-was-first">What we thought it was first<a class="headerlink" href="#what-we-thought-it-was-first" title="Permanent link">&para;</a></h3>
+<p>Suspected the <code>max_history_tokens</code> issue from the previous session - nixx-server restarted with
+the correct n_ctx (65536) and <code>_truncate_messages</code> was now passing the full session history
+through (63k token budget instead of the old 6k). Added <code>max_history_tokens: int = Field(default=16384)</code>
+to <code>NixxConfig</code> and plumbed it through <code>_truncate_messages</code>. This was a real problem worth fixing,
+but it wasn't the cause of the 504s.</p>
+<h3 id="timeout-chain-audit">Timeout chain audit<a class="headerlink" href="#timeout-chain-audit" title="Permanent link">&para;</a></h3>
+<p>Mapped all timeout values in the stack:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TUI httpx read</td>
+<td>120s (hard-coded)</td>
+</tr>
+<tr>
+<td>nixx-server <code>OpenAIClient</code></td>
+<td>120s (hard-coded default)</td>
+</tr>
+<tr>
+<td>nginx <code>proxy_read_timeout</code> on gatekeeper</td>
+<td>300s</td>
+</tr>
+</tbody>
+</table>
+<p>Raised all of them:
+- <code>OpenAIClient.__init__</code> now takes <code>timeout: float = 600.0</code> and builds a split
+  <code>httpx.Timeout(connect=60s, read=600s, write=60s)</code> so connect/write stay short but prefill
+  waits are long
+- Added <code>llm_request_timeout: float = Field(default=600.0)</code> to <code>NixxConfig</code>; passed to
+  <code>OpenAIClient</code> at instantiation in <code>server.py</code>
+- TUI <code>_stream_response</code> now uses <code>httpx.Timeout(connect=10s, read=660s, write=30s)</code> instead
+  of a flat 120s
+- nginx <code>proxy_read_timeout</code> raised to 600s on gatekeeper (<code>/etc/nginx/sites-enabled/gpt.conf</code>),
+  reloaded</p>
+<h3 id="actual-root-cause-wireguard-tunnel-was-down">Actual root cause: WireGuard tunnel was down<a class="headerlink" href="#actual-root-cause-wireguard-tunnel-was-down" title="Permanent link">&para;</a></h3>
+<p>After all the above, 504s continued. Checked <code>gpt.perdrizet.org</code> directly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>$ curl https://gpt.perdrizet.org/health
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>000 (curl exit 28 - timed out)
+</code></pre></div>
+<p><code>ping gpt.perdrizet.org</code> → 100% packet loss. The IP resolves but no packets reach it.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>$ sudo systemctl status wg-quick@wg0
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>Active: failed (Result: exit-code) since Fri 2026-03-27 17:11:20 EDT; 1 day 4h ago
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>...
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>wg-quick[2081]: Name or service not known: `perdrizet.org:51820&#39;
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>wg-quick[2081]: Configuration parsing error
+</code></pre></div>
+<p><code>wg-quick@wg0</code> is enabled and starts at boot, but the WireGuard config uses a hostname
+(<code>perdrizet.org:51820</code>) as the endpoint. The service started before DNS was available, the
+hostname lookup failed, and the tunnel stayed down permanently until manually restarted.</p>
+<h3 id="fix-drop-in-override-for-boot-ordering">Fix: drop-in override for boot ordering<a class="headerlink" href="#fix-drop-in-override-for-boot-ordering" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>/etc/systemd/system/wg-quick@wg0.service.d/wait-for-network.conf
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[Unit]</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="na">After</span><span class="o">=</span><span class="s">network-online.target</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="na">Wants</span><span class="o">=</span><span class="s">network-online.target</span>
+</code></pre></div>
+<p>This makes systemd wait until the network stack reports online before starting the tunnel.
+Both <code>NetworkManager-wait-online.service</code> and <code>systemd-networkd-wait-online.service</code> were already
+enabled so <code>network-online.target</code> is actually reached.</p>
+<p>Restarted the tunnel manually (<code>sudo systemctl restart wg-quick@wg0</code>), confirmed handshake and
+end-to-end reachability (<code>curl https://gpt.perdrizet.org/health</code> → 200).</p>
+<hr />
+<h2 id="whats-still-pending">What's still pending<a class="headerlink" href="#whats-still-pending" title="Permanent link">&para;</a></h2>
+<ul>
+<li>All code changes from this session are uncommitted (server.py, config.py, tui/app.py,
+  prompts.py, memory/db.py, tests/test_server.py)</li>
+<li><code>docs/project-state.md</code> should be updated to reflect <code>max_history_tokens</code>,
+  <code>llm_request_timeout</code>, and the WireGuard boot pitfall</li>
+</ul>
 
 
 
@@ -857,10 +869,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

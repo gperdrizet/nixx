@@ -10,29 +10,27 @@
       
       
       
-        <link rel="canonical" href="https://gperdrizet.github.io/nixx/">
+        <link rel="canonical" href="https://gperdrizet.github.io/nixx/build-log/2026-03-23-searxng-and-intent-persistence/">
       
       
-      
-        <link rel="next" href="blog/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Nixx</title>
+        <title>Build log: March 23, 2026 - SearXNG and intent persistence - Nixx</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -51,7 +49,7 @@
       
     
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -74,7 +72,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#nixx-development-blog" class="md-skip">
+        <a href="#build-log-march-23-2026-searxng-and-intent-persistence" class="md-skip">
           Skip to content
         </a>
       
@@ -90,7 +88,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="Nixx" class="md-header__button md-logo" aria-label="Nixx" data-md-component="logo">
+    <a href="../.." title="Nixx" class="md-header__button md-logo" aria-label="Nixx" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -110,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              Build log: March 23, 2026 - SearXNG and intent persistence
             
           </span>
         </div>
@@ -200,7 +198,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="Nixx" class="md-nav__button md-logo" aria-label="Nixx" data-md-component="logo">
+    <a href="../.." title="Nixx" class="md-nav__button md-logo" aria-label="Nixx" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -227,37 +225,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -273,81 +244,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#about" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        About
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-is-nixx" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What is Nixx?
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#follow-along" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Follow along
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Documentation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tech stack
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -361,7 +257,7 @@
   
   
     <li class="md-nav__item">
-      <a href="blog/" class="md-nav__link">
+      <a href="../../blog/" class="md-nav__link">
         
   
   
@@ -440,7 +336,7 @@
   
   
     <li class="md-nav__item">
-      <a href="architecture/" class="md-nav__link">
+      <a href="../../architecture/" class="md-nav__link">
         
   
   
@@ -468,7 +364,7 @@
   
   
     <li class="md-nav__item">
-      <a href="stack/" class="md-nav__link">
+      <a href="../../stack/" class="md-nav__link">
         
   
   
@@ -496,7 +392,7 @@
   
   
     <li class="md-nav__item">
-      <a href="knowledge-graph/" class="md-nav__link">
+      <a href="../../knowledge-graph/" class="md-nav__link">
         
   
   
@@ -583,7 +479,7 @@
   
   
     <li class="md-nav__item">
-      <a href="pgweb-guide/" class="md-nav__link">
+      <a href="../../pgweb-guide/" class="md-nav__link">
         
   
   
@@ -611,7 +507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="queries/" class="md-nav__link">
+      <a href="../../queries/" class="md-nav__link">
         
   
   
@@ -639,7 +535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="phone-access/" class="md-nav__link">
+      <a href="../../phone-access/" class="md-nav__link">
         
   
   
@@ -694,54 +590,94 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#about" class="md-nav__link">
+  <a href="#what-got-built" class="md-nav__link">
     <span class="md-ellipsis">
       
-        About
+        What got built
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What got built">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#searxng-web-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SearXNG web search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SearXNG web search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#debugging-notes-recorded-for-future-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Debugging notes (recorded for future reference)
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#what-is-nixx" class="md-nav__link">
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#intent-persistence" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What is Nixx?
+        Intent persistence
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#follow-along" class="md-nav__link">
+  <a href="#what-broke-and-how-it-was-fixed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Follow along
+        What broke and how it was fixed
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What broke and how it was fixed">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#old-ddg-code-left-in-web_searchpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Old DDG code left in web_search.py
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Documentation
-      
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
+  <a href="#state-at-end-of-session" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tech stack
+        State at end of session
       
     </span>
   </a>
@@ -768,40 +704,75 @@
   
 
 
-<h1 id="nixx-development-blog">Nixx: development blog<a class="headerlink" href="#nixx-development-blog" title="Permanent link">&para;</a></h1>
-<p><strong>Building a self-hosted personal knowledge base and memory system using vector search and semantic networks</strong></p>
-<h2 id="about">About<a class="headerlink" href="#about" title="Permanent link">&para;</a></h2>
-<p>Nixx is a local-first personal knowledge base and memory system with persistent context across all conversations and workspaces.</p>
-<h2 id="what-is-nixx">What is Nixx?<a class="headerlink" href="#what-is-nixx" title="Permanent link">&para;</a></h2>
-<p>Nixx is an open-source (MIT) personal memory system that:</p>
+<h1 id="build-log-march-23-2026-searxng-and-intent-persistence">Build log: March 23, 2026 - SearXNG and intent persistence<a class="headerlink" href="#build-log-march-23-2026-searxng-and-intent-persistence" title="Permanent link">&para;</a></h1>
+<h2 id="what-got-built">What got built<a class="headerlink" href="#what-got-built" title="Permanent link">&para;</a></h2>
+<p>Two main areas: replacing the broken DuckDuckGo web search with a self-hosted SearXNG
+instance, and making intent persist across server restarts.</p>
+<h3 id="searxng-web-search">SearXNG web search<a class="headerlink" href="#searxng-web-search" title="Permanent link">&para;</a></h3>
+<p>The DuckDuckGo HTML scraper (<code>web_search.py</code>) stopped working - DDG was returning a CAPTCHA
+challenge page (<code>cc=botnet</code>) to this server's IP. The <code>.result</code> CSS selector found nothing
+in the challenge HTML, so every search silently returned no results.</p>
+<p>Replaced with a local SearXNG container:</p>
 <ul>
-<li>Runs entirely on your own hardware</li>
-<li>Maintains unified context across all your projects</li>
-<li>Integrates with your editor via OpenAI-compatible API</li>
-<li>Provides a custom terminal UI for terminal-native workflows</li>
+<li><code>services/searxng/docker-compose.yml</code> - binds port 8888 on localhost only</li>
+<li><code>services/searxng/settings.yml</code> - enables google, brave, bing, duckduckgo, wikipedia;
+  disables image/news/video engines; sets <code>search.formats: [html, json]</code></li>
+<li><code>services/searxng/limiter.toml</code> - disables bot detection for local use</li>
 </ul>
-<p>The goal is to eliminate context fragmentation - no more isolated conversations that don't know about each other.</p>
-<h2 id="follow-along">Follow along<a class="headerlink" href="#follow-along" title="Permanent link">&para;</a></h2>
+<p>Config: <code>NIXX_SEARXNG_URL</code> (default <code>http://localhost:8888</code>) in <code>NixxConfig</code>. Passed through
+<code>ToolRegistry</code> to <code>WebSearchTool</code>.</p>
+<p><code>web_search.py</code> was rewritten to use the SearXNG JSON API
+(<code>GET /search?q=...&amp;format=json</code>). Adding <code>X-Forwarded-For: 127.0.0.1</code> is required - the
+SearXNG botdetection middleware blocks requests that don't appear to come from localhost.</p>
+<p>Verified end-to-end: "search for the latest Minecraft update" returns real results.</p>
+<h4 id="debugging-notes-recorded-for-future-reference">Debugging notes (recorded for future reference)<a class="headerlink" href="#debugging-notes-recorded-for-future-reference" title="Permanent link">&para;</a></h4>
+<p>The fix took several iterations. Key lessons:</p>
 <ul>
-<li><a href="blog/">Blog</a> - polished write-ups</li>
-<li><a href="architecture/">Architecture</a></li>
+<li><code>format=json</code> returns 403 unless explicitly opt-in in <code>settings.yml</code> under
+  <code>search.formats</code>. The default only enables HTML.</li>
+<li><code>docker compose restart</code> does not re-read the bind-mounted settings file if the file was
+  replaced on disk (inode changed). Use <code>down &amp;&amp; up -d</code> to force re-mount.</li>
+<li>The running editor (VS Code) caches file contents - <code>read_file</code> showed a stale version of
+  <code>settings.yml</code> that differed from what was actually on disk. Always verify with <code>cat</code> or
+  <code>sed</code> when something seems inconsistent.</li>
+<li>A fresh <code>async with httpx.AsyncClient(...)</code> per request doesn't carry cookies, but
+  SearXNG does not require cookie pre-seeding - the <code>X-Forwarded-For</code> header alone is
+  sufficient once <code>pass_ip</code> is configured.</li>
 </ul>
-<h2 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h2>
-<p><strong>Getting started:</strong>
-- <a href="quickstart/">Quickstart</a> - start nixx, open the TUI, slash commands, memory and file tools</p>
-<p><strong>Technical guides:</strong>
-- <a href="architecture/">Architecture</a> - system design, data flow, two-tier memory model
-- <a href="infrastructure/">Infrastructure</a> - hardware, CUDA setup, llama.cpp build, systemd services
-- <a href="stack/">Tech stack</a> - every library and tool with documentation links
-- <a href="knowledge-graph/">Knowledge graph</a> - planned knowledge graph architecture and roadmap
-- <a href="pgweb-guide/">pgweb guide</a> - web interface for database management
-- <a href="queries/">SQL queries</a> - common database operations
-- <a href="phone-access/">Phone access</a> - remote access via Tailscale + SSH</p>
-<h2 id="tech-stack">Tech stack<a class="headerlink" href="#tech-stack" title="Permanent link">&para;</a></h2>
-<p>Python · FastAPI · Uvicorn · asyncpg · PostgreSQL + pgvector · llama.cpp · Textual · Rich</p>
-<p>See <a href="stack/">docs/stack.md</a> for a full breakdown of every library with links to documentation.</p>
+<h3 id="intent-persistence">Intent persistence<a class="headerlink" href="#intent-persistence" title="Permanent link">&para;</a></h3>
+<p>Intent was stored only in <code>app.state</code> and lost on every server restart. Two problems: cold
+starts had no intent at all, and iteratively refined intent was discarded on restart.</p>
+<p><strong><code>state</code> table</strong> added to the DB schema (key/value, <code>TEXT PRIMARY KEY</code>). Two helpers in
+<code>db.py</code>: <code>get_state(pool, key)</code> and <code>set_state(pool, key, value)</code>. The old <code>kv_store</code> name
+was briefly used but immediately renamed to <code>state</code> - <code>kv_store</code> reads too much like the
+attention KV cache. An inline migration in <code>init_schema</code> copies any existing <code>kv_store</code> rows
+and drops the table.</p>
+<p><strong><code>DEFAULT_INTENT</code></strong> constant added to <code>server.py</code>:
+<code>"Understand the user's goals and assist them."</code> Used as the starting intent on cold starts
+(nothing in <code>state</code>) and when the user clears intent via <code>DELETE /v1/intent</code>.</p>
+<p>On startup, intent is loaded from <code>state</code> (key <code>intent</code>) with fallback to <code>DEFAULT_INTENT</code>.
+Every write path persists to <code>state</code>: <code>set_intent</code>, <code>clear_intent</code>, and <code>_derive_intent</code>.</p>
+<p><strong><code>intent_interval</code></strong> default changed from 10 to 5 to make derivation observable in normal
+use.</p>
 <hr />
-<p><em>Built with curiosity, coffee, and an ebay GPU.</em></p>
+<h2 id="what-broke-and-how-it-was-fixed">What broke and how it was fixed<a class="headerlink" href="#what-broke-and-how-it-was-fixed" title="Permanent link">&para;</a></h2>
+<h3 id="old-ddg-code-left-in-web_searchpy">Old DDG code left in web_search.py<a class="headerlink" href="#old-ddg-code-left-in-web_searchpy" title="Permanent link">&para;</a></h3>
+<p>The rewrite prepended the new SearXNG class, but the old DDG implementation was still
+appended below it in the same file. Python uses the last definition when a class has
+duplicate methods, so all search calls were hitting the old broken DDG code (which still
+referenced the deleted <code>_HEADERS</code> constant, causing <code>NameError</code>).</p>
+<p>Fix: truncated the file to the first 85 lines, removing the old class entirely.</p>
+<hr />
+<h2 id="state-at-end-of-session">State at end of session<a class="headerlink" href="#state-at-end-of-session" title="Permanent link">&para;</a></h2>
+<ul>
+<li>SearXNG container running at port 8888, <code>restart: unless-stopped</code>.</li>
+<li><code>web_search</code> tool working via SearXNG JSON API.</li>
+<li>Intent persisted in <code>state</code> table; survives restarts; defaults to generic string on cold
+  start.</li>
+<li>All uncommitted changes: <code>config.py</code>, <code>memory/db.py</code>, <code>server.py</code> (intent persistence</li>
+<li><code>state</code> table + <code>intent_interval=5</code>). The SearXNG commit was pushed; the intent work
+  is not yet committed.</li>
+</ul>
 
 
 
@@ -857,10 +828,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

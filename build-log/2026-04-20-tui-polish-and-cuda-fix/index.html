@@ -10,29 +10,27 @@
       
       
       
-        <link rel="canonical" href="https://gperdrizet.github.io/nixx/">
+        <link rel="canonical" href="https://gperdrizet.github.io/nixx/build-log/2026-04-20-tui-polish-and-cuda-fix/">
       
       
-      
-        <link rel="next" href="blog/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Nixx</title>
+        <title>2026-04-20: TUI polish and CUDA fix - Nixx</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -51,7 +49,7 @@
       
     
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -74,7 +72,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#nixx-development-blog" class="md-skip">
+        <a href="#2026-04-20-tui-polish-and-cuda-fix" class="md-skip">
           Skip to content
         </a>
       
@@ -90,7 +88,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="Nixx" class="md-header__button md-logo" aria-label="Nixx" data-md-component="logo">
+    <a href="../.." title="Nixx" class="md-header__button md-logo" aria-label="Nixx" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -110,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              2026-04-20: TUI polish and CUDA fix
             
           </span>
         </div>
@@ -200,7 +198,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="Nixx" class="md-nav__button md-logo" aria-label="Nixx" data-md-component="logo">
+    <a href="../.." title="Nixx" class="md-nav__button md-logo" aria-label="Nixx" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -227,37 +225,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -273,81 +244,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#about" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        About
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-is-nixx" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What is Nixx?
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#follow-along" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Follow along
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Documentation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tech stack
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -361,7 +257,7 @@
   
   
     <li class="md-nav__item">
-      <a href="blog/" class="md-nav__link">
+      <a href="../../blog/" class="md-nav__link">
         
   
   
@@ -440,7 +336,7 @@
   
   
     <li class="md-nav__item">
-      <a href="architecture/" class="md-nav__link">
+      <a href="../../architecture/" class="md-nav__link">
         
   
   
@@ -468,7 +364,7 @@
   
   
     <li class="md-nav__item">
-      <a href="stack/" class="md-nav__link">
+      <a href="../../stack/" class="md-nav__link">
         
   
   
@@ -496,7 +392,7 @@
   
   
     <li class="md-nav__item">
-      <a href="knowledge-graph/" class="md-nav__link">
+      <a href="../../knowledge-graph/" class="md-nav__link">
         
   
   
@@ -583,7 +479,7 @@
   
   
     <li class="md-nav__item">
-      <a href="pgweb-guide/" class="md-nav__link">
+      <a href="../../pgweb-guide/" class="md-nav__link">
         
   
   
@@ -611,7 +507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="queries/" class="md-nav__link">
+      <a href="../../queries/" class="md-nav__link">
         
   
   
@@ -639,7 +535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="phone-access/" class="md-nav__link">
+      <a href="../../phone-access/" class="md-nav__link">
         
   
   
@@ -694,10 +590,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#about" class="md-nav__link">
+  <a href="#what-got-built" class="md-nav__link">
     <span class="md-ellipsis">
       
-        About
+        What got built
       
     </span>
   </a>
@@ -705,10 +601,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-is-nixx" class="md-nav__link">
+  <a href="#tui-toggle-indicators" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What is Nixx?
+        TUI toggle indicators
       
     </span>
   </a>
@@ -716,10 +612,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#follow-along" class="md-nav__link">
+  <a href="#context-and-summary-bar-color-alignment" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Follow along
+        Context and summary bar color alignment
       
     </span>
   </a>
@@ -727,10 +623,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#documentation" class="md-nav__link">
+  <a href="#context-length-stuck-at-8192" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Documentation
+        Context length stuck at 8192
       
     </span>
   </a>
@@ -738,10 +634,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tech-stack" class="md-nav__link">
+  <a href="#cuda-libcudartso12-recurring-crash" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tech stack
+        CUDA libcudart.so.12 - recurring crash
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stray-files-in-repo-root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stray files in repo root
       
     </span>
   </a>
@@ -768,40 +675,66 @@
   
 
 
-<h1 id="nixx-development-blog">Nixx: development blog<a class="headerlink" href="#nixx-development-blog" title="Permanent link">&para;</a></h1>
-<p><strong>Building a self-hosted personal knowledge base and memory system using vector search and semantic networks</strong></p>
-<h2 id="about">About<a class="headerlink" href="#about" title="Permanent link">&para;</a></h2>
-<p>Nixx is a local-first personal knowledge base and memory system with persistent context across all conversations and workspaces.</p>
-<h2 id="what-is-nixx">What is Nixx?<a class="headerlink" href="#what-is-nixx" title="Permanent link">&para;</a></h2>
-<p>Nixx is an open-source (MIT) personal memory system that:</p>
-<ul>
-<li>Runs entirely on your own hardware</li>
-<li>Maintains unified context across all your projects</li>
-<li>Integrates with your editor via OpenAI-compatible API</li>
-<li>Provides a custom terminal UI for terminal-native workflows</li>
-</ul>
-<p>The goal is to eliminate context fragmentation - no more isolated conversations that don't know about each other.</p>
-<h2 id="follow-along">Follow along<a class="headerlink" href="#follow-along" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="blog/">Blog</a> - polished write-ups</li>
-<li><a href="architecture/">Architecture</a></li>
-</ul>
-<h2 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h2>
-<p><strong>Getting started:</strong>
-- <a href="quickstart/">Quickstart</a> - start nixx, open the TUI, slash commands, memory and file tools</p>
-<p><strong>Technical guides:</strong>
-- <a href="architecture/">Architecture</a> - system design, data flow, two-tier memory model
-- <a href="infrastructure/">Infrastructure</a> - hardware, CUDA setup, llama.cpp build, systemd services
-- <a href="stack/">Tech stack</a> - every library and tool with documentation links
-- <a href="knowledge-graph/">Knowledge graph</a> - planned knowledge graph architecture and roadmap
-- <a href="pgweb-guide/">pgweb guide</a> - web interface for database management
-- <a href="queries/">SQL queries</a> - common database operations
-- <a href="phone-access/">Phone access</a> - remote access via Tailscale + SSH</p>
-<h2 id="tech-stack">Tech stack<a class="headerlink" href="#tech-stack" title="Permanent link">&para;</a></h2>
-<p>Python · FastAPI · Uvicorn · asyncpg · PostgreSQL + pgvector · llama.cpp · Textual · Rich</p>
-<p>See <a href="stack/">docs/stack.md</a> for a full breakdown of every library with links to documentation.</p>
+<h1 id="2026-04-20-tui-polish-and-cuda-fix">2026-04-20: TUI polish and CUDA fix<a class="headerlink" href="#2026-04-20-tui-polish-and-cuda-fix" title="Permanent link">&para;</a></h1>
+<h2 id="what-got-built">What got built<a class="headerlink" href="#what-got-built" title="Permanent link">&para;</a></h2>
+<p>A session of small but visible TUI improvements, followed by a recurring infrastructure issue
+that finally got a proper fix.</p>
 <hr />
-<p><em>Built with curiosity, coffee, and an ebay GPU.</em></p>
+<h2 id="tui-toggle-indicators">TUI toggle indicators<a class="headerlink" href="#tui-toggle-indicators" title="Permanent link">&para;</a></h2>
+<p>The recall and intent toggles were rendered as Textual <code>Switch</code> widgets that were nearly invisible
+against the terminal background - no visible on/off state, and green widgets looked like progress
+bars identical to the context bar.</p>
+<p>Replaced the <code>Switch</code> widgets entirely with <code>Static</code> labels that include a Unicode dot indicator:</p>
+<ul>
+<li><code>recall ●</code> / <code>intent ●</code> in green when on</li>
+<li><code>recall ○</code> / <code>intent ○</code> dimmed when off</li>
+</ul>
+<p>The <code>Switch</code>-based event handler (<code>on_switch_changed</code>) was removed. <code>action_toggle_recall</code> and
+<code>action_toggle_intent</code> now toggle internal <code>_recall_on</code> / <code>_intent_on</code> state directly and call
+<code>_update_toggle_labels</code> immediately, then fire the server request as a worker. The server sync
+in <code>_update_summary_bar</code> compares against those fields and calls <code>_update_toggle_labels</code> only
+when the state differs.</p>
+<p>The <code>ctrl+i</code> binding for intent toggle was removed and replaced with <code>ctrl+t</code>. <code>ctrl+i</code> is
+a terminal-level alias for Tab and cannot be captured by Textual - it was causing focus
+navigation to fire instead of the toggle action.</p>
+<hr />
+<h2 id="context-and-summary-bar-color-alignment">Context and summary bar color alignment<a class="headerlink" href="#context-and-summary-bar-color-alignment" title="Permanent link">&para;</a></h2>
+<p><code>SummaryBar</code> was using a different color scheme (<code>dim</code> / <code>cyan</code> / <code>magenta</code>) and different
+thresholds (50% / 90%) than <code>ContextBar</code> (<code>green</code> / <code>yellow</code> / <code>red</code> at 50% / 80%). Both bars
+now use identical colors and thresholds: green below 50%, yellow 50-80%, red above 80%.</p>
+<hr />
+<h2 id="context-length-stuck-at-8192">Context length stuck at 8192<a class="headerlink" href="#context-length-stuck-at-8192" title="Permanent link">&para;</a></h2>
+<p>The context bar was showing 8192 (the config default) instead of 65536 after every restart.</p>
+<p>Root cause: nixx-server fetches <code>n_ctx</code> from the LLM server's <code>/props</code> endpoint at startup.
+When llamacpp is still loading (or was down at startup time due to the CUDA issue below), that
+fetch fails and the server falls back to 8192. A retry existed in the <code>/health</code> handler, but
+the TUI never calls <code>/health</code> - it only reads <code>context_length</code> from chat response payloads.
+So the retry never fired.</p>
+<p>Fix: extracted the retry into a shared <code>_ensure_n_ctx()</code> coroutine and called it at the top
+of both <code>/health</code> and <code>/v1/chat/completions</code>. The first chat message or health check after
+the LLM server becomes available now picks up the real value.</p>
+<hr />
+<h2 id="cuda-libcudartso12-recurring-crash">CUDA libcudart.so.12 - recurring crash<a class="headerlink" href="#cuda-libcudartso12-recurring-crash" title="Permanent link">&para;</a></h2>
+<p>llamacpp was crash-looping on startup with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>llama-server: error while loading shared libraries: libcudart.so.12: cannot open shared object file
+</code></pre></div>
+<p>This has happened before. The system has no installed CUDA runtime packages - only a
+<code>cuda-keyring</code> package. The only copy of <code>libcudart.so.12</code> on the machine is bundled inside
+Ollama's private library directory at <code>/usr/local/lib/ollama/cuda_v12/</code>. Previously the fix was
+to add <code>LD_LIBRARY_PATH=/usr/local/lib/ollama/cuda_v12</code> to the systemd drop-ins, but this was
+not persisted correctly across the last reboot.</p>
+<p>Proper fix: registered the directory with the system linker cache:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>echo &quot;/usr/local/lib/ollama/cuda_v12&quot; | sudo tee /etc/ld.so.conf.d/ollama-cuda12.conf
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>sudo ldconfig
+</code></pre></div>
+<p><code>libcudart.so.12</code> is now visible to all processes via ldconfig and survives reboots. The
+<code>LD_LIBRARY_PATH</code> lines were removed from both drop-ins (<code>llamacpp.service.d/override.conf</code>
+and <code>nixx-embed.service.d/override.conf</code>), leaving only <code>CUDA_VISIBLE_DEVICES=0</code> in each.</p>
+<hr />
+<h2 id="stray-files-in-repo-root">Stray files in repo root<a class="headerlink" href="#stray-files-in-repo-root" title="Permanent link">&para;</a></h2>
+<p>The broken heredoc attempts earlier in the session left three untracked files in the repo root:
+<code>EOF</code>, <code>[Service]</code>, and <code>Environment=CUDA_VISIBLE_DEVICES=0</code>. These should be deleted before
+committing.</p>
 
 
 
@@ -857,10 +790,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.top", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

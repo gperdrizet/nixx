@@ -847,6 +847,13 @@ workspaces and conversations - nixx remembers everything across sessions.</p>
 <td>postgres</td>
 <td>nixx DB: <code>postgresql://nixx:...@localhost/nixx</code></td>
 </tr>
+<tr>
+<td>SearXNG</td>
+<td>Docker container</td>
+<td>8888</td>
+<td>-</td>
+<td><code>services/searxng/</code>, <code>docker compose up -d</code></td>
+</tr>
 </tbody>
 </table>
 <p>All services run under <code>nixx.target</code> but <strong>restarting the target does not cascade to individual
@@ -897,6 +904,10 @@ server process still needs a restart, but no reinstall is needed.</p>
 <tr>
 <td><code>source_edges</code></td>
 <td>Knowledge graph edges between sources. Has <code>relation TEXT</code>, <code>weight FLOAT</code>, <code>activations INT</code>, <code>last_activated</code>. PK is <code>(from_id, to_id)</code>.</td>
+</tr>
+<tr>
+<td><code>state</code></td>
+<td>Persistent server state (key/value). Currently stores <code>intent</code>. Survives restarts.</td>
 </tr>
 </tbody>
 </table>
@@ -961,14 +972,18 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 <a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>  tools/
 <a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>    __init__.py
 <a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>    base.py       — ToolResult, BaseTool ABC
-<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>    file_tools.py — ReadFileTool, WriteFileTool, ListDirTool, DeleteFileTool
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>    file_tools.py — ReadFileTool, WriteFileTool, EditFileTool, ListDirTool, DeleteFileTool
 <a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>    memory_tools.py — SearchTranscriptTool, ViewTranscriptTool
-<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>    web_search.py — WebSearchTool (DuckDuckGo HTML scraper)
-<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>    read_webpage.py — ReadWebpageTool (httpx + BeautifulSoup, 8000 char limit)
-<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>    registry.py   — ToolRegistry: registers tools, builds OpenAI tool defs, executes calls
-<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>  tui/
-<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>    __init__.py
-<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>    app.py        — NixxApp (Textual): full chat UI
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>    permissions.py — Directory permission helpers (is_path_allowed, get_project_dir, set_project_dir)
+<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>    planning.py   — ReadPlanTool, WritePlanTool, get_current_plan
+<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>    run_python.py — RunPythonTool (sandboxed subprocess, unshare -rn for network isolation)
+<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>    shadow.py     — shadow_backup() — auto-snapshot before file modifications
+<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>    web_search.py — WebSearchTool (SearXNG JSON API, requires X-Forwarded-For header)
+<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>    read_webpage.py — ReadWebpageTool (httpx + BeautifulSoup, 8000 char limit)
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>    registry.py   — ToolRegistry: registers tools, builds OpenAI tool defs, executes calls
+<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>  tui/
+<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>    __init__.py
+<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>    app.py        — NixxApp (Textual): full chat UI
 </code></pre></div>
 <hr />
 <h2 id="config-nixxconfig">Config (NixxConfig)<a class="headerlink" href="#config-nixxconfig" title="Permanent link">&para;</a></h2>
@@ -990,7 +1005,7 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 <tr>
 <td><code>llm_base_url</code></td>
 <td><code>http://localhost:8080</code></td>
-<td>Overridden in .env to port 8502</td>
+<td>Overridden in .env to <code>https://model.perdrizet.org</code> (nginx on gatekeeper → WireGuard → localhost:8502)</td>
 </tr>
 <tr>
 <td><code>llm_model</code></td>
@@ -1001,6 +1016,16 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 <td><code>llm_context_length</code></td>
 <td><code>8192</code></td>
 <td>Auto-fetched from LLM <code>/props</code> at startup (overrides .env value). Fallback if fetch fails.</td>
+</tr>
+<tr>
+<td><code>max_history_tokens</code></td>
+<td><code>16384</code></td>
+<td>Max tokens of conversation history per request, independent of context length. Prevents slow prefill on long sessions.</td>
+</tr>
+<tr>
+<td><code>llm_request_timeout</code></td>
+<td><code>600.0</code></td>
+<td>Seconds to wait for first token from LLM (covers prefill). Used as <code>read</code> timeout in split <code>httpx.Timeout</code>.</td>
 </tr>
 <tr>
 <td><code>embedding_base_url</code></td>
@@ -1019,7 +1044,7 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 </tr>
 <tr>
 <td><code>intent_interval</code></td>
-<td><code>10</code></td>
+<td><code>5</code></td>
 <td>Messages between auto intent derivation</td>
 </tr>
 <tr>
@@ -1031,6 +1056,11 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 <td><code>recall_threshold</code></td>
 <td><code>0.4</code></td>
 <td>Minimum cosine similarity for episodic recall injection</td>
+</tr>
+<tr>
+<td><code>searxng_url</code></td>
+<td><code>http://localhost:8888</code></td>
+<td>Base URL for SearXNG container</td>
 </tr>
 <tr>
 <td><code>scratch_dir</code></td>
@@ -1061,7 +1091,7 @@ at test module scope.</p>
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>POST /v1/buffer/clear            — write session marker (start new session)
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>GET  /v1/episodic/status         — summary due? current word count, interval, recall_threshold
 <a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>POST /v1/episodic/config         — update interval_words, recall_enabled, recall_threshold at runtime
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>POST /v1/episodic/summary        — create summary now (body: {tags: []})
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>POST /v1/episodic/summary        — create summary now (no body required)
 <a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>POST /v1/episodic/search         — vector search summaries (body: {query, top_k})
 <a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>GET  /v1/episodic/transcript     — buffer entries for a range (?start_id=&amp;end_id=)
 <a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>GET  /v1/episodic/summaries      — list all summaries
@@ -1069,6 +1099,9 @@ at test module scope.</p>
 <a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>POST /v1/intent                  — set intent manually (body: {intent})
 <a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>DELETE /v1/intent                — clear intent
 <a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>POST /v1/intent/derive           — trigger intent derivation immediately
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>GET  /v1/project                 — get scratch_dir + current project directory
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>POST /v1/project                 — set project directory (body: {directory})
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>DELETE /v1/project               — clear project directory
 </code></pre></div>
 <hr />
 <h2 id="tui-apppy">TUI (app.py)<a class="headerlink" href="#tui-apppy" title="Permanent link">&para;</a></h2>
@@ -1076,25 +1109,30 @@ at test module scope.</p>
 - <code>NixxApp</code> — main Textual app
 - <code>ChatInput(TextArea)</code> — multi-line input; <code>Enter</code>=send, <code>Shift+Enter</code>=newline
 - <code>Message(Static)</code> — focusable message bubbles; <code>Enter</code>=edit, <code>Backspace</code>=rewind, <code>y</code>=yank to clipboard
-- <code>ContextBar</code> — token usage gauge
-- <code>SummaryBar</code> — summary word-count progress gauge
-- <code>IntentBar</code> — current intent string, hidden when no intent is set</p>
-<p>Tag input bar (<code>#tag-row</code>): appears when episodic summary is due. When auto-triggered (by
-word-count threshold), <strong>focus stays in the chat input</strong> - user must Tab to the tag bar. When
-triggered manually via <code>/summary</code>, tag bar auto-focuses. Typing a message while the tag bar is
-open dismisses it and defers the summary.</p>
+- <code>ContextBar</code> — token usage gauge (format: <code>context ████░░ XX% (n/total tok)</code>)
+- <code>SummaryBar</code> — summary word-count progress gauge (format: <code>summary ████░░ XX% (n/interval wds)</code>)
+- <code>IntentBar</code> — current intent string; always visible, shows <code>intent: -</code> when no intent is set</p>
+<p>Layout (bottom of screen, stacked): context-row → summary-row → IntentBar → toggles-row → input-row.</p>
+<p>Toggles row has two switches: <strong>recall</strong> (<code>Ctrl+R</code>) and <strong>intent</strong> (<code>Ctrl+I</code>). Labels color green (on)
+or red (off). Both sync from server state on the <code>_update_summary_bar</code> polling cycle.</p>
+<p>When an episodic summary is due (auto-triggered by word count, or via <code>/summary</code>), it runs
+immediately in the background - no user input needed. A <code>Summary created</code> system message appears
+inline with the LLM-derived tags and entities.</p>
 <p>TUI slash commands: <code>/help</code>, <code>/context</code>, <code>/summary</code>, <code>/search "q"</code>, <code>/transcript &lt;id&gt; [end]</code>,
-<code>/clear</code>, <code>/recall</code>, <code>/interval [n]</code>, <code>/intent [text]</code>, <code>/intent-bar</code> (toggle IntentBar),
-<code>/threshold [0.0-1.0]</code> (view or set recall similarity threshold).</p>
-<p>Tool call events: when nixx calls a tool mid-stream, a dim <code>calling tool: &lt;name&gt;</code> system
-message appears inline in the chat.</p>
+<code>/clear</code>, <code>/recall</code>, <code>/interval [n]</code>, <code>/intent [text]</code>, <code>/intent-toggle</code> (toggle intent injection),
+<code>/intent-bar</code> (toggle IntentBar), <code>/threshold [0.0-1.0]</code> (view or set recall similarity threshold),
+<code>/project [dir|clear]</code> (show, set, or clear project directory).</p>
+<p>Tool call events: when nixx calls a tool mid-stream, a dim <code>▸ tool_name</code> line is appended
+inline inside the streaming assistant message (not a separate system message).</p>
 <hr />
 <h2 id="memory-system">Memory system<a class="headerlink" href="#memory-system" title="Permanent link">&para;</a></h2>
 <h3 id="episodic-memory-automatic">Episodic memory (automatic)<a class="headerlink" href="#episodic-memory-automatic" title="Permanent link">&para;</a></h3>
 <ol>
 <li>Every message pair is written to <code>buffer</code>.</li>
-<li>Server tracks unsummarized word count. When it exceeds <code>summary_interval</code>, TUI prompts for tags.</li>
-<li>On confirmation: LLM generates a summary + extracts entities. Stored in <code>summaries</code> with embedding.</li>
+<li>Server tracks unsummarized word count. When it exceeds <code>summary_interval</code>, the TUI auto-triggers
+   a summary (no user input needed).</li>
+<li>LLM generates summary, extracts entities, and derives tags in a single call. Stored in <code>summaries</code>
+   with embedding.</li>
 <li>Recall: on each chat turn, last user message is embedded → cosine similarity search over
    <code>summaries</code> → top 3 results above <code>recall_threshold</code> injected into system prompt as context block.</li>
 </ol>
@@ -1107,12 +1145,17 @@ message appears inline in the chat.</p>
 <li>Recall: same vector search path as episodic, but over <code>memories</code>.</li>
 </ul>
 <h3 id="intent">Intent<a class="headerlink" href="#intent" title="Permanent link">&para;</a></h3>
-<p>Auto-derived every <code>intent_interval</code> (10) messages by asking LLM to analyze recent exchange.
-Injected into system prompt as <code>## Current Intent</code> block. Can be set/cleared manually via API
-or <code>/intent</code> TUI command.</p>
+<p>Auto-derived every <code>intent_interval</code> (5) messages by asking LLM to reflect on who it's being
+in the conversation (virtue-ethics framing, not task-level). Injected into system prompt as
+<code>## Current intent</code> block when <code>intent_enabled</code> is true. Default intent on cold start:
+<code>"Understand the user's goals and assist them."</code> Persisted across restarts in the <code>state</code> table
+(key <code>intent</code>). Can be set/cleared manually via API or <code>/intent</code> TUI command. Clearing resets
+to the default (not null).</p>
 <hr />
 <h2 id="tools-toolregistry">Tools (ToolRegistry)<a class="headerlink" href="#tools-toolregistry" title="Permanent link">&para;</a></h2>
-<p>LLM-callable tools, sandboxed to <code>scratch_dir</code> (<code>~/nixx_scratch</code>):</p>
+<p>LLM-callable tools, accessible within <code>scratch_dir</code> (<code>~/nixx_scratch</code>) and an optional
+project directory. The project directory is set via <code>/project &lt;dir&gt;</code> in the TUI or
+<code>POST /v1/project</code>. It is persisted in the <code>state</code> table (key <code>project_dir</code>).</p>
 <table>
 <thead>
 <tr>
@@ -1123,19 +1166,35 @@ or <code>/intent</code> TUI command.</p>
 <tbody>
 <tr>
 <td><code>read_file</code></td>
-<td>Read a file from scratch_dir</td>
+<td>Read a file from scratch_dir or project directory</td>
 </tr>
 <tr>
 <td><code>write_file</code></td>
-<td>Write a file to scratch_dir</td>
+<td>Write a file (auto shadow backup before overwrite)</td>
+</tr>
+<tr>
+<td><code>edit_file</code></td>
+<td>Find-and-replace edit (old_string must appear exactly once, auto shadow backup)</td>
 </tr>
 <tr>
 <td><code>list_dir</code></td>
-<td>List scratch_dir or a subdirectory</td>
+<td>List scratch_dir, a subdirectory, or project directory</td>
 </tr>
 <tr>
 <td><code>delete_file</code></td>
-<td>Delete a file from scratch_dir</td>
+<td>Delete a file (auto shadow backup)</td>
+</tr>
+<tr>
+<td><code>read_plan</code></td>
+<td>Read the current plan (.plan.md in scratch_dir)</td>
+</tr>
+<tr>
+<td><code>write_plan</code></td>
+<td>Write/replace the current plan (injected into system prompt automatically)</td>
+</tr>
+<tr>
+<td><code>run_python</code></td>
+<td>Execute Python in a sandboxed subprocess (unshare -rn for network isolation, 30s timeout)</td>
 </tr>
 <tr>
 <td><code>search_transcript</code></td>
@@ -1147,7 +1206,7 @@ or <code>/intent</code> TUI command.</p>
 </tr>
 <tr>
 <td><code>web_search</code></td>
-<td>DuckDuckGo HTML scraper, returns top 5 results (title/URL/snippet)</td>
+<td>SearXNG JSON API, top 5 results (title/URL/snippet). Requires <code>X-Forwarded-For: 127.0.0.1</code> header. SearXNG container must be running.</td>
 </tr>
 <tr>
 <td><code>read_webpage</code></td>
@@ -1155,6 +1214,7 @@ or <code>/intent</code> TUI command.</p>
 </tr>
 </tbody>
 </table>
+<p>Shadow backups are stored at <code>~/.nixx/shadows/</code> with timestamps, preserving directory structure.</p>
 <p>Tool calls are signalled to the TUI via a <code>{"tool_call": {"name": "..."}}</code> SSE event emitted
 before execution. The TUI renders a dim inline <code>calling tool: &lt;name&gt;</code> message.</p>
 <hr />
@@ -1169,8 +1229,20 @@ before execution. The TUI renders a dim inline <code>calling tool: &lt;name&gt;<
 <li>DB table for episodic summaries is <code>summaries</code> (not <code>episodic_summaries</code>).</li>
 <li><code>pre-commit</code> hook requires venv activated. Bypass with <code>git -c core.hooksPath=/dev/null commit</code>.</li>
 <li><code>llm_context_length</code> in <code>.env</code> is overridden at startup by the <code>/props</code> fetch. The running
-  value can be verified at <code>GET /health</code> (<code>context_length</code> field) or from server logs at startup.</li>
+  value can be verified at <code>GET /health</code> (<code>context_length</code> field) or from server logs at startup.
+  The <code>/props</code> fetch hits <code>model.perdrizet.org</code> - if WireGuard is down at startup it will fail and
+  fall back to 8192. The <code>/health</code> route retries the fetch, so restarting nixx-server after
+  the tunnel is up is enough.</li>
 <li><code>/props</code> returns <code>n_ctx</code> under <code>default_generation_settings</code>, not at the top level.</li>
+<li>SearXNG requires <code>X-Forwarded-For: 127.0.0.1</code> header on requests and <code>format=json</code> must be
+  explicitly listed in <code>settings.yml</code> under <code>search.formats</code>. If the container is restarted after
+  changing settings.yml, use <code>docker compose down &amp;&amp; docker compose up -d</code> (not just <code>restart</code>) to
+  ensure the bind-mount file is re-read correctly.</li>
+<li><code>wg-quick@wg0</code> uses a hostname endpoint (<code>perdrizet.org:51820</code>). If it starts before DNS is
+  available it fails silently and stays down. Fixed by
+  <code>/etc/systemd/system/wg-quick@wg0.service.d/wait-for-network.conf</code> with
+  <code>After=network-online.target</code>. If the tunnel is down, <code>model.perdrizet.org</code> will be unreachable
+  and all LLM calls will 504. Check with <code>sudo systemctl status wg-quick@wg0</code>.</li>
 </ul>
 
 
