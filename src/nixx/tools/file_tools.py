@@ -13,7 +13,7 @@ class ReadFileTool(Tool):
 
     def __init__(self, scratch_dir: Path) -> None:
         self._scratch_dir = scratch_dir
-        self._allowed_dirs: list[str] = []
+        self._project_dir: str | None = None
 
     @property
     def name(self) -> str:
@@ -23,7 +23,7 @@ class ReadFileTool(Tool):
     def description(self) -> str:
         return (
             "Read the contents of a file. Accepts a relative path (within the scratch directory) "
-            "or an absolute path (if the directory has been granted via /grant)."
+            "or an absolute path (within the project directory)."
         )
 
     @property
@@ -33,7 +33,7 @@ class ReadFileTool(Tool):
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Relative path within scratch directory, or absolute path in a granted directory",
+                    "description": "Relative path within scratch directory, or absolute path in the project directory",
                 }
             },
             "required": ["path"],
@@ -48,7 +48,7 @@ class ReadFileTool(Tool):
             p = Path(path)
             full_path = p.resolve() if p.is_absolute() else (self._scratch_dir / path).resolve()
 
-            if not is_path_allowed(full_path, self._scratch_dir, self._allowed_dirs):
+            if not is_path_allowed(full_path, self._scratch_dir, self._project_dir):
                 return ToolResult(success=False, error="Path is outside allowed directories")
 
             if not full_path.exists():
@@ -72,7 +72,7 @@ class WriteFileTool(Tool):
 
     def __init__(self, scratch_dir: Path) -> None:
         self._scratch_dir = scratch_dir
-        self._allowed_dirs: list[str] = []
+        self._project_dir: str | None = None
 
     @property
     def name(self) -> str:
@@ -82,7 +82,7 @@ class WriteFileTool(Tool):
     def description(self) -> str:
         return (
             "Write content to a file. Accepts a relative path (within the scratch directory) "
-            "or an absolute path (if the directory has been granted). Creates parent directories if needed. "
+            "or an absolute path (within the project directory). Creates parent directories if needed. "
             "A shadow backup is created automatically before overwriting existing files."
         )
 
@@ -93,7 +93,7 @@ class WriteFileTool(Tool):
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Relative path within scratch directory, or absolute path in a granted directory",
+                    "description": "Relative path within scratch directory, or absolute path in the project directory",
                 },
                 "content": {
                     "type": "string",
@@ -113,7 +113,7 @@ class WriteFileTool(Tool):
             p = Path(path)
             full_path = p.resolve() if p.is_absolute() else (self._scratch_dir / path).resolve()
 
-            if not is_path_allowed(full_path, self._scratch_dir, self._allowed_dirs):
+            if not is_path_allowed(full_path, self._scratch_dir, self._project_dir):
                 return ToolResult(success=False, error="Path is outside allowed directories")
 
             full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -129,7 +129,7 @@ class ListDirTool(Tool):
 
     def __init__(self, scratch_dir: Path) -> None:
         self._scratch_dir = scratch_dir
-        self._allowed_dirs: list[str] = []
+        self._project_dir: str | None = None
 
     @property
     def name(self) -> str:
@@ -139,7 +139,7 @@ class ListDirTool(Tool):
     def description(self) -> str:
         return (
             "List files and directories in a path. Accepts a relative path "
-            "(within scratch directory) or an absolute path (if granted)."
+            "(within scratch directory) or an absolute path (within the project directory)."
         )
 
     @property
@@ -149,7 +149,7 @@ class ListDirTool(Tool):
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Relative path within scratch directory, absolute path in a granted directory, or '.' for scratch root",
+                    "description": "Relative path within scratch directory, absolute path in the project directory, or '.' for scratch root",
                     "default": ".",
                 }
             },
@@ -163,7 +163,7 @@ class ListDirTool(Tool):
             p = Path(path)
             full_path = p.resolve() if p.is_absolute() else (self._scratch_dir / path).resolve()
 
-            if not is_path_allowed(full_path, self._scratch_dir, self._allowed_dirs):
+            if not is_path_allowed(full_path, self._scratch_dir, self._project_dir):
                 return ToolResult(success=False, error="Path is outside allowed directories")
 
             if not full_path.exists():
@@ -197,7 +197,7 @@ class DeleteFileTool(Tool):
 
     def __init__(self, scratch_dir: Path) -> None:
         self._scratch_dir = scratch_dir
-        self._allowed_dirs: list[str] = []
+        self._project_dir: str | None = None
 
     @property
     def name(self) -> str:
@@ -207,7 +207,7 @@ class DeleteFileTool(Tool):
     def description(self) -> str:
         return (
             "Delete a file. Accepts a relative path (within scratch directory) "
-            "or an absolute path (if granted). A shadow backup is created automatically."
+            "or an absolute path (within the project directory). A shadow backup is created automatically."
         )
 
     @property
@@ -217,7 +217,7 @@ class DeleteFileTool(Tool):
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Relative path within scratch directory, or absolute path in a granted directory",
+                    "description": "Relative path within scratch directory, or absolute path in the project directory",
                 }
             },
             "required": ["path"],
@@ -232,7 +232,7 @@ class DeleteFileTool(Tool):
             p = Path(path)
             full_path = p.resolve() if p.is_absolute() else (self._scratch_dir / path).resolve()
 
-            if not is_path_allowed(full_path, self._scratch_dir, self._allowed_dirs):
+            if not is_path_allowed(full_path, self._scratch_dir, self._project_dir):
                 return ToolResult(success=False, error="Path is outside allowed directories")
 
             if not full_path.exists():
@@ -256,7 +256,7 @@ class EditFileTool(Tool):
 
     def __init__(self, scratch_dir: Path) -> None:
         self._scratch_dir = scratch_dir
-        self._allowed_dirs: list[str] = []
+        self._project_dir: str | None = None
 
     @property
     def name(self) -> str:
@@ -267,7 +267,7 @@ class EditFileTool(Tool):
         return (
             "Edit a file by replacing an exact string with new content. The old_string must "
             "appear exactly once in the file. A shadow backup is created before editing. "
-            "Accepts relative paths (scratch directory) or absolute paths (granted directories)."
+            "Accepts relative paths (scratch directory) or absolute paths (project directory)."
         )
 
     @property
@@ -304,7 +304,7 @@ class EditFileTool(Tool):
             p = Path(path)
             full_path = p.resolve() if p.is_absolute() else (self._scratch_dir / path).resolve()
 
-            if not is_path_allowed(full_path, self._scratch_dir, self._allowed_dirs):
+            if not is_path_allowed(full_path, self._scratch_dir, self._project_dir):
                 return ToolResult(success=False, error="Path is outside allowed directories")
 
             if not full_path.exists():

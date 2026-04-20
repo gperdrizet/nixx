@@ -113,7 +113,7 @@ src/nixx/
     base.py       — ToolResult, BaseTool ABC
     file_tools.py — ReadFileTool, WriteFileTool, EditFileTool, ListDirTool, DeleteFileTool
     memory_tools.py — SearchTranscriptTool, ViewTranscriptTool
-    permissions.py — Directory permission helpers (is_path_allowed, grant_dir, revoke_dir)
+    permissions.py — Directory permission helpers (is_path_allowed, get_project_dir, set_project_dir)
     planning.py   — ReadPlanTool, WritePlanTool, get_current_plan
     run_python.py — RunPythonTool (sandboxed subprocess, unshare -rn for network isolation)
     shadow.py     — shadow_backup() — auto-snapshot before file modifications
@@ -134,7 +134,7 @@ All settings read from `.env` with `NIXX_` prefix. Key fields:
 | Setting | Default | Notes |
 |---|---|---|
 | `host` / `port` | `127.0.0.1` / `8000` | API server bind |
-| `llm_base_url` | `http://localhost:8080` | Overridden in .env to `https://gpt.perdrizet.org` (nginx on gatekeeper → WireGuard → localhost:8502) |
+| `llm_base_url` | `http://localhost:8080` | Overridden in .env to `https://model.perdrizet.org` (nginx on gatekeeper → WireGuard → localhost:8502) |
 | `llm_model` | `gpt-oss-20b` | |
 | `llm_context_length` | `8192` | Auto-fetched from LLM `/props` at startup (overrides .env value). Fallback if fetch fails. |
 | `max_history_tokens` | `16384` | Max tokens of conversation history per request, independent of context length. Prevents slow prefill on long sessions. |
@@ -179,9 +179,9 @@ GET  /v1/intent                  — get current intent + messages_since_derivat
 POST /v1/intent                  — set intent manually (body: {intent})
 DELETE /v1/intent                — clear intent
 POST /v1/intent/derive           — trigger intent derivation immediately
-GET  /v1/permissions/dirs        — list scratch_dir + granted directories
-POST /v1/permissions/grant       — grant access to a directory (body: {directory})
-POST /v1/permissions/revoke      — revoke directory access (body: {directory})
+GET  /v1/project                 — get scratch_dir + current project directory
+POST /v1/project                 — set project directory (body: {directory})
+DELETE /v1/project               — clear project directory
 ```
 
 ---
@@ -206,9 +206,9 @@ immediately in the background - no user input needed. A `Summary created` system
 inline with the LLM-derived tags and entities.
 
 TUI slash commands: `/help`, `/context`, `/summary`, `/search "q"`, `/transcript <id> [end]`,
-`/clear`, `/recall`, `/interval [n]`, `/intent [text]`, `/intent-bar` (toggle IntentBar),
-`/threshold [0.0-1.0]` (view or set recall similarity threshold), `/grant [dir]` (list or
-grant directory access), `/revoke <dir>` (revoke directory access).
+`/clear`, `/recall`, `/interval [n]`, `/intent [text]`, `/intent-toggle` (toggle intent injection),
+`/intent-bar` (toggle IntentBar), `/threshold [0.0-1.0]` (view or set recall similarity threshold),
+`/project [dir|clear]` (show, set, or clear project directory).
 
 Tool call events: when nixx calls a tool mid-stream, a dim `▸ tool_name` line is appended
 inline inside the streaming assistant message (not a separate system message).
@@ -248,16 +248,16 @@ to the default (not null).
 
 ## Tools (ToolRegistry)
 
-LLM-callable tools, sandboxed to `scratch_dir` (`~/nixx_scratch`) by default. Additional
-directories can be granted via `/grant <dir>` in the TUI or `POST /v1/permissions/grant`.
-Granted directories are persisted in the `state` table (key `allowed_dirs`, JSON array).
+LLM-callable tools, accessible within `scratch_dir` (`~/nixx_scratch`) and an optional
+project directory. The project directory is set via `/project <dir>` in the TUI or
+`POST /v1/project`. It is persisted in the `state` table (key `project_dir`).
 
 | Tool | Description |
 |---|---|
-| `read_file` | Read a file from scratch_dir or a granted directory |
+| `read_file` | Read a file from scratch_dir or project directory |
 | `write_file` | Write a file (auto shadow backup before overwrite) |
 | `edit_file` | Find-and-replace edit (old_string must appear exactly once, auto shadow backup) |
-| `list_dir` | List scratch_dir, a subdirectory, or a granted directory |
+| `list_dir` | List scratch_dir, a subdirectory, or project directory |
 | `delete_file` | Delete a file (auto shadow backup) |
 | `read_plan` | Read the current plan (.plan.md in scratch_dir) |
 | `write_plan` | Write/replace the current plan (injected into system prompt automatically) |
@@ -286,7 +286,7 @@ before execution. The TUI renders a dim inline `calling tool: <name>` message.
 - `pre-commit` hook requires venv activated. Bypass with `git -c core.hooksPath=/dev/null commit`.
 - `llm_context_length` in `.env` is overridden at startup by the `/props` fetch. The running
   value can be verified at `GET /health` (`context_length` field) or from server logs at startup.
-  The `/props` fetch hits `gpt.perdrizet.org` - if WireGuard is down at startup it will fail and
+  The `/props` fetch hits `model.perdrizet.org` - if WireGuard is down at startup it will fail and
   fall back to 8192. The `/health` route retries the fetch, so restarting nixx-server after
   the tunnel is up is enough.
 - `/props` returns `n_ctx` under `default_generation_settings`, not at the top level.
@@ -297,5 +297,5 @@ before execution. The TUI renders a dim inline `calling tool: <name>` message.
 - `wg-quick@wg0` uses a hostname endpoint (`perdrizet.org:51820`). If it starts before DNS is
   available it fails silently and stays down. Fixed by
   `/etc/systemd/system/wg-quick@wg0.service.d/wait-for-network.conf` with
-  `After=network-online.target`. If the tunnel is down, `gpt.perdrizet.org` will be unreachable
+  `After=network-online.target`. If the tunnel is down, `model.perdrizet.org` will be unreachable
   and all LLM calls will 504. Check with `sudo systemctl status wg-quick@wg0`.

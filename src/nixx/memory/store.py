@@ -13,6 +13,7 @@ from nixx.llm import OpenAIClient
 from nixx.memory.db import (
     count_unsummarized_words,
     get_buffer_entries,
+    get_last_session_marker_id,
     get_last_source_end_id,
     get_max_buffer_id,
     save_buffer_entry,
@@ -167,7 +168,10 @@ class MemoryStore:
         entities = result["entities"]
         tags = result["tags"]
 
-        embedding = await self._embedder.embed(self._config.embedding_model, summary_text)
+        try:
+            embedding = await self._embedder.embed(self._config.embedding_model, summary_text)
+        except Exception as exc:
+            raise ValueError(f"Embedding server unavailable: {exc}") from exc
 
         summary_id = await save_summary(
             self._pool,
@@ -253,10 +257,20 @@ class MemoryStore:
     async def recall_episodic_for_prompt(
         self, query: str, top_k: int = 3, threshold: float = 0.4
     ) -> list[dict]:
-        """Return the top episodic summaries above threshold for prompt injection."""
+        """Return the top episodic summaries above threshold for prompt injection.
+
+        Excludes summaries created during the current session to avoid echoing
+        content that is already in the conversation history.
+        """
         embedding = await self._embedder.embed(self._config.embedding_model, query)
         hits = await search_summaries(self._pool, query_embedding=embedding, top_k=top_k)
-        return [h for h in hits if float(h["similarity"]) >= threshold]
+        # Filter by threshold
+        hits = [h for h in hits if float(h["similarity"]) >= threshold]
+        # Exclude summaries from the current session (their content is already in history)
+        marker_id = await get_last_session_marker_id(self._pool)
+        if marker_id is not None:
+            hits = [h for h in hits if h.get("start_buffer_id", 0) < marker_id]
+        return hits
 
     def format_episodic_context(self, summaries: list[dict]) -> str:
         """Format episodic summary hits as a context block for the system prompt.

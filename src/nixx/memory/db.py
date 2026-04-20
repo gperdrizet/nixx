@@ -255,6 +255,15 @@ async def save_session_marker(
     return await save_buffer_entry(pool, role="marker", content="session_clear", origin=origin)
 
 
+async def get_last_session_marker_id(
+    pool: asyncpg.Pool,  # type: ignore[type-arg]
+) -> int | None:
+    """Return the buffer id of the most recent session marker, or None."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT MAX(id) AS marker_id FROM buffer WHERE role = 'marker'")
+        return int(row["marker_id"]) if row and row["marker_id"] is not None else None
+
+
 async def get_current_session_entries(
     pool: asyncpg.Pool,  # type: ignore[type-arg]
     limit: int | None = None,

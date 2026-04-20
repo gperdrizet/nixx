@@ -10,7 +10,6 @@ from nixx.tools.planning import ReadPlanTool, WritePlanTool, get_current_plan
 from nixx.tools.run_python import RunPythonTool
 from nixx.tools.shadow import shadow_backup
 
-
 # ── Shadow backup ─────────────────────────────────────────────────────────────
 
 
@@ -35,23 +34,23 @@ def test_is_path_allowed_scratch(tmp_path: Path) -> None:
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     target = scratch / "file.txt"
-    assert is_path_allowed(target, scratch, []) is True
+    assert is_path_allowed(target, scratch, None) is True
 
 
-def test_is_path_allowed_granted(tmp_path: Path) -> None:
+def test_is_path_allowed_project(tmp_path: Path) -> None:
     scratch = tmp_path / "scratch"
     scratch.mkdir()
-    granted = tmp_path / "other"
-    granted.mkdir()
-    target = granted / "file.txt"
-    assert is_path_allowed(target, scratch, [str(granted)]) is True
+    project = tmp_path / "project"
+    project.mkdir()
+    target = project / "file.txt"
+    assert is_path_allowed(target, scratch, str(project)) is True
 
 
 def test_is_path_allowed_denied(tmp_path: Path) -> None:
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     target = tmp_path / "forbidden" / "file.txt"
-    assert is_path_allowed(target, scratch, []) is False
+    assert is_path_allowed(target, scratch, None) is False
 
 
 # ── Edit file tool ────────────────────────────────────────────────────────────
@@ -80,7 +79,7 @@ async def test_edit_file_rejects_multiple(tmp_path: Path) -> None:
     tool = EditFileTool(scratch)
     result = await tool.execute(path="test.txt", old_string="aaa", new_string="ccc")
     assert not result.success
-    assert "2 times" in result.error
+    assert result.error and "2 times" in result.error
 
 
 @pytest.mark.asyncio
@@ -101,7 +100,7 @@ async def test_plan_read_empty(tmp_path: Path) -> None:
     tool = ReadPlanTool(tmp_path)
     result = await tool.execute()
     assert result.success
-    assert "No plan" in result.result
+    assert result.result and "No plan" in result.result
 
 
 @pytest.mark.asyncio
@@ -114,7 +113,7 @@ async def test_plan_write_and_read(tmp_path: Path) -> None:
 
     result = await read.execute()
     assert result.success
-    assert "Step 1" in result.result
+    assert result.result and "Step 1" in result.result
 
 
 def test_get_current_plan_none(tmp_path: Path) -> None:
@@ -136,7 +135,7 @@ async def test_run_python_success(tmp_path: Path) -> None:
     tool = RunPythonTool(scratch)
     result = await tool.execute(code="print(2 + 2)")
     assert result.success
-    assert "4" in result.result
+    assert result.result and "4" in result.result
 
 
 @pytest.mark.asyncio
@@ -146,7 +145,7 @@ async def test_run_python_error(tmp_path: Path) -> None:
     tool = RunPythonTool(scratch)
     result = await tool.execute(code="raise ValueError('boom')")
     assert not result.success
-    assert "boom" in result.error
+    assert result.error and "boom" in result.error
 
 
 @pytest.mark.asyncio
@@ -156,7 +155,7 @@ async def test_run_python_timeout(tmp_path: Path) -> None:
     tool = RunPythonTool(scratch)
     result = await tool.execute(code="import time; time.sleep(10)", timeout=1)
     assert not result.success
-    assert "timed out" in result.error
+    assert result.error and "timed out" in result.error
 
 
 # ── File tools with allowed directories ───────────────────────────────────────
@@ -171,10 +170,10 @@ async def test_read_file_absolute_granted(tmp_path: Path) -> None:
     (granted / "data.txt").write_text("hello from granted dir")
 
     tool = ReadFileTool(scratch)
-    tool._allowed_dirs = [str(granted)]
+    tool._project_dir = str(granted)
     result = await tool.execute(path=str(granted / "data.txt"))
     assert result.success
-    assert "hello from granted dir" in result.result
+    assert result.result and "hello from granted dir" in result.result
 
 
 @pytest.mark.asyncio
@@ -188,7 +187,7 @@ async def test_read_file_absolute_denied(tmp_path: Path) -> None:
     tool = ReadFileTool(scratch)
     result = await tool.execute(path=str(denied / "secret.txt"))
     assert not result.success
-    assert "outside allowed" in result.error
+    assert result.error and "outside allowed" in result.error
 
 
 @pytest.mark.asyncio

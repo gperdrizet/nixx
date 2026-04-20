@@ -83,7 +83,7 @@ Follow the build journey in [docs/build-log/](docs/build-log/).
 
 ```bash
 # 1. Start llama.cpp server
-# The production instance runs at gpt.perdrizet.org with API key auth.
+# The production instance runs at model.perdrizet.org with API key auth.
 # For local development, see https://github.com/ggerganov/llama.cpp
 
 # 2. Start PostgreSQL + pgvector container

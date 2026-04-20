@@ -35,7 +35,7 @@ from nixx.memory.db import (
 from nixx.memory.store import MemoryStore
 from nixx.prompts import INTENT_DERIVATION_PROMPT, SYSTEM_PROMPT
 from nixx.tools import ToolRegistry
-from nixx.tools.permissions import get_allowed_dirs, grant_dir, revoke_dir
+from nixx.tools.permissions import get_project_dir, set_project_dir
 from nixx.tools.planning import get_current_plan
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ class SetIntentRequest(BaseModel):
     intent: str
 
 
-class DirectoryRequest(BaseModel):
+class ProjectDirRequest(BaseModel):
     directory: str
 
 
@@ -141,9 +141,10 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         app.state.tools = ToolRegistry(
             config.scratch_dir, memory=app.state.memory, searxng_url=config.searxng_url
         )
-        # Load allowed directories from persistent state
-        allowed = await get_allowed_dirs(pool)
-        app.state.tools.set_allowed_dirs(allowed)
+        # Load project directory from persistent state
+        project_dir = await get_project_dir(pool)
+        app.state.tools.set_project_dir(project_dir)
+        app.state.project_dir = project_dir
 
         app.state.intent = await get_state(pool, "intent") or DEFAULT_INTENT
         app.state.messages_since_intent = 0  # Counter for automatic derivation
@@ -188,21 +189,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         # Retry /props fetch if it failed at startup (e.g. LLM server wasn't ready yet).
-        if not getattr(app.state, "n_ctx_fetched", True):
-            try:
-                _headers = (
-                    {"Authorization": f"Bearer {config.llm_api_key}"} if config.llm_api_key else {}
-                )
-                async with httpx.AsyncClient(timeout=5.0) as _client:
-                    _r = await _client.get(f"{config.llm_base_url}/props", headers=_headers)
-                    _r.raise_for_status()
-                    _n = _r.json().get("default_generation_settings", {}).get("n_ctx")
-                    if _n and isinstance(_n, int) and _n > 0:
-                        config.llm_context_length = _n
-                        app.state.n_ctx_fetched = True
-                        logger.info("nixx: context length fetched on demand: %d", _n)
-            except Exception:
-                pass
+        await _ensure_n_ctx()
         return {
             "status": "ok",
             "model": config.llm_model,
@@ -217,10 +204,30 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         )
         return ctx
 
+    async def _ensure_n_ctx() -> None:
+        """Retry fetching n_ctx from the LLM server if the startup attempt failed."""
+        if getattr(app.state, "n_ctx_fetched", True):
+            return
+        try:
+            _headers = (
+                {"Authorization": f"Bearer {config.llm_api_key}"} if config.llm_api_key else {}
+            )
+            async with httpx.AsyncClient(timeout=5.0) as _client:
+                _r = await _client.get(f"{config.llm_base_url}/props", headers=_headers)
+                _r.raise_for_status()
+                _n = _r.json().get("default_generation_settings", {}).get("n_ctx")
+                if _n and isinstance(_n, int) and _n > 0:
+                    config.llm_context_length = _n
+                    app.state.n_ctx_fetched = True
+                    logger.info("nixx: context length fetched on demand: %d", _n)
+        except Exception:
+            pass
+
     @app.post("/v1/chat/completions", response_model=None)
     async def chat_completions(
         request: ChatCompletionRequest,
     ) -> StreamingResponse | dict[str, Any]:
+        await _ensure_n_ctx()
         model = request.model or config.llm_model
         temperature = (
             request.temperature if request.temperature is not None else config.llm_temperature
@@ -254,10 +261,18 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         if plan_content:
             plan_block = f"\n\n## Current plan\n\n{plan_content}"
 
+        # Inject file access info so the LLM knows what directories are available
+        file_access_block = f"\n\n## File access\n\nScratch directory: {config.scratch_dir}"
+        if app.state.project_dir:
+            file_access_block += f"\nProject directory: {app.state.project_dir}"
+        else:
+            file_access_block += "\nNo project directory set."
+
         system_content = (
             SYSTEM_PROMPT
             + intent_block
             + plan_block
+            + file_access_block
             + (f"\n\n{context_block}" if context_block else "")
         )
         messages = [{"role": "system", "content": system_content}] + messages
@@ -569,35 +584,36 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             "messages_since_derivation": app.state.messages_since_intent,
         }
 
-    # ── Directory permission endpoints ────────────────────────────────────
+    # ── Project directory endpoints ──────────────────────────────────────
 
-    @app.get("/v1/permissions/dirs")
-    async def list_allowed_dirs() -> dict:
-        """List directories nixx is allowed to access beyond scratch_dir."""
-        pool = app.state.memory._pool
-        dirs = await get_allowed_dirs(pool)
-        return {"scratch_dir": str(config.scratch_dir), "allowed_dirs": dirs}
+    @app.get("/v1/project")
+    async def get_project() -> dict:
+        """Get the current project directory."""
+        return {
+            "scratch_dir": str(config.scratch_dir),
+            "project_dir": app.state.project_dir,
+        }
 
-    @app.post("/v1/permissions/grant")
-    async def grant_directory(request: DirectoryRequest) -> dict:
-        """Grant nixx access to a directory."""
+    @app.post("/v1/project")
+    async def set_project(request: ProjectDirRequest) -> dict:
+        """Set the project directory."""
         pool = app.state.memory._pool
         path = Path(request.directory).expanduser().resolve()
         if not path.is_dir():
             raise HTTPException(status_code=400, detail=f"Not a directory: {path}")
-        dirs = await grant_dir(pool, str(path))
-        # Update the tool registry's allowed dirs
-        app.state.tools.set_allowed_dirs(dirs)
-        return {"granted": str(path), "allowed_dirs": dirs}
+        project_dir = await set_project_dir(pool, str(path))
+        app.state.project_dir = project_dir
+        app.state.tools.set_project_dir(project_dir)
+        return {"project_dir": project_dir}
 
-    @app.post("/v1/permissions/revoke")
-    async def revoke_directory(request: DirectoryRequest) -> dict:
-        """Revoke nixx's access to a directory."""
+    @app.delete("/v1/project")
+    async def clear_project() -> dict:
+        """Clear the project directory."""
         pool = app.state.memory._pool
-        path = Path(request.directory).expanduser().resolve()
-        dirs = await revoke_dir(pool, str(path))
-        app.state.tools.set_allowed_dirs(dirs)
-        return {"revoked": str(path), "allowed_dirs": dirs}
+        await set_project_dir(pool, None)
+        app.state.project_dir = None
+        app.state.tools.set_project_dir(None)
+        return {"project_dir": None}
 
     return app
 

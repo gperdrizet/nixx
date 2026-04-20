@@ -86,7 +86,7 @@ Four tables across two memory systems:
 
 ## llama.cpp
 
-Default LLM backend. The production instance runs at `gpt.perdrizet.org` with API key
+Default LLM backend. The production instance runs at `model.perdrizet.org` with API key
 authentication via Bearer token. For local development, llama.cpp can also run locally
 on port 8080. Exposes an OpenAI-compatible API for chat completions
 (`/v1/chat/completions`) and embeddings (`/v1/embeddings`). The default model is

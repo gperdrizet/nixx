@@ -39,17 +39,16 @@ class ToolRegistry:
         self._scratch_dir = scratch_dir
         self._memory = memory
         self._searxng_url = searxng_url
-        self._allowed_dirs: list[str] = []
+        self._project_dir: str | None = None
         self._tools: dict[str, Tool] = {}
         self._register_default_tools()
 
-    def set_allowed_dirs(self, dirs: list[str]) -> None:
-        """Update the allowed directories list. Propagates to all file tools."""
-        self._allowed_dirs = dirs
-        # Update existing file tools
+    def set_project_dir(self, project_dir: str | None) -> None:
+        """Update the project directory. Propagates to all file tools."""
+        self._project_dir = project_dir
         for tool in self._tools.values():
-            if hasattr(tool, "_allowed_dirs"):
-                tool._allowed_dirs = dirs  # type: ignore[attr-defined]
+            if hasattr(tool, "_project_dir"):
+                tool._project_dir = project_dir  # type: ignore[attr-defined]
 
     def _register_default_tools(self) -> None:
         """Register the default file operation tools."""

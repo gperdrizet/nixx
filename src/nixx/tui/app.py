@@ -10,7 +10,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.message import Message as TextualMessage
-from textual.widgets import Footer, Header, Static, Switch, TextArea
+from textual.widgets import Footer, Header, Static, TextArea
 
 from nixx.config import NixxConfig
 
@@ -59,12 +59,13 @@ class Message(Static):
 
     def append(self, text: str) -> None:
         self._content += text
-        self.update(escape_markup(self._content))
+        self.update(self._content)
 
-    def render_markdown(self) -> None:
+    def render_markdown(self, content: str | None = None) -> None:
         """Re-render content as markdown (for assistant messages)."""
-        if self._content:
-            self.update(RichMarkdown(self._content))
+        text = content if content is not None else self._content
+        if text:
+            self.update(RichMarkdown(text))
 
     def action_edit(self) -> None:
         if self._role == "user" and self._history_index is not None:
@@ -148,11 +149,11 @@ class SummaryBar(Static):
         filled = int(pct * 20)
         bar = "\u2588" * filled + "\u2591" * (20 - filled)
         if pct < 0.5:
-            color = "dim"
-        elif pct < 0.9:
-            color = "cyan"
+            color = "green"
+        elif pct < 0.8:
+            color = "yellow"
         else:
-            color = "magenta"
+            color = "red"
         self.update(
             f"[dim]summary[/dim] [{color}]{bar}[/] {pct:.0%}"
             f" [dim]({current_words:,} / {interval_words:,} words)[/dim]"
@@ -243,12 +244,9 @@ class NixxApp(App[None]):
         width: auto;
         padding: 0 1 0 0;
     }
-    #recall-switch, #intent-switch {
+    #recall-label, #intent-label {
         width: auto;
-        height: auto;
-        min-height: 1;
-        padding: 0;
-        margin-right: 2;
+        padding: 0 2 0 0;
     }
     """
 
@@ -256,7 +254,7 @@ class NixxApp(App[None]):
         ("ctrl+c", "quit", "Quit"),
         ("ctrl+l", "clear", "Clear"),
         ("ctrl+r", "toggle_recall", "Recall"),
-        ("ctrl+i", "toggle_intent", "Intent"),
+        ("ctrl+t", "toggle_intent", "Intent"),
         Binding("escape", "cancel_edit", "Cancel", show=False),
     ]
 
@@ -268,6 +266,8 @@ class NixxApp(App[None]):
         self._editing_msg: Message | None = None
         self._summary_in_progress: bool = False
         self._intent_bar_visible: bool = True
+        self._recall_on: bool = True
+        self._intent_on: bool = True
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -279,10 +279,8 @@ class NixxApp(App[None]):
                 yield SummaryBar(id="summary-bar")
             yield IntentBar(id="intent-bar")
             with Horizontal(id="toggles-row"):
-                yield Static("recall", id="recall-label")
-                yield Switch(value=True, id="recall-switch")
-                yield Static("intent", id="intent-label")
-                yield Switch(value=True, id="intent-switch")
+                yield Static("[green]recall ●[/green]", id="recall-label")
+                yield Static("[green]intent ●[/green]", id="intent-label")
         with Vertical(id="input-row"):
             yield ChatInput(id="input")
         yield Footer()
@@ -312,7 +310,8 @@ class NixxApp(App[None]):
                 resp = await client.get(f"{self._base_url}/v1/buffer/session")
                 resp.raise_for_status()
                 data = resp.json()
-        except Exception:
+        except Exception as exc:
+            self._add_message("system", f"Could not connect to nixx server: {exc}")
             self._show_help()
             return
         entries = data.get("entries", [])
@@ -399,22 +398,20 @@ class NixxApp(App[None]):
                 self._toggle_intent_bar()
             elif text.startswith("/intent"):
                 arg = text[7:].strip()
-                if arg:
+                if arg.lower() == "clear":
+                    self.run_worker(self._clear_intent(), exclusive=False, thread=False)
+                elif arg:
                     self.run_worker(self._set_intent(arg), exclusive=False, thread=False)
                 else:
                     self.run_worker(self._show_intent(), exclusive=False, thread=False)
-            elif text.startswith("/grant"):
-                arg = text[6:].strip()
-                if arg:
-                    self.run_worker(self._grant_dir(arg), exclusive=False, thread=False)
+            elif text.startswith("/project"):
+                arg = text[8:].strip()
+                if arg.lower() == "clear":
+                    self.run_worker(self._clear_project(), exclusive=False, thread=False)
+                elif arg:
+                    self.run_worker(self._set_project(arg), exclusive=False, thread=False)
                 else:
-                    self.run_worker(self._list_dirs(), exclusive=False, thread=False)
-            elif text.startswith("/revoke"):
-                arg = text[7:].strip()
-                if arg:
-                    self.run_worker(self._revoke_dir(arg), exclusive=False, thread=False)
-                else:
-                    self._add_message("system", "Usage: /revoke <directory>")
+                    self.run_worker(self._show_project(), exclusive=False, thread=False)
             else:
                 self._add_message("system", f"Unknown command: {text}")
             chat_input.focus()
@@ -512,15 +509,14 @@ class NixxApp(App[None]):
             "  /intent-toggle          Toggle intent injection on/off\n"
             "  /interval \\[words]       Show or set summary word threshold\n"
             "  /threshold \\[0.0-1.0]    Show or set recall similarity threshold\n"
-            "  /intent \\[text]          Show or set current intent\n"
+            "  /intent \\[text|clear]    Show, set, or clear current intent\n"
             "  /intent-bar             Toggle intent bar visibility\n"
-            "  /grant \\[dir]            List or grant directory access\n"
-            "  /revoke <dir>           Revoke directory access\n"
+            "  /project \\[dir|clear]    Show, set, or clear project directory\n"
             "\n"
             "[b]Keybindings[/b]\n"
             "  Ctrl+L                  Clear conversation\n"
             "  Ctrl+R                  Toggle episodic recall\n"
-            "  Ctrl+I                  Toggle intent injection\n"
+            "  Ctrl+T                  Toggle intent injection\n"
             "  Ctrl+P                  Command palette\n"
             "  Shift+Enter             New line in input\n"
             "  Tab / Shift+Tab         Focus messages\n"
@@ -652,6 +648,19 @@ class NixxApp(App[None]):
         self._add_message("system", f"Intent set: [b]{data['intent']}[/b]")
         self._refresh_intent_bar(data.get("intent"))
 
+    async def _clear_intent(self) -> None:
+        """Clear the current intent, resetting to default."""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.delete(f"{self._base_url}/v1/intent")
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            self._add_message("system", f"[red]Error: {exc}[/red]")
+            return
+        self._add_message("system", "Intent cleared.")
+        self._refresh_intent_bar(data.get("intent"))
+
     async def _show_intent(self) -> None:
         """Show the current intent/motivation."""
         try:
@@ -674,12 +683,12 @@ class NixxApp(App[None]):
             self._add_message("system", "[dim]No intent set[/dim]")
         self._refresh_intent_bar(intent)
 
-    async def _grant_dir(self, directory: str) -> None:
-        """Grant nixx access to a directory."""
+    async def _set_project(self, directory: str) -> None:
+        """Set the project directory."""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(
-                    f"{self._base_url}/v1/permissions/grant",
+                    f"{self._base_url}/v1/project",
                     json={"directory": directory},
                 )
                 resp.raise_for_status()
@@ -691,48 +700,36 @@ class NixxApp(App[None]):
         except Exception as exc:
             self._add_message("system", f"[red]Error: {exc}[/red]")
             return
-        self._add_message(
-            "system",
-            f"Granted: [b]{data['granted']}[/b]\n"
-            f"[dim]Allowed dirs: {', '.join(data['allowed_dirs']) or 'none'}[/dim]",
-        )
+        self._add_message("system", f"Project directory: [b]{data['project_dir']}[/b]")
 
-    async def _revoke_dir(self, directory: str) -> None:
-        """Revoke nixx's access to a directory."""
+    async def _clear_project(self) -> None:
+        """Clear the project directory."""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(
-                    f"{self._base_url}/v1/permissions/revoke",
-                    json={"directory": directory},
-                )
+                resp = await client.delete(f"{self._base_url}/v1/project")
                 resp.raise_for_status()
-                data = resp.json()
         except Exception as exc:
             self._add_message("system", f"[red]Error: {exc}[/red]")
             return
-        self._add_message(
-            "system",
-            f"Revoked: [b]{data['revoked']}[/b]\n"
-            f"[dim]Allowed dirs: {', '.join(data['allowed_dirs']) or 'none'}[/dim]",
-        )
+        self._add_message("system", "Project directory cleared.")
 
-    async def _list_dirs(self) -> None:
-        """List allowed directories."""
+    async def _show_project(self) -> None:
+        """Show current project directory."""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(f"{self._base_url}/v1/permissions/dirs")
+                resp = await client.get(f"{self._base_url}/v1/project")
                 resp.raise_for_status()
                 data = resp.json()
         except Exception as exc:
             self._add_message("system", f"[red]Error: {exc}[/red]")
             return
         scratch = data.get("scratch_dir", "?")
-        dirs = data.get("allowed_dirs", [])
+        project = data.get("project_dir")
         text = f"[b]Scratch dir:[/b] {scratch}"
-        if dirs:
-            text += "\n[b]Granted dirs:[/b]\n" + "\n".join(f"  {d}" for d in dirs)
+        if project:
+            text += f"\n[b]Project dir:[/b] {project}"
         else:
-            text += "\n[dim]No additional directories granted[/dim]"
+            text += "\n[dim]No project directory set[/dim]"
         self._add_message("system", text)
 
     async def _update_context_bar(self) -> None:
@@ -832,13 +829,10 @@ class NixxApp(App[None]):
         # Sync switch states with server truth
         recall_on = data.get("recall_enabled", True)
         intent_on = data.get("intent_enabled", True)
-        recall_switch = self.query_one("#recall-switch", Switch)
-        if recall_switch.value != recall_on:
-            recall_switch.value = recall_on
-        intent_switch = self.query_one("#intent-switch", Switch)
-        if intent_switch.value != intent_on:
-            intent_switch.value = intent_on
-        self._update_toggle_labels(recall_on, intent_on)
+        if self._recall_on != recall_on or self._intent_on != intent_on:
+            self._recall_on = recall_on
+            self._intent_on = intent_on
+            self._update_toggle_labels(recall_on, intent_on)
 
     async def _check_summary_due(self) -> None:
         """Check if a summary is due and trigger one automatically if so."""
@@ -952,6 +946,7 @@ class NixxApp(App[None]):
             "stream": True,
         }
         accumulated = ""
+        tool_calls: list[str] = []
         try:
             # Long read timeout: nixx-server won't send the first chunk until after LLM prefill,
             # which can take several minutes for large prompts. Short connect/write are fine.
@@ -984,6 +979,7 @@ class NixxApp(App[None]):
                             break
                         if "tool_call" in chunk:
                             tool_name = chunk["tool_call"].get("name", "?")
+                            tool_calls.append(tool_name)
                             msg.append(f"\n[dim]▸ {escape_markup(tool_name)}[/dim]\n")
                             self.query_one("#messages", ScrollableContainer).scroll_end(
                                 animate=False
@@ -1008,7 +1004,11 @@ class NixxApp(App[None]):
         if accumulated:
             self._history.append({"role": "assistant", "content": accumulated})
             msg._history_index = len(self._history) - 1
-            msg.render_markdown()
+            render_content = accumulated
+            if tool_calls:
+                prefix = "  \n".join(f"*▸ {name}*" for name in tool_calls) + "  \n\n"
+                render_content = prefix + accumulated
+            msg.render_markdown(render_content)
             # Check if episodic summary is due
             self.run_worker(self._check_summary_due(), exclusive=False, thread=False)
             self.run_worker(self._update_context_bar(), exclusive=False, thread=False)
@@ -1027,28 +1027,21 @@ class NixxApp(App[None]):
 
     def action_toggle_recall(self) -> None:
         """Toggle episodic recall on/off via the server."""
-        switch = self.query_one("#recall-switch", Switch)
-        switch.toggle()
+        self._recall_on = not self._recall_on
+        self._update_toggle_labels(self._recall_on, self._intent_on)
+        self.run_worker(self._set_recall(self._recall_on), exclusive=False, thread=False)
 
     def action_toggle_intent(self) -> None:
         """Toggle intent injection on/off via the server."""
-        switch = self.query_one("#intent-switch", Switch)
-        switch.toggle()
+        self._intent_on = not self._intent_on
+        self._update_toggle_labels(self._recall_on, self._intent_on)
+        self.run_worker(self._set_intent_enabled(self._intent_on), exclusive=False, thread=False)
 
     def _update_toggle_labels(self, recall_on: bool, intent_on: bool) -> None:
-        recall_markup = "[green]recall[/green]" if recall_on else "[red]recall[/red]"
-        intent_markup = "[green]intent[/green]" if intent_on else "[red]intent[/red]"
+        recall_markup = "[green]recall ●[/green]" if recall_on else "[dim]recall ○[/dim]"
+        intent_markup = "[green]intent ●[/green]" if intent_on else "[dim]intent ○[/dim]"
         self.query_one("#recall-label", Static).update(recall_markup)
         self.query_one("#intent-label", Static).update(intent_markup)
-
-    def on_switch_changed(self, event: Switch.Changed) -> None:
-        recall_on = self.query_one("#recall-switch", Switch).value
-        intent_on = self.query_one("#intent-switch", Switch).value
-        self._update_toggle_labels(recall_on, intent_on)
-        if event.switch.id == "recall-switch":
-            self.run_worker(self._set_recall(event.value), exclusive=False, thread=False)
-        elif event.switch.id == "intent-switch":
-            self.run_worker(self._set_intent_enabled(event.value), exclusive=False, thread=False)
 
     async def _set_recall(self, enabled: bool) -> None:
         try:

@@ -1,65 +1,39 @@
-"""Directory permissions - manage which directories nixx can access beyond scratch_dir."""
+"""Directory permissions - scratch_dir + optional project_dir."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-_STATE_KEY = "allowed_dirs"
+_STATE_KEY = "project_dir"
 
 
-def _parse_dirs(raw: str | None) -> list[str]:
-    """Parse the JSON list stored in the state table."""
-    if not raw:
-        return []
-    try:
-        dirs = json.loads(raw)
-        return dirs if isinstance(dirs, list) else []
-    except (json.JSONDecodeError, TypeError):
-        return []
-
-
-def _serialize_dirs(dirs: list[str]) -> str:
-    return json.dumps(sorted(set(dirs)))
-
-
-def is_path_allowed(path: Path, scratch_dir: Path, allowed_dirs: list[str]) -> bool:
-    """Check if a resolved path is within scratch_dir or any allowed directory."""
+def is_path_allowed(path: Path, scratch_dir: Path, project_dir: str | None) -> bool:
+    """Check if a resolved path is within scratch_dir or project_dir."""
     resolved = str(path.resolve())
     if resolved.startswith(str(scratch_dir.resolve())):
         return True
-    for d in allowed_dirs:
-        if resolved.startswith(str(Path(d).resolve())):
+    if project_dir:
+        if resolved.startswith(str(Path(project_dir).resolve())):
             return True
     return False
 
 
-async def get_allowed_dirs(pool: object) -> list[str]:
-    """Load allowed directories from the state table."""
+async def get_project_dir(pool: object) -> str | None:
+    """Load the project directory from the state table."""
     from nixx.memory.db import get_state
 
     raw = await get_state(pool, _STATE_KEY)  # type: ignore[arg-type]
-    return _parse_dirs(raw)
+    return raw if raw else None
 
 
-async def grant_dir(pool: object, directory: str) -> list[str]:
-    """Add a directory to the allow-list. Returns updated list."""
-    from nixx.memory.db import get_state, set_state
+async def set_project_dir(pool: object, directory: str | None) -> str | None:
+    """Set or clear the project directory. Returns the resolved path or None."""
+    from nixx.memory.db import set_state
 
-    dirs = _parse_dirs(await get_state(pool, _STATE_KEY))  # type: ignore[arg-type]
-    resolved = str(Path(directory).resolve())
-    if resolved not in dirs:
-        dirs.append(resolved)
-    await set_state(pool, _STATE_KEY, _serialize_dirs(dirs))  # type: ignore[arg-type]
-    return sorted(set(dirs))
-
-
-async def revoke_dir(pool: object, directory: str) -> list[str]:
-    """Remove a directory from the allow-list. Returns updated list."""
-    from nixx.memory.db import get_state, set_state
-
-    dirs = _parse_dirs(await get_state(pool, _STATE_KEY))  # type: ignore[arg-type]
-    resolved = str(Path(directory).resolve())
-    dirs = [d for d in dirs if d != resolved]
-    await set_state(pool, _STATE_KEY, _serialize_dirs(dirs))  # type: ignore[arg-type]
-    return sorted(set(dirs))
+    if directory:
+        resolved = str(Path(directory).resolve())
+        await set_state(pool, _STATE_KEY, resolved)  # type: ignore[arg-type]
+        return resolved
+    else:
+        await set_state(pool, _STATE_KEY, "")  # type: ignore[arg-type]
+        return None

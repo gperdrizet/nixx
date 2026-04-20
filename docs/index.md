@@ -24,8 +24,12 @@ The goal is to eliminate context fragmentation - no more isolated conversations 
 
 ## Documentation
 
+**Getting started:**
+- [Quickstart](quickstart.md) - start nixx, open the TUI, slash commands, memory and file tools
+
 **Technical guides:**
 - [Architecture](architecture.md) - system design, data flow, two-tier memory model
+- [Infrastructure](infrastructure.md) - hardware, CUDA setup, llama.cpp build, systemd services
 - [Tech stack](stack.md) - every library and tool with documentation links
 - [Knowledge graph](knowledge-graph.md) - planned knowledge graph architecture and roadmap
 - [pgweb guide](pgweb-guide.md) - web interface for database management

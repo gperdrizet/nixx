@@ -85,6 +85,8 @@ async def app_client(config: NixxConfig, tmp_path: Path) -> AsyncGenerator[httpx
     app = create_app(config)
     app.state.memory = _mock_memory_store()
     app.state.recall_enabled = True
+    app.state.intent_enabled = True
+    app.state.project_dir = None
     app.state.tools = ToolRegistry(tmp_path / "scratch", memory=app.state.memory)
     app.state.intent = None
     app.state.messages_since_intent = 0
@@ -108,6 +110,8 @@ async def mocked_app_client(
         app = create_app(config)
         app.state.memory = _mock_memory_store()
         app.state.recall_enabled = True
+        app.state.intent_enabled = True
+        app.state.project_dir = None
         app.state.tools = ToolRegistry(tmp_path / "scratch", memory=app.state.memory)
         app.state.intent = None
         app.state.messages_since_intent = 0

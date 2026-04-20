@@ -79,6 +79,7 @@ async def test_chat_completions_model_override(config: NixxConfig, tmp_path: Pat
         app.state.tools = ToolRegistry(tmp_path / "scratch")
         app.state.intent = None
         app.state.messages_since_intent = 0
+        app.state.project_dir = None  # Patch for new permissions model
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -100,6 +101,7 @@ async def test_chat_completions_llm_error(config: NixxConfig, tmp_path: Path) ->
         app.state.tools = ToolRegistry(tmp_path / "scratch")
         app.state.intent = None
         app.state.messages_since_intent = 0
+        app.state.project_dir = None  # Patch for new permissions model
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -126,6 +128,7 @@ async def test_chat_completions_streaming(config: NixxConfig, tmp_path: Path) ->
         app.state.tools = ToolRegistry(tmp_path / "scratch")
         app.state.intent = None
         app.state.messages_since_intent = 0
+        app.state.project_dir = None  # Patch for new permissions model
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -195,6 +198,7 @@ async def test_recall_toggle_disables_context_injection(config: NixxConfig, tmp_
         app.state.tools = ToolRegistry(tmp_path / "scratch")
         app.state.intent = None
         app.state.messages_since_intent = 0
+        app.state.project_dir = None  # Patch for new permissions model
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
