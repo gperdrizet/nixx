@@ -86,10 +86,9 @@ Four tables across two memory systems:
 
 ## llama.cpp
 
-Default LLM backend. The production instance runs at `model.perdrizet.org` with API key
-authentication via Bearer token. For local development, llama.cpp can also run locally
-on port 8080. Exposes an OpenAI-compatible API for chat completions
-(`/v1/chat/completions`) and embeddings (`/v1/embeddings`). The default model is
+LLM backend. An OpenAI-compatible server for chat completions and embeddings. Currently
+configured to use `promptlyapi.com/v1` (remote). The local instance runs at port 8502
+and can be switched in by updating `NIXX_LLM_BASE_URL` in `.env`. The default model is
 `gpt-oss-20b`.
 
 - [llama.cpp GitHub](https://github.com/ggerganov/llama.cpp)

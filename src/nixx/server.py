@@ -1,5 +1,6 @@
 """Nixx API server — OpenAI-compatible endpoint for local LLM inference."""
 
+import asyncio
 import json
 import logging
 import time
@@ -13,7 +14,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from httpx import HTTPError as HttpError
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from nixx.config import NixxConfig
 from nixx.ingest.pipeline import IngestPipeline
@@ -21,6 +22,7 @@ from nixx.llm import OpenAIClient
 from nixx.memory.db import (
     count_unsummarized_words,
     create_pool,
+    delete_buffer_tail,
     get_buffer_entries,
     get_current_session_entries,
     get_state,
@@ -83,12 +85,84 @@ def _truncate_messages(
     return [messages[0]] + kept
 
 
+def _strip_trailing_empty_assistant(messages: list[dict[str, Any]]) -> None:
+    """Drop invalid assistant-prefill tails for llama.cpp reasoning mode.
+
+    Some backends reject requests that end with an assistant message containing
+    empty content and no tool_calls.
+    """
+    while messages:
+        last = messages[-1]
+        if last.get("role") != "assistant":
+            return
+        has_tool_calls = bool(last.get("tool_calls"))
+        content = str(last.get("content") or "").strip()
+        if has_tool_calls or content:
+            return
+        messages.pop()
+
+
+# ── Context assembly ─────────────────────────────────────────────────────────
+
+
+async def _assemble_messages(
+    raw_messages: list[dict[str, Any]],
+    app: FastAPI,
+    config: NixxConfig,
+    memory: MemoryStore,
+) -> tuple[list[dict[str, Any]], list[dict]]:
+    """Build the fully-assembled, truncated message list for an LLM call.
+
+    Returns (messages, recalled) where recalled is the raw episodic hits list,
+    needed by callers that want to populate debug/context state.
+    """
+    last_user = next((m["content"] for m in reversed(raw_messages) if m["role"] == "user"), "")
+    recalled: list[dict] = []
+    context_block = ""
+    if last_user and getattr(app.state, "recall_enabled", True):
+        try:
+            recalled = await memory.recall_episodic_for_prompt(
+                last_user, top_k=3, threshold=config.recall_threshold
+            )
+            context_block = memory.format_episodic_context(recalled)
+        except Exception as exc:
+            logger.warning("Episodic recall failed (continuing without context): %s", exc)
+
+    intent_block = ""
+    if getattr(app.state, "intent", None) and getattr(app.state, "intent_enabled", True):
+        intent_block = f"\n\n## Current intent\n\n{app.state.intent}"
+
+    plan_block = ""
+    plan_content = get_current_plan(config.scratch_dir)
+    if plan_content:
+        plan_block = f"\n\n## Current plan\n\n{plan_content}"
+
+    file_access_block = f"\n\n## File access\n\nScratch directory: {config.scratch_dir}"
+    if getattr(app.state, "project_dir", None):
+        file_access_block += f"\nProject directory: {app.state.project_dir}"
+    else:
+        file_access_block += "\nNo project directory set."
+
+    system_content = (
+        SYSTEM_PROMPT
+        + intent_block
+        + plan_block
+        + file_access_block
+        + (f"\n\n{context_block}" if context_block else "")
+    )
+    messages = [{"role": "system", "content": system_content}] + raw_messages
+    messages = _truncate_messages(messages, config.llm_context_length, config.max_history_tokens)
+    return messages, recalled
+
+
 # ── OpenAI-compatible request models ──────────────────────────────────────────
 
 
 class ChatMessage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     role: str
-    content: str
+    content: str | None = None
 
 
 class ChatCompletionRequest(BaseModel):
@@ -227,59 +301,27 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
     async def chat_completions(
         request: ChatCompletionRequest,
     ) -> StreamingResponse | dict[str, Any]:
-        await _ensure_n_ctx()
         model = request.model or config.llm_model
         temperature = (
             request.temperature if request.temperature is not None else config.llm_temperature
         )
-        messages = [{"role": m.role, "content": m.content} for m in request.messages]
+        raw_messages: list[dict[str, Any]] = []
+        for m in request.messages:
+            msg = m.model_dump(exclude_none=True)
+            # Keep compatibility with backends expecting a content field.
+            if "content" not in msg:
+                msg["content"] = ""
+            raw_messages.append(msg)
         completion_id = f"chatcmpl-{uuid.uuid4().hex}"
         created = int(time.time())
 
-        # Build system message: base identity prompt + intent + episodic memory context
         memory: MemoryStore = app.state.memory
-        last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
-        context_block = ""
-        recalled: list[dict] = []
-        if last_user and app.state.recall_enabled:
-            try:
-                recalled = await memory.recall_episodic_for_prompt(
-                    last_user, top_k=3, threshold=config.recall_threshold
-                )
-                context_block = memory.format_episodic_context(recalled)
-            except Exception as exc:
-                logger.warning("Episodic recall failed (continuing without context): %s", exc)
-
-        # Build intent block if set
-        intent_block = ""
-        if app.state.intent and app.state.intent_enabled:
-            intent_block = f"\n\n## Current intent\n\n{app.state.intent}"
-
-        # Inject current plan if one exists
-        plan_block = ""
-        plan_content = get_current_plan(config.scratch_dir)
-        if plan_content:
-            plan_block = f"\n\n## Current plan\n\n{plan_content}"
-
-        # Inject file access info so the LLM knows what directories are available
-        file_access_block = f"\n\n## File access\n\nScratch directory: {config.scratch_dir}"
-        if app.state.project_dir:
-            file_access_block += f"\nProject directory: {app.state.project_dir}"
-        else:
-            file_access_block += "\nNo project directory set."
-
-        system_content = (
-            SYSTEM_PROMPT
-            + intent_block
-            + plan_block
-            + file_access_block
-            + (f"\n\n{context_block}" if context_block else "")
+        messages, recalled = await _assemble_messages(raw_messages, app, config, memory)
+        last_user = next(
+            ((m.get("content") or "") for m in reversed(raw_messages) if m.get("role") == "user"),
+            "",
         )
-        messages = [{"role": "system", "content": system_content}] + messages
-        # Truncate to fit within the LLM context window and history cap.
-        messages = _truncate_messages(
-            messages, config.llm_context_length, config.max_history_tokens
-        )
+        context_block = memory.format_episodic_context(recalled) if recalled else ""
         prompt_token_estimate = sum(_estimate_tokens(m["content"]) + 4 for m in messages)
         app.state.last_context = {
             "base": SYSTEM_PROMPT,
@@ -321,9 +363,10 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         # Non-streaming with tool execution loop
         tools = app.state.tools
         tool_defs = tools.to_openai_tools()
-        max_tool_rounds = 5  # Prevent infinite loops
+        max_tool_rounds = 10  # Prevent infinite loops
 
         for _ in range(max_tool_rounds):
+            _strip_trailing_empty_assistant(messages)
             try:
                 result = await llm.chat(
                     model, messages, temperature, request.max_tokens, tools=tool_defs
@@ -360,6 +403,17 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                 )
 
         content = result.content
+
+        # If the loop ended after tool calls but the model never produced text,
+        # do one final call without tools to force a prose response.
+        if not content and result.tool_calls is not None:
+            try:
+                result = await llm.chat(
+                    model, messages, temperature, request.max_tokens, tools=None
+                )
+                content = result.content
+            except HttpError as exc:
+                raise HTTPException(status_code=502, detail=f"LLM backend error: {exc}") from exc
 
         # Persist the exchange to the buffer.
         if last_user:
@@ -470,6 +524,15 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         pool = app.state.memory._pool
         marker_id = await save_session_marker(pool)
         return {"marker_id": marker_id}
+
+    @app.delete("/v1/buffer/session/tail")
+    async def buffer_trim(keep: int = 0) -> dict:
+        """Delete session buffer entries beyond `keep` (oldest N kept)."""
+        if keep < 0:
+            raise HTTPException(status_code=400, detail="keep must be >= 0")
+        pool = app.state.memory._pool
+        deleted = await delete_buffer_tail(pool, keep)
+        return {"deleted": deleted}
 
     # ── Episodic memory endpoints ─────────────────────────────────────────
 
@@ -651,8 +714,8 @@ async def _derive_intent(app: FastAPI, llm: OpenAIClient, config: NixxConfig) ->
         result = await llm.chat(
             config.llm_model,
             messages,
-            temperature=0.3,  # Lower temperature for more focused response
-            max_tokens=250,
+            temperature=0.6,
+            max_tokens=800,
         )
         intent = result.content.strip()
         if intent:
@@ -683,91 +746,138 @@ async def _chat_event_stream(
 ) -> AsyncGenerator[str, None]:
     accumulated = ""
     tool_defs = tools.to_openai_tools() if tools else None
-    max_tool_rounds = 5
+    max_tool_rounds = 10
+    recent_tool_names: list[str] = []  # for stuck-loop detection
+    tool_calls_made = False
 
-    for _ in range(max_tool_rounds):
+    # --- Resume detection: if the last non-system message is an assistant turn
+    # with tool_calls, the user approved the tool plan and we skip first-pass
+    # inference and go straight to execution. ---
+    last_conv = next((m for m in reversed(messages) if m["role"] != "system"), None)
+    is_resume = (
+        last_conv is not None
+        and last_conv.get("role") == "assistant"
+        and last_conv.get("tool_calls")
+    )
+
+    if is_resume:
+        # Extract pending tool calls from the assistant turn the TUI appended.
+        raw_tcs = last_conv["tool_calls"]  # type: ignore[index]
+        pending_tool_calls_initial = [
+            {
+                "id": tc["id"],
+                "name": tc["function"]["name"],
+                "arguments": tc["function"]["arguments"],
+            }
+            for tc in raw_tcs
+        ]
+        first_pass_pending = pending_tool_calls_initial
+    else:
+        first_pass_pending = []
+
+    for round_idx in range(max_tool_rounds):
         pending_tool_calls: list[dict[str, Any]] = []
 
-        try:
-            async for chunk in llm.chat_stream(
-                model, messages, temperature, max_tokens, tools=tool_defs
-            ):
-                content = chunk.content
-                done = chunk.done
+        # On the first iteration of a resume, skip inference and use the
+        # tool_calls that were already decided in the previous request.
+        if round_idx == 0 and first_pass_pending:
+            pending_tool_calls = first_pass_pending
+        else:
+            reasoning_acc = ""
+            try:
+                _strip_trailing_empty_assistant(messages)
+                async for chunk in llm.chat_stream(
+                    model, messages, temperature, max_tokens, tools=tool_defs
+                ):
+                    content = chunk.content
+                    done = chunk.done
 
-                if content:
-                    accumulated += content
-                    data = {
-                        "id": completion_id,
-                        "object": "chat.completion.chunk",
-                        "created": created,
-                        "model": model,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {"content": content},
-                                "finish_reason": None,
-                            }
-                        ],
-                    }
-                    yield f"data: {json.dumps(data)}\n\n"
+                    if chunk.reasoning:
+                        reasoning_acc += chunk.reasoning
 
-                # Collect tool calls from final chunk
-                if done and chunk.tool_calls:
-                    pending_tool_calls = [
-                        {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
-                        for tc in chunk.tool_calls
-                    ]
-                    break
+                    if content:
+                        accumulated += content
+                        data = {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {"content": content},
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                        yield f"data: {json.dumps(data)}\n\n"
 
-                if done and not chunk.tool_calls:
-                    # No tool calls, finish streaming
-                    data = {
-                        "id": completion_id,
-                        "object": "chat.completion.chunk",
-                        "created": created,
-                        "model": model,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {},
-                                "finish_reason": "stop",
-                            }
-                        ],
-                    }
-                    yield f"data: {json.dumps(data)}\n\n"
-                    break
+                    # Collect tool calls from final chunk
+                    if done and chunk.tool_calls:
+                        pending_tool_calls = [
+                            {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                            for tc in chunk.tool_calls
+                        ]
+                        # First tool-calling pass: pause and ask for approval.
+                        # Subsequent rounds (round_idx > 0) run unattended because
+                        # the user already approved the overall task.
+                        if round_idx == 0:
+                            tool_names = [tc["name"] for tc in pending_tool_calls]
+                            yield f"data: {json.dumps({'approval_needed': {'tools': tool_names, 'reasoning': reasoning_acc, 'tool_calls': [{'id': tc['id'], 'type': 'function', 'function': {'name': tc['name'], 'arguments': tc['arguments']}} for tc in pending_tool_calls]}})}\n\n"
+                            yield "data: [PAUSE]\n\n"
+                            return
+                        break
 
-        except Exception as exc:
-            msg = str(exc) or f"{type(exc).__name__} (no message)"
-            error = {"error": {"message": msg, "type": "server_error"}}
-            yield f"data: {json.dumps(error)}\n\n"
-            yield "data: [DONE]\n\n"
-            return
+                    if done and not chunk.tool_calls:
+                        # No tool calls, finish streaming
+                        data = {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {},
+                                    "finish_reason": "stop",
+                                }
+                            ],
+                        }
+                        yield f"data: {json.dumps(data)}\n\n"
+                        break
 
-        # If no tool calls, we're done with the loop
+            except Exception as exc:
+                msg = str(exc) or f"{type(exc).__name__} (no message)"
+                error = {"error": {"message": msg, "type": "server_error"}}
+                yield f"data: {json.dumps(error)}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+        # If no tool calls, we're done with the loop.
         if not pending_tool_calls:
             break
 
-        # Execute tool calls
+        # Execute tool calls.
         if tools:
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": accumulated,
-                    "tool_calls": [
-                        {
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": {"name": tc["name"], "arguments": tc["arguments"]},
-                        }
-                        for tc in pending_tool_calls
-                    ],
-                }
-            )
+            # On the resume round (round_idx == 0, is_resume), the TUI already
+            # appended the assistant tool_calls turn to messages - don't re-append.
+            if not (round_idx == 0 and is_resume):
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": accumulated,
+                        "tool_calls": [
+                            {
+                                "id": tc["id"],
+                                "type": "function",
+                                "function": {"name": tc["name"], "arguments": tc["arguments"]},
+                            }
+                            for tc in pending_tool_calls
+                        ],
+                    }
+                )
             for tc in pending_tool_calls:
                 logger.info("Executing tool: %s", tc["name"])
-                # Signal tool execution to the client
                 yield f"data: {json.dumps({'tool_call': {'name': tc['name']}})}\n\n"
                 tool_result = await tools.execute(tc["name"], tc["arguments"])
                 messages.append(
@@ -777,8 +887,60 @@ async def _chat_event_stream(
                         "content": tool_result.to_content(),
                     }
                 )
-            # Clear accumulated for next round
+            # Discard any content streamed before tool calls (thinking/preamble).
+            yield f"data: {json.dumps({'reset_accumulated': True})}\n\n"
+            # Detect stuck loops: same tool called 3+ times consecutively.
+            recent_tool_names.extend(tc["name"] for tc in pending_tool_calls)
+            if len(recent_tool_names) >= 3 and len(set(recent_tool_names[-3:])) == 1:
+                logger.warning(
+                    "Tool loop detected (%s called 3+ times consecutively), forcing final response",
+                    recent_tool_names[-1],
+                )
+                accumulated = ""
+                tool_calls_made = True
+                break
+            tool_calls_made = True
             accumulated = ""
+
+    # --- Judge/verification phase: synthesize final answer after tool use ---
+    # If we already streamed a substantive answer after tools, don't synthesize
+    # a second one (prevents duplicate/repetitive responses).
+    if tool_calls_made and not accumulated.strip():
+        yield f"data: {json.dumps({'verifying': True})}\n\n"
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    f"Original request: {user_text}\n\n"
+                    "Review the tool results above and provide the final answer. "
+                    "If the request was to show, display, or produce content, reproduce "
+                    "that content in full. Be direct."
+                ),
+            }
+        )
+        try:
+            # Use non-streaming chat() so thinking tokens don't consume max_tokens
+            # budget before the actual answer is produced.
+            judge_response = await llm.chat(model, messages, temperature, max_tokens, tools=None)
+            judge_text = judge_response.content.strip() if judge_response.content else ""
+            if judge_text:
+                accumulated += judge_text
+                data = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": judge_text},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+                yield f"data: {json.dumps(data)}\n\n"
+        except Exception as exc:
+            logger.warning("Judge call failed: %s", exc)
 
     # Write to buffer BEFORE yielding [DONE]
     if memory is not None:
@@ -790,13 +952,17 @@ async def _chat_event_stream(
         except Exception as exc:
             logger.warning("Buffer write failed: %s", exc)
 
-    # Increment message counter and check for intent derivation
+    yield "data: [DONE]\n\n"
+
+    # Increment message counter and trigger intent derivation as a background task
     if app is not None and config is not None:
         app.state.messages_since_intent += 1
         if app.state.messages_since_intent >= config.intent_interval:
-            try:
-                await _derive_intent(app, llm, config)
-            except Exception as exc:
-                logger.warning("Intent derivation failed: %s", exc)
 
-    yield "data: [DONE]\n\n"
+            async def _intent_task() -> None:
+                try:
+                    await _derive_intent(app, llm, config)
+                except Exception as exc:
+                    logger.warning("Intent derivation failed: %s", exc)
+
+            asyncio.create_task(_intent_task())

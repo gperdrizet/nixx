@@ -1,4 +1,4 @@
-"""Database schema and initialisation for the Nixx memory system.
+"""Database schema and initialization for the Nixx memory system.
 
 Tables
 ------
@@ -56,7 +56,7 @@ async def _init_connection(conn: asyncpg.Connection) -> None:  # type: ignore[ty
     await register_vector(conn)
 
 
-# ── Schema initialisation ─────────────────────────────────────────────────────
+# ── Schema initialization ─────────────────────────────────────────────────────
 
 
 async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # type: ignore[type-arg]
@@ -142,7 +142,7 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
 
         # ── Indexes ──
 
-        # HNSW index for fast approximate nearest-neighbour search.
+        # HNSW index for fast approximate nearest-neighbor search.
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS memories_embedding_hnsw
             ON memories
@@ -177,7 +177,7 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
             );
         """)
 
-    logger.info("Database schema initialised")
+    logger.info("Database schema initialized")
 
 
 # ── State helpers ─────────────────────────────────────────────────────────────
@@ -293,6 +293,30 @@ async def get_current_session_entries(
                 ") ORDER BY id ASC",
             )
             return [dict(r) for r in rows]
+
+
+async def delete_buffer_tail(
+    pool: asyncpg.Pool,  # type: ignore[type-arg]
+    keep: int,
+) -> int:
+    """Delete the most recent buffer entries in the current session, keeping only `keep`.
+
+    Returns the number of rows deleted.
+    """
+    async with pool.acquire() as conn:
+        deleted = await conn.execute(
+            "DELETE FROM buffer WHERE id IN ("
+            "  SELECT id FROM buffer"
+            "  WHERE role != 'marker' AND id > COALESCE("
+            "    (SELECT MAX(id) FROM buffer WHERE role = 'marker'), 0"
+            "  )"
+            "  ORDER BY id DESC"
+            "  OFFSET $1"
+            ")",
+            keep,
+        )
+        # asyncpg returns "DELETE N"
+        return int(deleted.split()[-1])
 
 
 async def search_buffer_fulltext(

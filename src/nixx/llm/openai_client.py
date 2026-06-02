@@ -25,6 +25,7 @@ class ChatResponse:
     """Response from a chat completion."""
 
     content: str
+    reasoning: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     done: bool = False
     prompt_tokens: int = 0
@@ -178,6 +179,8 @@ class OpenAIClient:
 
                     # Handle content
                     content = delta.get("content", "") or ""
+                    reasoning = delta.get("reasoning_content", "") or ""
+                    reasoning = delta.get("reasoning_content", "") or ""
 
                     # Handle tool calls (accumulate across deltas)
                     for tc in delta.get("tool_calls", []):
@@ -192,9 +195,14 @@ class OpenAIClient:
                         if "arguments" in func:
                             tool_calls_acc[idx]["arguments"] += func["arguments"]
 
-                    # Yield content chunks
+                    # Yield content chunks; yield reasoning separately so callers
+                    # can optionally display thinking progress.
                     if content:
                         yield ChatResponse(content=content, done=False)
+                    elif reasoning:
+                        yield ChatResponse(content="", reasoning=reasoning, done=False)
+                    elif reasoning:
+                        yield ChatResponse(content="", reasoning=reasoning, done=False)
 
                     # Signal done only for non-tool finishes (tool_calls wait for [DONE])
                     if finish and finish != "tool_calls":

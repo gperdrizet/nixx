@@ -134,7 +134,7 @@ sudo systemctl daemon-reload
 
 ### Starting and stopping
 
-Services are not enabled for auto-boot. Start manually:
+All services are enabled for auto-boot. If any failed to start, bring them up manually:
 
 ```bash
 # Start everything
@@ -170,8 +170,7 @@ ExecStart=/opt/llama.cpp/build/bin/llama-server \
     --metrics
 ```
 
-The server is reached from the nixx API server via `model.perdrizet.org` (nginx on gatekeeper
-→ WireGuard → localhost:8502), configured in `.env` as `NIXX_LLM_BASE_URL`.
+The local server runs at localhost:8502. nixx currently uses a remote inference API (`promptlyapi.com/v1`) configured in `.env` as `NIXX_LLM_BASE_URL`. To switch to the local instance, update that value to `http://localhost:8502`.
 
 ### Recovering from a failed service
 

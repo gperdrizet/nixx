@@ -72,7 +72,7 @@ Processes, modules, and communication paths as they exist today.
         ▼                    ▼                                 ▼ ▼
   ┌────────────────────┐ ┌────────────────────┐ ┌────────────────────────────────┐
   │ llama.cpp (remote) │ │ llama.cpp (local)  │ │ PostgreSQL + pgvector · 5432   │
-  │ model.perdrizet.org│ │ localhost:8082     │ │ (student-postgres container)   │
+  │ promptlyapi.com/v1 │ │ localhost:8082     │ │ (student-postgres container)   │
   │                    │ │                    │ │                                │
   │ gpt-oss-20b        │ │ mxbai-embed-large  │ │ Episodic:                      │
   │ chat + completions │ │ embeddings         │ │   buffer    (transcript + FTS) │

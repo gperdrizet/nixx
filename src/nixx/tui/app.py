@@ -1,6 +1,7 @@
 """Nixx chat TUI."""
 
 import json
+from typing import Any
 
 import httpx
 from rich.markdown import Markdown as RichMarkdown
@@ -262,12 +263,17 @@ class NixxApp(App[None]):
         super().__init__()
         self._config = config
         self._base_url = f"http://{config.host}:{config.port}"
-        self._history: list[dict[str, str]] = []
+        self._history: list[dict[str, Any]] = []
         self._editing_msg: Message | None = None
         self._summary_in_progress: bool = False
         self._intent_bar_visible: bool = True
         self._recall_on: bool = True
         self._intent_on: bool = True
+        # Pending tool approval state: set when the server pauses for user approval.
+        # _pending_tool_calls is the OpenAI-format tool_calls array from the assistant turn.
+        # _pending_assistant_msg is the widget where the final response will stream.
+        self._pending_tool_calls: list[dict] | None = None
+        self._pending_assistant_msg: Message | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -331,6 +337,45 @@ class NixxApp(App[None]):
             self._show_help()
 
     def on_key(self, event: events.Key) -> None:
+        # Tool approval: Enter to proceed, Esc to cancel.
+        if self._pending_tool_calls is not None:
+            if event.key == "enter":
+                tool_calls = self._pending_tool_calls
+                msg = self._pending_assistant_msg
+                self._pending_tool_calls = None
+                self._pending_assistant_msg = None
+                # Remove the approval prompt system message.
+                container = self.query_one("#messages", ScrollableContainer)
+                children = list(container.children)
+                if children:
+                    children[-1].remove()
+                # Append the assistant's tool_calls turn to history so the server
+                # sees it and knows to resume directly into execution.
+                self._history.append({"role": "assistant", "content": "", "tool_calls": tool_calls})
+                if msg is not None:
+                    msg._content = ""
+                    msg.update("")
+                    self.run_worker(
+                        self._stream_response(msg),
+                        exclusive=False,
+                        thread=False,
+                    )
+                event.stop()
+                return
+            elif event.key == "escape":
+                self._pending_tool_calls = None
+                self._pending_assistant_msg = None
+                # Remove approval prompt and the assistant bubble.
+                container = self.query_one("#messages", ScrollableContainer)
+                children = list(container.children)
+                for child in children[-2:]:
+                    child.remove()
+                # Remove user message from history.
+                if self._history and self._history[-1]["role"] == "user":
+                    self._history.pop()
+                event.stop()
+                return
+
         # VS Code's integrated terminal uses the Kitty keyboard protocol, which
         # sends space as \x1b[32u. Textual parses this as key='space' but sets
         # character=None (sequence length > 1), so Input._on_key skips it as
@@ -479,6 +524,7 @@ class NixxApp(App[None]):
         """Remove a message and everything after it."""
         if msg._history_index is None:
             return
+        keep = msg._history_index  # entries to keep in buffer (0-based, exclude this msg)
         self._history = self._history[: msg._history_index]
 
         container = self.query_one("#messages", ScrollableContainer)
@@ -489,6 +535,19 @@ class NixxApp(App[None]):
             return
         for child in children[idx:]:
             child.remove()
+
+        # Sync buffer on server so restored sessions match the rewound state.
+        async def _trim_buffer() -> None:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await client.delete(
+                        f"{self._base_url}/v1/buffer/session/tail",
+                        params={"keep": keep},
+                    )
+            except Exception:
+                pass  # Non-fatal; worst case the buffer has extra entries on restart
+
+        self.run_worker(_trim_buffer(), exclusive=False, thread=False)
 
         self._add_message("system", "Conversation rewound.")
         if self._editing_msg is not None:
@@ -941,12 +1000,13 @@ class NixxApp(App[None]):
         self._add_message("system", text.strip())
 
     async def _stream_response(self, msg: Message) -> None:
-        payload = {
+        payload: dict = {
             "messages": list(self._history),
             "stream": True,
         }
         accumulated = ""
         tool_calls: list[str] = []
+        paused = False
         try:
             # Long read timeout: nixx-server won't send the first chunk until after LLM prefill,
             # which can take several minutes for large prompts. Short connect/write are fine.
@@ -964,6 +1024,9 @@ class NixxApp(App[None]):
                         raw = line[5:].strip()
                         if raw == "[DONE]":
                             break
+                        if raw == "[PAUSE]":
+                            paused = True
+                            break
                         try:
                             chunk = json.loads(raw)
                         except json.JSONDecodeError:
@@ -977,6 +1040,46 @@ class NixxApp(App[None]):
                             )
                             msg.append(f"\n[red]Error: {escape_markup(err_msg)}[/red]")
                             break
+                        if "approval_needed" in chunk:
+                            # Model wants to use tools. Show reasoning + tool list and
+                            # pause for user approval. The msg bubble becomes the approval UI.
+                            data = chunk["approval_needed"]
+                            reasoning = (data.get("reasoning") or "").strip()
+                            tool_names = data.get("tools", [])
+                            raw_tool_calls = data.get("tool_calls", [])
+                            # Clear any streamed content (thinking preamble) from the bubble.
+                            accumulated = ""
+                            msg._content = ""
+                            msg.update("")
+                            # Display reasoning if present, then tool list.
+                            lines: list[str] = []
+                            if reasoning:
+                                lines.append(f"[dim]{escape_markup(reasoning)}[/dim]\n")
+                            lines.append(
+                                "[bold]Tools:[/bold] "
+                                + ", ".join(f"[cyan]{escape_markup(n)}[/cyan]" for n in tool_names)
+                            )
+                            msg.append("\n".join(lines))
+                            self._add_message(
+                                "system",
+                                "[dim][bold]Enter[/bold] to proceed, [bold]Esc[/bold] to cancel.[/dim]",
+                            )
+                            self._pending_tool_calls = raw_tool_calls
+                            self._pending_assistant_msg = msg
+                            self.query_one("#messages", ScrollableContainer).scroll_end(
+                                animate=False
+                            )
+                            continue
+                        if "reset_accumulated" in chunk:
+                            # Discard content streamed before tool calls (model preamble/thinking).
+                            accumulated = ""
+                            continue
+                        if "verifying" in chunk:
+                            msg.append("\n[dim]✓ verifying...[/dim]\n")
+                            self.query_one("#messages", ScrollableContainer).scroll_end(
+                                animate=False
+                            )
+                            continue
                         if "tool_call" in chunk:
                             tool_name = chunk["tool_call"].get("name", "?")
                             tool_calls.append(tool_name)
@@ -1001,13 +1104,17 @@ class NixxApp(App[None]):
             msg.update(f"[red]Error: {escape_markup(detail)}[/red]")
             return
 
-        if accumulated:
-            self._history.append({"role": "assistant", "content": accumulated})
-            msg._history_index = len(self._history) - 1
+        # If paused for approval, don't write to history - wait for Enter/Esc.
+        if paused:
+            return
+
+        if accumulated or tool_calls:
             render_content = accumulated
             if tool_calls:
-                prefix = "  \n".join(f"*▸ {name}*" for name in tool_calls) + "  \n\n"
-                render_content = prefix + accumulated
+                tc_prefix = "  \n".join(f"*▸ {name}*" for name in tool_calls) + "  \n\n"
+                render_content = tc_prefix + accumulated
+            self._history.append({"role": "assistant", "content": accumulated})
+            msg._history_index = len(self._history) - 1
             msg.render_markdown(render_content)
             # Check if episodic summary is due
             self.run_worker(self._check_summary_due(), exclusive=False, thread=False)

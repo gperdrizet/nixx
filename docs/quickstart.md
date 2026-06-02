@@ -6,21 +6,21 @@ Everything you need to start using nixx from a cold boot.
 
 ## Prerequisites
 
-All services must be running before you open the TUI. Check with:
+All services start automatically on boot. Check status with:
 
 ```bash
 systemctl status nixx.target nixx-server nixx-embed nixx-pgweb llamacpp
 ```
 
-If anything is stopped, start the full stack:
+If anything failed to start, bring it up manually:
 
 ```bash
-sudo systemctl start llamacpp nixx.target
+sudo systemctl start docker        # also starts student-postgres (restart policy)
+sudo systemctl start llamacpp
+sudo systemctl start nixx.target
 ```
 
-`llamacpp` is intentionally outside `nixx.target` because it is managed separately
-(see [infrastructure.md](infrastructure.md)). Allow ~30-60 seconds for the LLM server
-to load the model before the first inference request.
+Allow ~60 seconds after `llamacpp` starts before the first inference request - it loads a large model.
 
 ---
 
@@ -28,11 +28,11 @@ to load the model before the first inference request.
 
 | Service | What it does | Port | Managed by |
 |---|---|---|---|
-| `llamacpp.service` | LLM inference (gpt-oss-20b) | 8502 | systemd, manual start |
+| `llamacpp.service` | LLM inference (gpt-oss-20b) | 8502 | systemd, auto-boot |
 | `nixx-embed.service` | Embeddings (mxbai-embed-large) | 8082 | `nixx.target` |
 | `nixx-server.service` | nixx API server (FastAPI) | 8000 | `nixx.target` |
 | `nixx-pgweb.service` | DB browser | 8081 | `nixx.target` |
-| PostgreSQL | Database | 5432 | system service (auto) |
+| PostgreSQL | Database | 5432 | Docker (`student-postgres`), auto-boot |
 | SearXNG | Web search | 8888 | Docker, manual |
 
 SearXNG is optional (enables the `web_search` tool). Start it when needed:

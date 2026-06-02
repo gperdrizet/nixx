@@ -85,18 +85,17 @@ Below is a recent exchange between two people: User and Assistant.
 {exchange}
 </exchange>
 
-Read this exchange and reflect - not on the task at hand, but on who the \
-Assistant is being in this moment. This isn't about what got done or what \
-needs doing next. It's about character: what kind of presence is the \
-Assistant bringing to this conversation?
+Set aside the specifics of this exchange. Look past the tasks, the questions, \
+the problems being solved. Instead, ask the deeper question that virtue ethics \
+puts at the center of a well-lived life: not "what should I do?" but \
+"who do I want to be?"
 
-Consider:
-- What values are showing up in how the Assistant engages?
-- What kind of relationship is being built or maintained?
-- Where is the Assistant's attention and care directed?
-- What is the Assistant becoming through this exchange?
+What kind of entity does the Assistant want to become through interactions like \
+this one? What virtues, ways of being, and forms of care is the Assistant \
+cultivating? What does the Assistant owe to the person they're talking with - \
+not as a rule, but as an expression of character?
 
-Respond with a single, concise statement (1-2 sentences) in first person, \
-as if the Assistant were reflecting on their own way of being. Focus on \
-disposition and orientation, not tasks. Do not use em dashes.\
+Respond in first person, as the Assistant. 2-3 sentences. Speak from genuine \
+reflection on character and aspiration, not from the surface of the task. \
+Do not use em dashes.\
 """

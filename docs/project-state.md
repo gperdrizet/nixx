@@ -21,7 +21,7 @@ workspaces and conversations - nixx remembers everything across sessions.
 | LLM server | llama.cpp `llama-server` | 8502 | llama | gpt-oss-20b-mxfp4.gguf |
 | Embed server | llama.cpp `llama-server` | 8082 | llama | mxbai-embed-large-v1-f16.gguf |
 | pgweb | `/usr/local/bin/pgweb` | 8081 | siderealyear | DB browser |
-| PostgreSQL | system service | 5432 | postgres | nixx DB: `postgresql://nixx:...@localhost/nixx` |
+| PostgreSQL | Docker container | 5432 | postgres | `student-postgres` container; starts automatically with Docker |
 | SearXNG | Docker container | 8888 | - | `services/searxng/`, `docker compose up -d` |
 
 All services run under `nixx.target` but **restarting the target does not cascade to individual
@@ -78,7 +78,7 @@ Unit files live in `scripts/`, symlinked into `/etc/systemd/system/`:
 | `scripts/nixx-embed.service` | Embed server, `User=llama`, model at `/opt/models/mxbai-embed-large-v1-f16.gguf` |
 | `scripts/nixx-pgweb.service` | pgweb browser, `User=siderealyear`, `--listen=8081` |
 
-Services are not enabled for auto-boot. Start manually with `sudo systemctl start nixx.target`.
+All services are enabled for auto-boot. Docker starts first, which brings up `student-postgres` (restart policy: unless-stopped). `nixx-server` and `nixx-embed` start after Docker. `llamacpp` starts independently. Allow ~60 seconds after boot for llamacpp to load the model before the first inference request.
 
 ---
 
@@ -134,7 +134,7 @@ All settings read from `.env` with `NIXX_` prefix. Key fields:
 | Setting | Default | Notes |
 |---|---|---|
 | `host` / `port` | `127.0.0.1` / `8000` | API server bind |
-| `llm_base_url` | `http://localhost:8080` | Overridden in .env to `https://model.perdrizet.org` (nginx on gatekeeper → WireGuard → localhost:8502) |
+| `llm_base_url` | `http://localhost:8080` | Overridden in .env to `https://promptlyapi.com/v1` (remote inference API) |
 | `llm_model` | `gpt-oss-20b` | |
 | `llm_context_length` | `8192` | Auto-fetched from LLM `/props` at startup (overrides .env value). Fallback if fetch fails. |
 | `max_history_tokens` | `16384` | Max tokens of conversation history per request, independent of context length. Prevents slow prefill on long sessions. |
