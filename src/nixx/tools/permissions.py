@@ -1,16 +1,20 @@
-"""Directory permissions - scratch_dir + optional project_dir."""
+"""Directory permissions - scratch_dir + source_dir (always) + optional project_dir."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from nixx.config import _NIXX_ROOT
+
 _STATE_KEY = "project_dir"
 
 
 def is_path_allowed(path: Path, scratch_dir: Path, project_dir: str | None) -> bool:
-    """Check if a resolved path is within scratch_dir or project_dir."""
+    """Check if a resolved path is within scratch_dir, the nixx source tree, or project_dir."""
     resolved = str(path.resolve())
     if resolved.startswith(str(scratch_dir.resolve())):
+        return True
+    if resolved.startswith(str(_NIXX_ROOT.resolve())):
         return True
     if project_dir:
         if resolved.startswith(str(Path(project_dir).resolve())):

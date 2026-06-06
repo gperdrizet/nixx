@@ -138,7 +138,10 @@ async def _assemble_messages(
     if plan_content:
         plan_block = f"\n\n## Current plan\n\n{plan_content}"
 
+    from nixx.config import _NIXX_ROOT
+
     file_access_block = f"\n\n## File access\n\nScratch directory: {config.scratch_dir}"
+    file_access_block += f"\nSource directory (nixx): {_NIXX_ROOT}"
     if getattr(app.state, "project_dir", None):
         file_access_block += f"\nProject directory: {app.state.project_dir}"
     else:

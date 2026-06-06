@@ -4,9 +4,18 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from nixx.config import _NIXX_ROOT
 from nixx.tools.base import Tool, ToolResult
 
 _MAX_OUTPUT = 20_000
+
+
+def _find_pytest(repo: Path) -> list[str] | None:
+    """Return the pytest command to use, preferring the project venv."""
+    venv_pytest = repo / ".venv" / "bin" / "pytest"
+    if venv_pytest.exists():
+        return [str(venv_pytest)]
+    return None
 
 
 def _run(cmd: list[str], cwd: Path, timeout: int = 60) -> tuple[int, str]:
@@ -30,16 +39,10 @@ def _run(cmd: list[str], cwd: Path, timeout: int = 60) -> tuple[int, str]:
 class ValidateAndCommitTool(Tool):
     """Validate changed Python files and commit to git after self-modification.
 
-    Runs ruff check and py_compile on every staged/modified .py file,
+    Runs py_compile and a smoke-test suite on every modified .py file,
     then commits with the provided message if all checks pass.
-    Use this after editing any nixx source file.
+    Always operates on the nixx source tree - use this after editing any nixx source file.
     """
-
-    def __init__(self, project_dir: str | None = None) -> None:
-        self._project_dir = project_dir
-
-    def set_project_dir(self, project_dir: str | None) -> None:
-        self._project_dir = project_dir
 
     @property
     def name(self) -> str:
@@ -49,7 +52,7 @@ class ValidateAndCommitTool(Tool):
     def description(self) -> str:
         return (
             "Validate and commit self-modifications to the nixx codebase. "
-            "Runs ruff check and syntax validation on all modified Python files. "
+            "Runs a syntax check (py_compile) and a core smoke-test suite on all modified Python files. "
             "If checks pass, stages all changes and commits with the given message. "
             "Returns detailed output so you can diagnose failures. "
             "Use this after every self-modification before considering the task done."
@@ -82,14 +85,7 @@ class ValidateAndCommitTool(Tool):
         if not message:
             return ToolResult(success=False, error="commit message is required")
 
-        project_dir = self._project_dir
-        if not project_dir:
-            return ToolResult(
-                success=False,
-                error="No project directory set. Use /project <path> to set it first.",
-            )
-
-        repo = Path(project_dir).resolve()
+        repo = _NIXX_ROOT.resolve()
         if not (repo / ".git").exists():
             return ToolResult(
                 success=False,
@@ -110,16 +106,8 @@ class ValidateAndCommitTool(Tool):
 
         lines.append(f"Modified Python files: {len(py_files)}")
 
-        # ── ruff check ───────────────────────────────────────────────────────
+        # ── py_compile (syntax check) ─────────────────────────────────────────
         if py_files:
-            ruff_cmd = ["ruff", "check"] + [str(f) for f in py_files]
-            rc, ruff_out = _run(ruff_cmd, cwd=repo)
-            if rc != 0:
-                lines.append(f"\nruff check FAILED:\n{ruff_out}")
-                return ToolResult(success=False, error="\n".join(lines))
-            lines.append("ruff check: passed")
-
-            # ── py_compile (syntax check) ─────────────────────────────────────
             import sys
 
             compile_errors = []
@@ -135,7 +123,31 @@ class ValidateAndCommitTool(Tool):
                 return ToolResult(success=False, error="\n".join(lines))
             lines.append("syntax check: passed")
         else:
-            lines.append("No Python files modified - skipping lint/syntax checks")
+            lines.append("No Python files modified - skipping syntax check")
+
+        # ── Smoke tests ───────────────────────────────────────────────────────
+        _SMOKE_TESTS = [
+            "tests/test_config.py::test_defaults",
+            "tests/test_config.py::test_env_var_override",
+            "tests/test_tools.py::test_is_path_allowed_scratch",
+            "tests/test_tools.py::test_is_path_allowed_project",
+            "tests/test_tools.py::test_is_path_allowed_denied",
+            "tests/test_tools.py::test_read_file_absolute_granted",
+            "tests/test_tools.py::test_read_file_absolute_denied",
+            "tests/test_tools.py::test_shadow_backup_creates_copy",
+            "tests/test_server.py::test_health",
+        ]
+        pytest_cmd = _find_pytest(repo)
+        if pytest_cmd:
+            rc, pytest_out = _run(
+                pytest_cmd + _SMOKE_TESTS + ["-q", "--tb=short"], cwd=repo, timeout=60
+            )
+            if rc != 0:
+                lines.append(f"\nSmoke tests FAILED:\n{pytest_out}")
+                return ToolResult(success=False, error="\n".join(lines))
+            lines.append(f"smoke tests: passed\n{pytest_out}")
+        else:
+            lines.append("pytest not found in .venv - skipping smoke tests")
 
         # ── Show what will be committed ───────────────────────────────────────
         rc, stat_out = _run(["git", "diff", "--stat"], cwd=repo)

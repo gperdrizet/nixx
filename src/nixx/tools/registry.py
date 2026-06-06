@@ -42,7 +42,7 @@ class ToolRegistry:
         self._searxng_url = searxng_url
         self._project_dir: str | None = None
         self._tools: dict[str, Tool] = {}
-        self._git_tool = ValidateAndCommitTool(project_dir=None)
+        self._git_tool = ValidateAndCommitTool()
         self._register_default_tools()
 
     def set_project_dir(self, project_dir: str | None) -> None:
@@ -51,7 +51,6 @@ class ToolRegistry:
         for tool in self._tools.values():
             if hasattr(tool, "_project_dir"):
                 tool._project_dir = project_dir  # type: ignore[attr-defined]
-        self._git_tool.set_project_dir(project_dir)
 
     def _register_default_tools(self) -> None:
         """Register the default file operation tools."""
