@@ -949,7 +949,7 @@ simultaneously causes OOM).</p>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span>daemon-reload
 </code></pre></div>
 <h3 id="starting-and-stopping">Starting and stopping<a class="headerlink" href="#starting-and-stopping" title="Permanent link">&para;</a></h3>
-<p>Services are not enabled for auto-boot. Start manually:</p>
+<p>All services are enabled for auto-boot. If any failed to start, bring them up manually:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Start everything</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span>start<span class="w"> </span>llamacpp
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span>start<span class="w"> </span>nixx.target
@@ -978,8 +978,7 @@ service explicitly when needed.</p>
 <a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">    </span><span class="na">--api-key &lt;key&gt; \</span>
 <a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">    </span><span class="na">--metrics</span>
 </code></pre></div>
-<p>The server is reached from the nixx API server via <code>model.perdrizet.org</code> (nginx on gatekeeper
-→ WireGuard → localhost:8502), configured in <code>.env</code> as <code>NIXX_LLM_BASE_URL</code>.</p>
+<p>The local server runs at localhost:8502. nixx currently uses a remote inference API (<code>promptlyapi.com/v1</code>) configured in <code>.env</code> as <code>NIXX_LLM_BASE_URL</code>. To switch to the local instance, update that value to <code>http://localhost:8502</code>.</p>
 <h3 id="recovering-from-a-failed-service">Recovering from a failed service<a class="headerlink" href="#recovering-from-a-failed-service" title="Permanent link">&para;</a></h3>
 <p>If <code>llamacpp.service</code> hits its restart limit (5 attempts in 300 seconds):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span>reset-failed<span class="w"> </span>llamacpp

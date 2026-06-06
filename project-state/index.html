@@ -842,10 +842,10 @@ workspaces and conversations - nixx remembers everything across sessions.</p>
 </tr>
 <tr>
 <td>PostgreSQL</td>
-<td>system service</td>
+<td>Docker container</td>
 <td>5432</td>
 <td>postgres</td>
-<td>nixx DB: <code>postgresql://nixx:...@localhost/nixx</code></td>
+<td><code>student-postgres</code> container; starts automatically with Docker. Managed via <code>~/postgreSQL-server/docker-compose.yml</code> (service name: <code>postgres</code>).</td>
 </tr>
 <tr>
 <td>SearXNG</td>
@@ -943,7 +943,7 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 </tr>
 </tbody>
 </table>
-<p>Services are not enabled for auto-boot. Start manually with <code>sudo systemctl start nixx.target</code>.</p>
+<p>All services are enabled for auto-boot. Docker starts first, which brings up <code>student-postgres</code> (restart policy: unless-stopped). <code>nixx-server</code> and <code>nixx-embed</code> start after Docker. <code>llamacpp</code> starts independently. Allow ~60 seconds after boot for llamacpp to load the model before the first inference request.</p>
 <hr />
 <h2 id="source-layout">Source layout<a class="headerlink" href="#source-layout" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>src/nixx/
@@ -1005,7 +1005,7 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 <tr>
 <td><code>llm_base_url</code></td>
 <td><code>http://localhost:8080</code></td>
-<td>Overridden in .env to <code>https://model.perdrizet.org</code> (nginx on gatekeeper → WireGuard → localhost:8502)</td>
+<td>Overridden in .env to <code>https://promptlyapi.com/v1</code> (remote inference API)</td>
 </tr>
 <tr>
 <td><code>llm_model</code></td>
