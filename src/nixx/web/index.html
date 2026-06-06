@@ -273,6 +273,92 @@
     }
     #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     #send-btn svg { width: 18px; height: 18px; }
+
+    /* ── Tab bar ── */
+    #tab-bar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 0.5rem;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── Files panel ── */
+    #files-panel {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #files-panel.visible { display: flex; }
+    #files-toolbar {
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    #files-path { flex: 1; font-family: monospace; }
+    #files-refresh-btn {
+      background: none; border: none; color: var(--accent);
+      cursor: pointer; font-size: 0.8rem; padding: 0.2rem 0.4rem;
+    }
+    #files-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.5rem 0;
+    }
+    .file-row {
+      display: flex;
+      align-items: center;
+      padding: 0.55rem 1rem;
+      gap: 0.75rem;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .file-row:active { background: var(--surface2); }
+    .file-icon { font-size: 1.1rem; flex-shrink: 0; }
+    .file-info { flex: 1; min-width: 0; }
+    .file-name {
+      font-size: 0.9rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-meta { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.1rem; }
+    .file-actions { display: flex; gap: 0.35rem; flex-shrink: 0; }
+    .file-dl-btn, .file-del-btn {
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.3rem;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .file-dl-btn { color: var(--accent); }
+    .file-del-btn { color: var(--red); }
+    #files-empty {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
@@ -282,6 +368,13 @@
       <span class="subtitle">personal memory system</span>
     </div>
 
+    <div id="tab-bar">
+      <button class="tab-btn active" data-tab="chat">chat</button>
+      <button class="tab-btn" data-tab="files">files</button>
+    </div>
+
+    <!-- Chat panel -->
+    <div id="chat-panel" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
     <div id="messages"></div>
 
     <div id="approval-card">
@@ -307,6 +400,18 @@
           <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
         </svg>
       </button>
+    </div>
+    </div>
+
+    <!-- Files panel -->
+    <div id="files-panel">
+      <div id="files-toolbar">
+        <span id="files-path">scratch:/</span>
+        <button id="files-refresh-btn" title="Refresh">↻ refresh</button>
+      </div>
+      <div id="files-list">
+        <div id="files-empty">No files yet.</div>
+      </div>
     </div>
   </div>
 
@@ -715,6 +820,108 @@
       }
       inputEl.focus();
     }
+
+    // ── Tab switching ──────────────────────────────────────────────────────────
+    const chatPanel  = document.getElementById('chat-panel');
+    const filesPanel = document.getElementById('files-panel');
+    let currentDir = '';
+
+    document.getElementById('tab-bar').addEventListener('click', e => {
+      const btn = e.target.closest('.tab-btn');
+      if (!btn) return;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      chatPanel.style.display  = tab === 'chat'  ? 'flex' : 'none';
+      filesPanel.classList.toggle('visible', tab === 'files');
+      if (tab === 'files') loadFiles('');
+    });
+
+    // ── File browser ───────────────────────────────────────────────────────────
+    function formatSize(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function formatDate(ts) {
+      return new Date(ts * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    async function loadFiles(subdir) {
+      currentDir = subdir;
+      const pathEl = document.getElementById('files-path');
+      const listEl = document.getElementById('files-list');
+      pathEl.textContent = `scratch:/${subdir}`;
+      listEl.innerHTML = '<div id="files-empty" style="padding:2rem;text-align:center;color:var(--text-muted)">Loading…</div>';
+
+      try {
+        const url = subdir ? `${API}/v1/files?subdir=${encodeURIComponent(subdir)}` : `${API}/v1/files`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        listEl.innerHTML = '';
+
+        if (subdir) {
+          const upRow = document.createElement('div');
+          upRow.className = 'file-row';
+          upRow.innerHTML = `<span class="file-icon">📁</span><span class="file-name">.. (up)</span>`;
+          upRow.addEventListener('click', () => {
+            const parts = subdir.split('/').filter(Boolean);
+            parts.pop();
+            loadFiles(parts.join('/'));
+          });
+          listEl.appendChild(upRow);
+        }
+
+        if (!data.entries.length && !subdir) {
+          listEl.innerHTML = '<div id="files-empty" style="padding:2rem;text-align:center;color:var(--text-muted)">Scratch directory is empty.</div>';
+          return;
+        }
+
+        for (const entry of data.entries) {
+          const row = document.createElement('div');
+          row.className = 'file-row';
+
+          const icon = entry.is_dir ? '📁' : '📄';
+          const meta = entry.is_dir ? '' : `${formatSize(entry.size)} · ${formatDate(entry.modified)}`;
+
+          row.innerHTML = `
+            <span class="file-icon">${icon}</span>
+            <div class="file-info">
+              <div class="file-name">${entry.name}</div>
+              ${meta ? `<div class="file-meta">${meta}</div>` : ''}
+            </div>
+            <div class="file-actions">
+              ${entry.is_dir ? '' : `<button class="file-dl-btn" data-path="${entry.path}">↓</button>`}
+              ${entry.is_dir ? '' : `<button class="file-del-btn" data-path="${entry.path}">✕</button>`}
+            </div>
+          `;
+
+          if (entry.is_dir) {
+            row.addEventListener('click', () => loadFiles(entry.path));
+          } else {
+            row.querySelector('.file-dl-btn')?.addEventListener('click', e => {
+              e.stopPropagation();
+              window.location.href = `${API}/v1/files/download?path=${encodeURIComponent(entry.path)}`;
+            });
+            row.querySelector('.file-del-btn')?.addEventListener('click', async e => {
+              e.stopPropagation();
+              if (!confirm(`Delete ${entry.name}?`)) return;
+              await fetch(`${API}/v1/files?path=${encodeURIComponent(entry.path)}`, { method: 'DELETE' });
+              loadFiles(currentDir);
+            });
+          }
+
+          listEl.appendChild(row);
+        }
+      } catch (err) {
+        listEl.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--red)">Error: ${err.message}</div>`;
+      }
+    }
+
+    document.getElementById('files-refresh-btn').addEventListener('click', () => loadFiles(currentDir));
 
     // ── Send ───────────────────────────────────────────────────────────────────
     async function send() {

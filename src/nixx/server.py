@@ -682,6 +682,62 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         app.state.tools.set_project_dir(None)
         return {"project_dir": None}
 
+    # ── File browser endpoints ────────────────────────────────────────────────
+
+    def _file_entry(p: Path, base: Path) -> dict[str, Any]:
+        stat = p.stat()
+        return {
+            "name": p.name,
+            "path": str(p.relative_to(base)),
+            "size": stat.st_size,
+            "modified": stat.st_mtime,
+            "is_dir": p.is_dir(),
+        }
+
+    @app.get("/v1/files")
+    async def list_files(subdir: str = "") -> dict:
+        """List files in the scratch directory (optionally a subdirectory)."""
+        base = config.scratch_dir.resolve()
+        target = (base / subdir).resolve() if subdir else base
+        if not str(target).startswith(str(base)):
+            raise HTTPException(status_code=400, detail="Path outside scratch directory")
+        if not target.exists():
+            raise HTTPException(status_code=404, detail="Directory not found")
+        entries = sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+        return {
+            "directory": str(target.relative_to(base)) if target != base else "",
+            "entries": [_file_entry(p, base) for p in entries],
+        }
+
+    @app.get("/v1/files/download")
+    async def download_file(path: str) -> Any:
+        """Download a file from the scratch directory."""
+        from fastapi.responses import FileResponse
+
+        base = config.scratch_dir.resolve()
+        target = (base / path).resolve()
+        if not str(target).startswith(str(base)):
+            raise HTTPException(status_code=400, detail="Path outside scratch directory")
+        if not target.exists() or not target.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+        return FileResponse(target, filename=target.name)
+
+    @app.delete("/v1/files")
+    async def delete_file(path: str) -> dict:
+        """Delete a file from the scratch directory."""
+        import os
+
+        base = config.scratch_dir.resolve()
+        target = (base / path).resolve()
+        if not str(target).startswith(str(base)):
+            raise HTTPException(status_code=400, detail="Path outside scratch directory")
+        if not target.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+        if target.is_dir():
+            raise HTTPException(status_code=400, detail="Use directory deletion endpoint")
+        os.remove(target)
+        return {"deleted": path}
+
     # Mount PWA - must be last (catch-all)
     web_dir = Path(__file__).parent / "web"
     if web_dir.exists():
