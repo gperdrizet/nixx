@@ -87,7 +87,7 @@ class OpenAIClient:
             response.raise_for_status()
             data = response.json()
 
-        choice = data.get("choices", [{}])[0]
+        choice = (data.get("choices") or [{}])[0]
         message = choice.get("message", {})
         usage = data.get("usage", {})
 
@@ -173,7 +173,10 @@ class OpenAIClient:
                         return
 
                     chunk = json.loads(payload_str)
-                    choice = chunk.get("choices", [{}])[0]
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    choice = choices[0]
                     delta = choice.get("delta", {})
                     finish = choice.get("finish_reason")
 
