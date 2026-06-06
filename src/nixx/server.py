@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from httpx import HTTPError as HttpError
 from pydantic import BaseModel, ConfigDict
 
@@ -677,6 +678,11 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         app.state.project_dir = None
         app.state.tools.set_project_dir(None)
         return {"project_dir": None}
+
+    # Mount PWA - must be last (catch-all)
+    web_dir = Path(__file__).parent / "web"
+    if web_dir.exists():
+        app.mount("/app", StaticFiles(directory=web_dir, html=True), name="web")
 
     return app
 

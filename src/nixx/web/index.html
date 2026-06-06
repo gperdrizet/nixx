@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>nixx</title>
+  <link rel="manifest" href="/app/manifest.json">
+  <meta name="theme-color" content="#0f0f1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="nixx">
+  <link rel="apple-touch-icon" href="/app/icon.svg">
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f1a;
+      --surface: #1a1a2e;
+      --surface2: #16213e;
+      --accent: #4f46e5;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --user-bg: #1e293b;
+      --asst-bg: #0f172a;
+      --border: #2d2d4e;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    #header {
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    #header h1 { font-size: 1rem; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; }
+    #header .subtitle { font-size: 0.75rem; color: var(--text-muted); }
+
+    /* ── Messages ── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .msg {
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      word-break: break-word;
+    }
+
+    .msg.user {
+      background: var(--user-bg);
+      align-self: flex-end;
+      max-width: 85%;
+      white-space: pre-wrap;
+    }
+
+    .msg.assistant {
+      background: var(--asst-bg);
+      border: 1px solid var(--border);
+    }
+
+    .msg.system {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-style: italic;
+      text-align: center;
+      padding: 0.25rem;
+      background: none;
+    }
+
+    /* markdown within assistant messages */
+    .msg.assistant h1, .msg.assistant h2, .msg.assistant h3,
+    .msg.assistant h4, .msg.assistant h5, .msg.assistant h6 {
+      margin: 0.75em 0 0.35em;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    .msg.assistant h1 { font-size: 1.25em; }
+    .msg.assistant h2 { font-size: 1.1em; }
+    .msg.assistant h3 { font-size: 1em; }
+    .msg.assistant p { margin-bottom: 0.6em; }
+    .msg.assistant p:last-child { margin-bottom: 0; }
+    .msg.assistant pre {
+      background: #080812;
+      border: 1px solid var(--border);
+      border-radius: 0.375rem;
+      padding: 0.75rem;
+      overflow-x: auto;
+      margin: 0.6em 0;
+      font-size: 0.85em;
+    }
+    .msg.assistant code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: 0.875em;
+    }
+    .msg.assistant pre code { background: none; padding: 0; }
+    .msg.assistant :not(pre) > code {
+      background: #1a1a3e;
+      padding: 0.15em 0.35em;
+      border-radius: 0.25em;
+    }
+    .msg.assistant ul, .msg.assistant ol {
+      padding-left: 1.5em;
+      margin-bottom: 0.6em;
+    }
+    .msg.assistant li { margin-bottom: 0.2em; }
+    .msg.assistant li:last-child { margin-bottom: 0; }
+    .msg.assistant blockquote {
+      border-left: 3px solid var(--accent);
+      padding: 0.25em 0 0.25em 0.75em;
+      color: var(--text-muted);
+      margin: 0.6em 0;
+    }
+    .msg.assistant table { border-collapse: collapse; width: 100%; margin: 0.6em 0; font-size: 0.9em; }
+    .msg.assistant th, .msg.assistant td {
+      border: 1px solid var(--border);
+      padding: 0.35em 0.6em;
+      text-align: left;
+    }
+    .msg.assistant th { background: var(--surface); font-weight: 600; }
+    .msg.assistant a { color: var(--accent); text-decoration: underline; }
+    .msg.assistant hr { border: none; border-top: 1px solid var(--border); margin: 0.75em 0; }
+    .msg.assistant strong { font-weight: 600; }
+    .msg.assistant em { font-style: italic; }
+
+    .cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); margin-left: 1px; animation: blink 0.9s step-end infinite; vertical-align: text-bottom; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* ── Tool approval card ── */
+    #approval-card {
+      display: none;
+      margin: 0.5rem 1rem;
+      padding: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: 0.5rem;
+      flex-shrink: 0;
+    }
+    #approval-card.visible { display: block; }
+    #approval-card h4 { color: var(--accent); margin-bottom: 0.5rem; font-size: 0.9rem; font-weight: 600; }
+    #approval-tools { margin-bottom: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.25rem; }
+    .tool-pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 0.2em 0.55em;
+      border-radius: 1em;
+      font-size: 0.8rem;
+      font-family: monospace;
+      color: var(--text);
+    }
+    #approval-reasoning {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+      max-height: 100px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      display: none;
+      background: var(--bg);
+      border-radius: 0.25rem;
+      padding: 0.5rem;
+    }
+    #approval-buttons { display: flex; gap: 0.5rem; }
+    #approve-btn {
+      flex: 1;
+      padding: 0.6rem;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    #approve-btn:active { opacity: 0.85; }
+    #cancel-btn {
+      flex: 1;
+      padding: 0.6rem;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 0.375rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    #cancel-btn:active { opacity: 0.75; }
+
+    /* ── Status area ── */
+    #status-area {
+      padding: 0.4rem 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      flex-shrink: 0;
+      font-family: monospace;
+    }
+    #intent-bar { font-family: system-ui, sans-serif; font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Input area ── */
+    #input-area {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.6rem 1rem;
+      padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+      align-items: flex-end;
+    }
+    #input {
+      flex: 1;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      padding: 0.55rem 0.75rem;
+      font-size: 1rem;
+      font-family: inherit;
+      resize: none;
+      min-height: 42px;
+      max-height: 140px;
+      line-height: 1.45;
+      -webkit-appearance: none;
+    }
+    #input:focus { outline: none; border-color: var(--accent); }
+    #input::placeholder { color: var(--text-muted); }
+    #send-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      width: 42px;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    #send-btn svg { width: 18px; height: 18px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="header">
+      <h1>nixx</h1>
+      <span class="subtitle">personal memory system</span>
+    </div>
+
+    <div id="messages"></div>
+
+    <div id="approval-card">
+      <h4>Tool use requested</h4>
+      <div id="approval-tools"></div>
+      <div id="approval-reasoning"></div>
+      <div id="approval-buttons">
+        <button id="approve-btn">Approve</button>
+        <button id="cancel-btn">Cancel</button>
+      </div>
+    </div>
+
+    <div id="status-area">
+      <div id="summary-bar"></div>
+      <div id="intent-bar">intent: -</div>
+    </div>
+
+    <div id="input-area">
+      <textarea id="input" placeholder="Message nixx… (Shift+Enter for newline)" rows="1"></textarea>
+      <button id="send-btn" title="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ── Configuration ──────────────────────────────────────────────────────────
+    const API = window.location.origin;
+
+    marked.setOptions({ breaks: true, gfm: true });
+
+    // ── State ──────────────────────────────────────────────────────────────────
+    let history = [];
+    let streaming = false;
+    let pendingToolCalls = null;
+    let currentAssistantEl = null;
+
+    // ── DOM refs ───────────────────────────────────────────────────────────────
+    const messagesEl    = document.getElementById('messages');
+    const inputEl       = document.getElementById('input');
+    const sendBtn       = document.getElementById('send-btn');
+    const approvalCard  = document.getElementById('approval-card');
+    const approvalTools = document.getElementById('approval-tools');
+    const approvalReason= document.getElementById('approval-reasoning');
+    const summaryBarEl  = document.getElementById('summary-bar');
+    const intentBarEl   = document.getElementById('intent-bar');
+
+    // ── Message rendering ──────────────────────────────────────────────────────
+    function addMessage(role, content = '') {
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      if (role === 'assistant' && content) {
+        div.innerHTML = marked.parse(content);
+      } else {
+        div.textContent = content;
+      }
+      messagesEl.appendChild(div);
+      scrollToBottom();
+      return div;
+    }
+
+    function addSystem(text) {
+      return addMessage('system', text);
+    }
+
+    function scrollToBottom() {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    // ── Session restore ────────────────────────────────────────────────────────
+    async function restoreSession() {
+      try {
+        const resp = await fetch(`${API}/v1/buffer/session`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const entries = (data.entries || []).filter(e => e.role !== 'marker');
+        if (entries.length > 0) {
+          for (const e of entries) {
+            history.push({ role: e.role, content: e.content });
+            addMessage(e.role, e.content);
+          }
+          addSystem(`Restored ${entries.length} messages.`);
+        } else {
+          addSystem('New session. Type a message or /help for commands.');
+        }
+      } catch (err) {
+        addSystem(`Could not connect to nixx server: ${err.message}`);
+      }
+    }
+
+    // ── Status bars ────────────────────────────────────────────────────────────
+    async function refreshStatus() {
+      try {
+        const [intentResp, statusResp] = await Promise.all([
+          fetch(`${API}/v1/intent`),
+          fetch(`${API}/v1/episodic/status`),
+        ]);
+        if (intentResp.ok) {
+          const d = await intentResp.json();
+          const text = d.intent ? d.intent.replace(/\n/g, ' ') : null;
+          intentBarEl.textContent = text ? `intent: ${text.slice(0, 150)}` : 'intent: -';
+        }
+        if (statusResp.ok) {
+          const d = await statusResp.json();
+          if (d.current_words != null && d.interval_words) {
+            const pct = Math.min(d.current_words / d.interval_words, 1.0);
+            const filled = Math.round(pct * 20);
+            const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
+            const color = pct < 0.5 ? 'var(--green)' : pct < 0.8 ? 'var(--yellow)' : 'var(--red)';
+            summaryBarEl.innerHTML =
+              `<span>summary </span>` +
+              `<span style="color:${color}">${bar}</span>` +
+              ` ${Math.round(pct * 100)}%` +
+              ` <span style="color:var(--text-muted)">(${d.current_words}/${d.interval_words} words)</span>`;
+          }
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    // ── Streaming ──────────────────────────────────────────────────────────────
+    async function streamResponse(assistantEl) {
+      streaming = true;
+      sendBtn.disabled = true;
+
+      let accumulated = '';
+      let approvalData = null;
+
+      // Show blinking cursor
+      const cursor = document.createElement('span');
+      cursor.className = 'cursor';
+      assistantEl.appendChild(cursor);
+
+      try {
+        const resp = await fetch(`${API}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: history, stream: true }),
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ error: { message: resp.statusText } }));
+          cursor.remove();
+          assistantEl.textContent = `Error: ${err?.error?.message || resp.statusText}`;
+          setIdle();
+          return;
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+
+            if (raw === '[DONE]') {
+              cursor.remove();
+              if (accumulated) {
+                history.push({ role: 'assistant', content: accumulated });
+                assistantEl.innerHTML = marked.parse(accumulated);
+              } else if (!assistantEl.textContent.trim()) {
+                assistantEl.remove();
+              }
+              await refreshStatus();
+              setIdle();
+              return;
+            }
+
+            if (raw === '[PAUSE]') {
+              cursor.remove();
+              showApproval(approvalData, assistantEl);
+              streaming = false;
+              sendBtn.disabled = false;
+              return;
+            }
+
+            let data;
+            try { data = JSON.parse(raw); } catch { continue; }
+
+            if (data.approval_needed) {
+              approvalData = data.approval_needed;
+              continue;
+            }
+
+            if (data.reset_accumulated) {
+              accumulated = '';
+              assistantEl.textContent = '';
+              assistantEl.appendChild(cursor);
+              continue;
+            }
+
+            if (data.verifying) {
+              // Show a subtle indicator; will be replaced by real content
+              if (!accumulated) {
+                assistantEl.textContent = '';
+                const verif = document.createElement('span');
+                verif.style.color = 'var(--text-muted)';
+                verif.style.fontStyle = 'italic';
+                verif.textContent = 'verifying…';
+                assistantEl.appendChild(verif);
+                assistantEl.appendChild(cursor);
+              }
+              continue;
+            }
+
+            if (data.error) {
+              cursor.remove();
+              assistantEl.textContent = `Error: ${data.error.message}`;
+              setIdle();
+              return;
+            }
+
+            const content = data.choices?.[0]?.delta?.content;
+            if (content) {
+              accumulated += content;
+              // Remove verifying placeholder if it's there
+              const verif = assistantEl.querySelector('span[style*="italic"]');
+              if (verif) verif.remove();
+              // Show raw text during streaming; render markdown on [DONE]
+              assistantEl.textContent = accumulated;
+              assistantEl.appendChild(cursor);
+              scrollToBottom();
+            }
+          }
+        }
+      } catch (err) {
+        cursor.remove();
+        assistantEl.textContent = `Error: ${err.message}`;
+      }
+
+      setIdle();
+    }
+
+    function setIdle() {
+      streaming = false;
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+
+    // ── Tool approval ──────────────────────────────────────────────────────────
+    function showApproval(data, assistantEl) {
+      if (!data) return;
+      pendingToolCalls = data.tool_calls;
+      currentAssistantEl = assistantEl;
+
+      approvalTools.innerHTML = (data.tools || [])
+        .map(t => `<span class="tool-pill">${t}</span>`)
+        .join('');
+
+      const reasoning = (data.reasoning || '').replace(/<\/?think>/gi, '').trim();
+      if (reasoning) {
+        approvalReason.textContent = reasoning.slice(0, 600) + (reasoning.length > 600 ? '…' : '');
+        approvalReason.style.display = 'block';
+      } else {
+        approvalReason.style.display = 'none';
+      }
+
+      approvalCard.classList.add('visible');
+      approvalCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function hideApproval() {
+      approvalCard.classList.remove('visible');
+      pendingToolCalls = null;
+    }
+
+    async function approveTools() {
+      if (!pendingToolCalls) return;
+      const toolCalls = pendingToolCalls;
+      const assistantEl = currentAssistantEl;
+      hideApproval();
+      history.push({ role: 'assistant', content: '', tool_calls: toolCalls });
+      if (assistantEl) {
+        assistantEl.textContent = '';
+      }
+      await streamResponse(assistantEl || addMessage('assistant'));
+    }
+
+    function cancelTools() {
+      hideApproval();
+      // Pop the user message from history
+      if (history.length && history[history.length - 1].role === 'user') {
+        history.pop();
+      }
+      // Remove the last user + assistant bubbles from DOM
+      const bubbles = messagesEl.querySelectorAll('.msg.user, .msg.assistant');
+      const len = bubbles.length;
+      if (len >= 2) { bubbles[len - 1].remove(); bubbles[len - 2].remove(); }
+      else if (len === 1) { bubbles[0].remove(); }
+      addSystem('Tool use cancelled.');
+      inputEl.focus();
+    }
+
+    // ── Slash commands ─────────────────────────────────────────────────────────
+    async function handleCommand(text) {
+      const parts = text.slice(1).split(' ');
+      const cmd = parts[0].toLowerCase();
+      const arg = parts.slice(1).join(' ').trim();
+
+      if (cmd === 'help') {
+        addSystem(
+          'Commands: /clear /summary /search "query" /context /recall /intent [text|clear] /project [dir|clear] /threshold [0.0-1.0] /interval [n]\n' +
+          'Enter sends · Shift+Enter = newline'
+        );
+      } else if (cmd === 'clear') {
+        history = [];
+        messagesEl.innerHTML = '';
+        await fetch(`${API}/v1/buffer/clear`, { method: 'POST' });
+        addSystem('Conversation cleared.');
+        await refreshStatus();
+      } else if (cmd === 'summary') {
+        try {
+          const r = await fetch(`${API}/v1/episodic/summary`, { method: 'POST' });
+          const d = await r.json();
+          addSystem(r.ok ? `Summary created (id ${d.id}).` : `Summary failed: ${d.detail}`);
+          await refreshStatus();
+        } catch { addSystem('Summary failed.'); }
+      } else if (cmd === 'search') {
+        const query = arg.replace(/^["']|["']$/g, '');
+        if (!query) { addSystem('Usage: /search "query"'); return; }
+        try {
+          const r = await fetch(`${API}/v1/episodic/search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, top_k: 5 }),
+          });
+          const d = await r.json();
+          if (!d.results?.length) { addSystem('No results found.'); return; }
+          const out = d.results.map(r => `[${r.role}] ${r.content.slice(0, 200)}`).join('\n\n');
+          addMessage('system', out);
+        } catch { addSystem('Search failed.'); }
+      } else if (cmd === 'context') {
+        try {
+          const r = await fetch(`${API}/v1/debug/context`);
+          const d = await r.json();
+          const preview = (d.system_prompt || '').slice(0, 800);
+          addSystem(`System prompt (first 800 chars):\n\n${preview}`);
+        } catch { addSystem('Failed to fetch context.'); }
+      } else if (cmd === 'recall') {
+        try {
+          const r = await fetch(`${API}/v1/episodic/status`);
+          const d = await r.json();
+          const newVal = !d.recall_enabled;
+          await fetch(`${API}/v1/episodic/config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recall_enabled: newVal }),
+          });
+          addSystem(`Recall ${newVal ? 'on' : 'off'}.`);
+        } catch { addSystem('Failed.'); }
+      } else if (cmd === 'intent') {
+        if (!arg) {
+          try {
+            const r = await fetch(`${API}/v1/intent`);
+            const d = await r.json();
+            addSystem(`Current intent: ${d.intent || '(none)'}`);
+          } catch { addSystem('Failed.'); }
+        } else if (arg.toLowerCase() === 'clear') {
+          await fetch(`${API}/v1/intent`, { method: 'DELETE' });
+          addSystem('Intent cleared.');
+          await refreshStatus();
+        } else {
+          await fetch(`${API}/v1/intent`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ intent: arg }),
+          });
+          addSystem(`Intent set.`);
+          await refreshStatus();
+        }
+      } else if (cmd === 'project') {
+        if (!arg) {
+          try {
+            const r = await fetch(`${API}/v1/project`);
+            const d = await r.json();
+            addSystem(`Project directory: ${d.project_dir || '(none)'}\nScratch directory: ${d.scratch_dir}`);
+          } catch { addSystem('Failed.'); }
+        } else if (arg.toLowerCase() === 'clear') {
+          await fetch(`${API}/v1/project`, { method: 'DELETE' });
+          addSystem('Project directory cleared.');
+        } else {
+          try {
+            const r = await fetch(`${API}/v1/project`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ directory: arg }),
+            });
+            if (r.ok) addSystem(`Project directory set to: ${arg}`);
+            else { const d = await r.json(); addSystem(`Error: ${d.detail}`); }
+          } catch { addSystem('Failed.'); }
+        }
+      } else if (cmd === 'threshold') {
+        if (!arg) {
+          const r = await fetch(`${API}/v1/episodic/status`);
+          const d = await r.json();
+          addSystem(`Recall threshold: ${d.recall_threshold}`);
+        } else {
+          await fetch(`${API}/v1/episodic/config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recall_threshold: parseFloat(arg) }),
+          });
+          addSystem(`Threshold set to ${arg}.`);
+        }
+      } else if (cmd === 'interval') {
+        if (!arg) {
+          const r = await fetch(`${API}/v1/episodic/status`);
+          const d = await r.json();
+          addSystem(`Summary interval: ${d.interval_words} words`);
+        } else {
+          await fetch(`${API}/v1/episodic/config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ interval_words: parseInt(arg) }),
+          });
+          addSystem(`Interval set to ${arg} words.`);
+        }
+      } else {
+        addSystem(`Unknown command: /${cmd}. Try /help.`);
+      }
+      inputEl.focus();
+    }
+
+    // ── Send ───────────────────────────────────────────────────────────────────
+    async function send() {
+      const text = inputEl.value.trim();
+      if (!text || streaming) return;
+
+      inputEl.value = '';
+      autoResize();
+
+      if (text.startsWith('/')) {
+        await handleCommand(text);
+        return;
+      }
+
+      history.push({ role: 'user', content: text });
+      addMessage('user', text);
+      const assistantEl = addMessage('assistant', '');
+      currentAssistantEl = assistantEl;
+      await streamResponse(assistantEl);
+    }
+
+    // ── Input auto-resize ──────────────────────────────────────────────────────
+    function autoResize() {
+      inputEl.style.height = 'auto';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
+    }
+
+    // ── Event listeners ────────────────────────────────────────────────────────
+    sendBtn.addEventListener('click', send);
+    document.getElementById('approve-btn').addEventListener('click', approveTools);
+    document.getElementById('cancel-btn').addEventListener('click', cancelTools);
+
+    inputEl.addEventListener('input', autoResize);
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+
+    // Service worker registration
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' }).catch(() => {});
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    (async () => {
+      await restoreSession();
+      await refreshStatus();
+      inputEl.focus();
+    })();
+  </script>
+</body>
+</html>

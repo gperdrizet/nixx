@@ -21,7 +21,7 @@ workspaces and conversations - nixx remembers everything across sessions.
 | LLM server | llama.cpp `llama-server` | 8502 | llama | gpt-oss-20b-mxfp4.gguf |
 | Embed server | llama.cpp `llama-server` | 8082 | llama | mxbai-embed-large-v1-f16.gguf |
 | pgweb | `/usr/local/bin/pgweb` | 8081 | siderealyear | DB browser |
-| PostgreSQL | Docker container | 5432 | postgres | `student-postgres` container; starts automatically with Docker |
+| PostgreSQL | Docker container | 5432 | postgres | `student-postgres` container; starts automatically with Docker. Managed via `~/postgreSQL-server/docker-compose.yml` (service name: `postgres`). |
 | SearXNG | Docker container | 8888 | - | `services/searxng/`, `docker compose up -d` |
 
 All services run under `nixx.target` but **restarting the target does not cascade to individual

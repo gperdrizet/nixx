@@ -15,7 +15,8 @@ systemctl status nixx.target nixx-server nixx-embed nixx-pgweb llamacpp
 If anything failed to start, bring it up manually:
 
 ```bash
-sudo systemctl start docker        # also starts student-postgres (restart policy)
+sudo systemctl start docker
+cd ~/postgreSQL-server && docker compose up -d postgres  # if student-postgres didn't auto-start
 sudo systemctl start llamacpp
 sudo systemctl start nixx.target
 ```
