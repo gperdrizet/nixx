@@ -46,10 +46,16 @@ def create_app() -> FastAPI:
 
     @app.get("/admin/api/status")
     async def get_status() -> dict[str, Any]:
+        def _svc(display_name: str, unit: str) -> dict[str, str]:
+            s = _service_status(unit)
+            s["name"] = display_name
+            return s
+
         services = [
             _service_status("nixx-server"),
             _service_status("nixx-embed"),
-            _service_status("docker"),
+            _svc("llamacpp", "llamacpp.service"),
+            _svc("postgresql", "docker"),
         ]
         conn = await _db()
         try:

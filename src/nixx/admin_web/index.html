@@ -115,7 +115,7 @@
   }
 
   function svcHtml(svc) {
-    const canRestart = svc.name !== 'docker';
+    const canRestart = svc.name !== 'docker' && svc.name !== 'postgresql' && svc.name !== 'llamacpp';
     const restartBtn = canRestart
       ? `<button class="restart-btn" onclick="restartService('${svc.name}', this)">restart</button>`
       : '';
