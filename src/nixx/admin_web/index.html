@@ -287,9 +287,9 @@
           ${row('context', (c.context_length || 0).toLocaleString() + ' tokens')}
           ${row('summary frequency', (c.summary_interval || 0).toLocaleString() + ' words')}
           ${row('intent frequency', (c.intent_interval || 0) + ' messages')}
-          <div class="cfg-row"><span class="cfg-key">tools</span><div class="cfg-tags">${(c.tools || []).map(t => `<span class="cfg-tag">${t}</span>`).join('')}</div></div>
         </div>
         <div class="cfg-col">
+          <div class="cfg-row"><span class="cfg-key">tools</span><div class="cfg-tags">${(c.tools || []).map(t => `<span class="cfg-tag">${t}</span>`).join('')}</div></div>
           ${row('intent', c.intent ?? 'none', !c.intent)}
         </div>`;
     }
