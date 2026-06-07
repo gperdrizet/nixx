@@ -48,6 +48,13 @@
     .chart-title { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
     .chart-wrap { position: relative; height: 180px; }
 
+    /* ── Config panel ── */
+    .config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: grid; gap: 0.4rem 2rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .cfg-row { display: flex; align-items: baseline; gap: 0.5rem; font-size: 0.83rem; }
+    .cfg-key { color: var(--muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+    .cfg-val { font-family: monospace; color: var(--text); word-break: break-all; }
+    .cfg-val.none { color: var(--muted); font-style: italic; }
+
     /* ── Refresh ── */
     #refresh-info { font-size: 0.72rem; color: var(--muted); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
     #refresh-btn { padding: 0.25rem 0.6rem; border-radius: 0.3rem; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.75rem; cursor: pointer; }
@@ -66,6 +73,8 @@
   <div class="services" id="services-row"></div>
 
   <div class="grid" id="stats-grid"></div>
+
+  <div class="config-panel" id="config-panel"></div>
 
   <div class="charts">
     <div class="chart-card">
@@ -170,9 +179,10 @@
   async function refresh() {
     document.getElementById('ts').textContent = new Date().toLocaleTimeString();
 
-    const [statusResp, metricsResp] = await Promise.all([
+    const [statusResp, metricsResp, configResp] = await Promise.all([
       fetch(`${API}/admin/api/status`).then(r => r.json()).catch(() => null),
       fetch(`${API}/admin/api/metrics?limit=60`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/admin/api/config`).then(r => r.json()).catch(() => null),
     ]);
 
     // Services
@@ -192,6 +202,21 @@
         statCard('memory chunks', fmt(db.memory_chunks)),
         statCard('tool calls', fmt(db.total_tool_calls)),
       ].join('');
+    }
+
+    // Config panel
+    if (configResp) {
+      const c = configResp;
+      const cfgRow = (key, val, none = false) =>
+        `<div class="cfg-row"><span class="cfg-key">${key}</span><span class="cfg-val${none ? ' none' : ''}">${val}</span></div>`;
+      const pathRows = (c.paths || []).map(p => cfgRow('path', p)).join('');
+      document.getElementById('config-panel').innerHTML =
+        cfgRow('model', c.model) +
+        cfgRow('context', (c.context_length || 0).toLocaleString() + ' tokens') +
+        cfgRow('summary every', (c.summary_interval || 0).toLocaleString() + ' words') +
+        cfgRow('intent every', (c.intent_interval || 0) + ' messages') +
+        cfgRow('intent', c.intent ?? 'none', !c.intent) +
+        pathRows;
     }
 
     // Charts

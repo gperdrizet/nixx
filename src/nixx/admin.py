@@ -199,6 +199,33 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=504, detail="Restart timed out")
         return {"restarted": service}
 
+    @app.get("/admin/api/config")
+    async def get_config() -> dict[str, Any]:
+        from nixx.config import NixxConfig, _NIXX_ROOT
+
+        cfg = NixxConfig()
+        conn = await _db()
+        try:
+            intent_row = await conn.fetchrow("SELECT value FROM state WHERE key = 'intent'")
+            project_dir_row = await conn.fetchrow(
+                "SELECT value FROM state WHERE key = 'project_dir'"
+            )
+        finally:
+            await conn.close()
+        intent = intent_row["value"] if intent_row else None
+        project_dir = project_dir_row["value"] if project_dir_row else None
+        paths = [str(cfg.scratch_dir), str(_NIXX_ROOT)]
+        if project_dir:
+            paths.append(project_dir)
+        return {
+            "model": cfg.llm_model,
+            "context_length": cfg.llm_context_length,
+            "summary_interval": cfg.summary_interval,
+            "intent_interval": cfg.intent_interval,
+            "intent": intent,
+            "paths": paths,
+        }
+
     # ── Dashboard HTML ────────────────────────────────────────────────────────
 
     _HTML = (Path(__file__).parent / "admin_web" / "index.html").read_text()
