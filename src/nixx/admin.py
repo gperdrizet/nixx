@@ -29,33 +29,64 @@ def create_app() -> FastAPI:
 
     # ── Service status ────────────────────────────────────────────────────────
 
-    def _service_status(name: str) -> dict[str, str]:
+    def _service_status(name: str, unit: str | None = None) -> dict[str, str]:
+        unit = unit or name
+        result: dict[str, str] = {"name": name, "state": "unknown", "uptime": ""}
         try:
             r = subprocess.run(
-                ["systemctl", "is-active", name],
+                ["systemctl", "is-active", unit],
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
-            state = r.stdout.strip()
+            result["state"] = r.stdout.strip()
         except Exception:
-            state = "unknown"
-        return {"name": name, "state": state}
+            pass
+        try:
+            r2 = subprocess.run(
+                ["systemctl", "show", unit, "--property=ActiveEnterTimestamp"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            ts_str = r2.stdout.strip().split("=", 1)[-1].strip()
+            if ts_str:
+                from datetime import datetime
+
+                fmt = "%a %Y-%m-%d %H:%M:%S %Z"
+                try:
+                    started = datetime.strptime(ts_str, fmt)
+                    # systemctl timestamps are in local time; get elapsed in seconds
+
+                    local_now = datetime.now()
+                    elapsed = int(local_now.timestamp() - started.timestamp())
+                    if elapsed < 0:
+                        elapsed = 0
+                    if elapsed < 3600:
+                        result["uptime"] = f"{elapsed // 60}m"
+                    elif elapsed < 86400:
+                        result["uptime"] = f"{elapsed // 3600}h {(elapsed % 3600) // 60}m"
+                    else:
+                        result["uptime"] = f"{elapsed // 86400}d {(elapsed % 86400) // 3600}h"
+                except ValueError:
+                    pass
+        except Exception:
+            pass
+        return result
 
     # ── Routes ────────────────────────────────────────────────────────────────
 
     @app.get("/admin/api/status")
     async def get_status() -> dict[str, Any]:
-        def _svc(display_name: str, unit: str) -> dict[str, str]:
-            s = _service_status(unit)
-            s["name"] = display_name
-            return s
+        from nixx.config import NixxConfig
+
+        cfg = NixxConfig()
 
         services = [
             _service_status("nixx-server"),
-            _service_status("nixx-embed"),
-            _svc("llamacpp", "llamacpp.service"),
-            _svc("postgresql", "docker"),
+            _service_status("postgresql", "docker"),
+            {**_service_status("nixx-embed"), "model": cfg.embedding_model},
+            {**_service_status("llamacpp", "llamacpp.service"), "model": cfg.llm_model},
         ]
         conn = await _db()
         try:

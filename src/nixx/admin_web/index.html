@@ -34,6 +34,7 @@
     .svc-info { flex: 1; min-width: 0; }
     .svc-name { font-size: 0.85rem; font-weight: 600; font-family: monospace; }
     .svc-state { font-size: 0.72rem; color: var(--muted); }
+    .svc-meta { font-size: 0.68rem; color: var(--muted); opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
     .restart-btn {
       padding: 0.3rem 0.6rem; border-radius: 0.3rem; border: 1px solid var(--border);
       background: var(--surface2); color: var(--text); font-size: 0.75rem; cursor: pointer;
@@ -199,7 +200,8 @@
         <div class="svc-dot ${svc.state}"></div>
         <div class="svc-info">
           <div class="svc-name">${svc.name}</div>
-          <div class="svc-state">${svc.state}</div>
+          <div class="svc-state">${svc.state}${svc.uptime ? ` · ${svc.uptime}` : ''}</div>
+          ${svc.model ? `<div class="svc-meta">${svc.model}</div>` : ''}
         </div>
         ${restartBtn}
       </div>`;
