@@ -48,17 +48,6 @@
     .chart-title { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
     .chart-wrap { position: relative; height: 180px; }
 
-    /* ── Recent buffer ── */
-    .section-title { font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
-    .buffer-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-    .buffer-table th { text-align: left; padding: 0.4rem 0.6rem; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500; }
-    .buffer-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
-    .buffer-table tr:last-child td { border-bottom: none; }
-    .role-user { color: var(--accent); font-weight: 600; }
-    .role-assistant { color: var(--green); font-weight: 600; }
-    .role-system { color: var(--muted); font-style: italic; }
-    .snippet { color: var(--muted); max-width: 500px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
     /* ── Refresh ── */
     #refresh-info { font-size: 0.72rem; color: var(--muted); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
     #refresh-btn { padding: 0.25rem 0.6rem; border-radius: 0.3rem; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.75rem; cursor: pointer; }
@@ -97,13 +86,6 @@
     </div>
   </div>
 
-  <div class="section-title">recent buffer</div>
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:0.5rem;overflow:hidden;">
-    <table class="buffer-table">
-      <thead><tr><th>#</th><th>role</th><th>snippet</th><th>time</th></tr></thead>
-      <tbody id="buffer-body"></tbody>
-    </table>
-  </div>
 </div>
 
 <script>
@@ -188,10 +170,9 @@
   async function refresh() {
     document.getElementById('ts').textContent = new Date().toLocaleTimeString();
 
-    const [statusResp, metricsResp, bufferResp] = await Promise.all([
+    const [statusResp, metricsResp] = await Promise.all([
       fetch(`${API}/admin/api/status`).then(r => r.json()).catch(() => null),
       fetch(`${API}/admin/api/metrics?limit=60`).then(r => r.json()).catch(() => null),
-      fetch(`${API}/admin/api/recent-buffer`).then(r => r.json()).catch(() => null),
     ]);
 
     // Services
@@ -278,20 +259,6 @@
       combinedChart = updateOrCreate(combinedChart, 'combined-chart', 'bar', combinedData, combinedOpts);
     }
 
-    // Recent buffer
-    if (bufferResp?.entries) {
-      const tbody = document.getElementById('buffer-body');
-      tbody.innerHTML = bufferResp.entries.map(e => {
-        const roleClass = `role-${e.role}`;
-        const time = e.created_at ? new Date(e.created_at).toLocaleTimeString() : '-';
-        return `<tr>
-          <td style="color:var(--muted);font-family:monospace">${e.id}</td>
-          <td class="${roleClass}">${e.role}</td>
-          <td class="snippet">${e.snippet.replace(/</g, '&lt;')}</td>
-          <td style="color:var(--muted);font-size:0.75rem;white-space:nowrap">${time}</td>
-        </tr>`;
-      }).join('');
-    }
   }
 
   document.getElementById('refresh-btn').addEventListener('click', refresh);
