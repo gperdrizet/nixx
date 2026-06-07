@@ -201,7 +201,7 @@ def create_app() -> FastAPI:
 
     @app.get("/admin/api/config")
     async def get_config() -> dict[str, Any]:
-        from nixx.config import NixxConfig, _NIXX_ROOT
+        from nixx.config import NixxConfig
 
         cfg = NixxConfig()
         conn = await _db()
@@ -214,9 +214,6 @@ def create_app() -> FastAPI:
             await conn.close()
         intent = intent_row["value"] if intent_row else None
         project_dir = project_dir_row["value"] if project_dir_row else None
-        paths = [str(cfg.scratch_dir), str(_NIXX_ROOT)]
-        if project_dir:
-            paths.append(project_dir)
         return {
             "model": cfg.llm_model,
             "context_length": cfg.llm_context_length,
@@ -224,7 +221,7 @@ def create_app() -> FastAPI:
             "intent_interval": cfg.intent_interval,
             "intent": intent,
             "paths": {
-                "source": str(_NIXX_ROOT),
+                "source": str(cfg.source_dir),
                 "scratch": str(cfg.scratch_dir),
                 "project": project_dir,
             },

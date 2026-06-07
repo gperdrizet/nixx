@@ -7,8 +7,13 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Absolute path to nixx project .env file
-_NIXX_ROOT = Path(__file__).parent.parent.parent
-_ENV_FILE = _NIXX_ROOT / ".env"
+# When installed via pipx, Path(__file__) points into the venv - not the repo.
+# NIXX_SOURCE_DIR in the environment overrides the computed path.
+_COMPUTED_ROOT = Path(__file__).parent.parent.parent
+_ENV_FILE = _COMPUTED_ROOT / ".env"
+import os as _os  # noqa: E402
+
+_NIXX_ROOT = Path(_os.environ.get("NIXX_SOURCE_DIR", str(_COMPUTED_ROOT)))
 
 
 class NixxConfig(BaseSettings):
@@ -76,6 +81,12 @@ class NixxConfig(BaseSettings):
     scratch_dir: Path = Field(
         default=Path.home() / "nixx_scratch",
         description="Directory for file read/write operations",
+    )
+
+    # Source directory (repo root) - overrides the path computed from __file__
+    source_dir: Path = Field(
+        default=_COMPUTED_ROOT,
+        description="Root of the nixx source repository",
     )
 
     # Database settings
