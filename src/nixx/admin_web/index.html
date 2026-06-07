@@ -56,6 +56,18 @@
     .cfg-key { color: var(--muted); font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
     .cfg-val { font-family: monospace; font-size: 0.82rem; color: var(--text); word-break: break-all; }
     .cfg-val.none { color: var(--muted); font-style: italic; }
+    .cfg-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.1rem; }
+    .cfg-tag { font-family: monospace; font-size: 0.75rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 0.25rem; padding: 0.1rem 0.4rem; color: var(--text); }
+
+    /* ── Cheat sheet cards ── */
+    .cheat-grid { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; margin-bottom: 1.5rem; }
+    @media (max-width: 600px) { .cheat-grid { grid-template-columns: 1fr; } }
+    .cheat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem 1.25rem; }
+    .cheat-title { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.75rem; }
+    .cheat-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .cheat-table tr + tr td { padding-top: 0.3rem; }
+    .cheat-table td:first-child { font-family: monospace; color: var(--accent); white-space: nowrap; padding-right: 1rem; vertical-align: top; }
+    .cheat-table td:last-child { color: var(--muted); }
 
     /* ── Refresh ── */
     #refresh-info { font-size: 0.72rem; color: var(--muted); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
@@ -96,6 +108,54 @@
   </div>
 
   <div class="config-panel" id="config-panel"></div>
+
+  <div class="cheat-grid">
+    <div class="cheat-card">
+      <div class="cheat-title">TUI commands &amp; keys</div>
+      <table class="cheat-table">
+        <tr><td>/help</td><td>show all commands and keybindings</td></tr>
+        <tr><td>/clear</td><td>clear conversation</td></tr>
+        <tr><td>/recall</td><td>toggle episodic recall on/off</td></tr>
+        <tr><td>/intent-toggle</td><td>toggle intent injection on/off</td></tr>
+        <tr><td>/intent [text|clear]</td><td>show, set, or clear current intent</td></tr>
+        <tr><td>/intent-bar</td><td>toggle intent bar visibility</td></tr>
+        <tr><td>/interval [words]</td><td>show or set summary word threshold</td></tr>
+        <tr><td>/threshold [0-1]</td><td>show or set recall similarity threshold</td></tr>
+        <tr><td>/project [dir|clear]</td><td>show, set, or clear project directory</td></tr>
+        <tr><td>/transcript [id] [end]</td><td>view transcript messages</td></tr>
+        <tr><td>/context</td><td>show current context debug info</td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td>Ctrl+L</td><td>clear conversation</td></tr>
+        <tr><td>Ctrl+R</td><td>toggle episodic recall</td></tr>
+        <tr><td>Ctrl+T</td><td>toggle intent injection</td></tr>
+        <tr><td>Shift+Enter</td><td>new line in input</td></tr>
+        <tr><td>Enter (on msg)</td><td>edit user message and regenerate</td></tr>
+        <tr><td>Backspace (on msg)</td><td>rewind to before that message</td></tr>
+        <tr><td>y (on msg)</td><td>copy message to clipboard</td></tr>
+        <tr><td>Escape</td><td>cancel edit</td></tr>
+        <tr><td>Ctrl+C</td><td>quit</td></tr>
+      </table>
+    </div>
+    <div class="cheat-card">
+      <div class="cheat-title">nixx CLI commands</div>
+      <table class="cheat-table">
+        <tr><td>nixx serve</td><td>start the API server</td></tr>
+        <tr><td>nixx status</td><td>check server health</td></tr>
+        <tr><td>nixx chat</td><td>launch the chat TUI</td></tr>
+        <tr><td>nixx ingest &lt;src&gt;</td><td>ingest a file or URL into memory</td></tr>
+        <tr><td>&nbsp;&nbsp;--name &lt;label&gt;</td><td>label for the source (default: path/URL)</td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td>nixx-server</td><td>start API server (entry point)</td></tr>
+        <tr><td>nixx-admin</td><td>start admin dashboard on :8001</td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td>pipx inject nixx . --force -q</td><td>reinstall from source</td></tr>
+        <tr><td>sudo systemctl restart nixx-server</td><td>restart API server</td></tr>
+        <tr><td>sudo systemctl restart nixx-admin</td><td>restart admin dashboard</td></tr>
+        <tr><td>sudo systemctl restart nixx-embed</td><td>restart embedding server</td></tr>
+        <tr><td>journalctl -u nixx-server -f</td><td>tail server logs</td></tr>
+      </table>
+    </div>
+  </div>
 
 </div>
 
@@ -221,6 +281,7 @@
           ${row('context', (c.context_length || 0).toLocaleString() + ' tokens')}
           ${row('summary frequency', (c.summary_interval || 0).toLocaleString() + ' words')}
           ${row('intent frequency', (c.intent_interval || 0) + ' messages')}
+          <div class="cfg-row"><span class="cfg-key">tools</span><div class="cfg-tags">${(c.tools || []).map(t => `<span class="cfg-tag">${t}</span>`).join('')}</div></div>
         </div>
         <div class="cfg-col">
           ${row('intent', c.intent ?? 'none', !c.intent)}

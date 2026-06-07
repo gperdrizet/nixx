@@ -214,12 +214,28 @@ def create_app() -> FastAPI:
             await conn.close()
         intent = intent_row["value"] if intent_row else None
         project_dir = project_dir_row["value"] if project_dir_row else None
+        tools = [
+            "read_file",
+            "write_file",
+            "edit_file",
+            "list_dir",
+            "delete_file",
+            "read_plan",
+            "write_plan",
+            "run_python",
+            "web_search",
+            "read_webpage",
+            "validate_and_commit",
+            "search_transcript",
+            "view_transcript",
+        ]
         return {
             "model": cfg.llm_model,
             "context_length": cfg.llm_context_length,
             "summary_interval": cfg.summary_interval,
             "intent_interval": cfg.intent_interval,
             "intent": intent,
+            "tools": tools,
             "paths": {
                 "source": str(cfg.source_dir),
                 "scratch": str(cfg.scratch_dir),
