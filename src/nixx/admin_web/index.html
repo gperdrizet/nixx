@@ -76,8 +76,6 @@
 
   <div class="grid" id="stats-grid"></div>
 
-  <div class="config-panel" id="config-panel"></div>
-
   <div class="charts">
     <div class="chart-card">
       <div class="chart-title">response latency (ms)</div>
@@ -96,6 +94,8 @@
       <div class="chart-wrap"><canvas id="combined-chart"></canvas></div>
     </div>
   </div>
+
+  <div class="config-panel" id="config-panel"></div>
 
 </div>
 
@@ -214,15 +214,15 @@
         `<div class="cfg-row"><span class="cfg-key">${key}</span><span class="cfg-val${none ? ' none' : ''}">${val}</span></div>`;
       document.getElementById('config-panel').innerHTML =
         `<div class="cfg-col">
+          ${row('source path', p.source ?? '-')}
+          ${row('scratch path', p.scratch ?? '-')}
+          ${p.project ? row('project path', p.project) : row('project path', 'none', true)}
           ${row('model', c.model)}
           ${row('context', (c.context_length || 0).toLocaleString() + ' tokens')}
           ${row('summary frequency', (c.summary_interval || 0).toLocaleString() + ' words')}
           ${row('intent frequency', (c.intent_interval || 0) + ' messages')}
         </div>
         <div class="cfg-col">
-          ${row('source path', p.source ?? '-')}
-          ${row('scratch path', p.scratch ?? '-')}
-          ${p.project ? row('project path', p.project) : row('project path', 'none', true)}
           ${row('intent', c.intent ?? 'none', !c.intent)}
         </div>`;
     }
