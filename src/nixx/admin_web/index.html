@@ -261,6 +261,7 @@
     // Stat cards
     if (statusResp?.db) {
       const db = statusResp.db;
+      const ctxLen = configResp?.context_length;
       document.getElementById('stats-grid').innerHTML = [
         statCard('buffer messages', fmt(db.buffer_rows)),
         statCard('user messages', fmt(db.user_msgs)),
@@ -269,6 +270,7 @@
         statCard('sources', fmt(db.sources)),
         statCard('memory chunks', fmt(db.memory_chunks)),
         statCard('tool calls', fmt(db.total_tool_calls)),
+        statCard('context size', ctxLen ? fmt(ctxLen) + ' tok' : '-'),
       ].join('');
     }
 
