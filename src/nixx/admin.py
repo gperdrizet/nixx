@@ -123,6 +123,57 @@ def create_app() -> FastAPI:
         finally:
             await conn.close()
 
+    @app.get("/admin/api/metrics")
+    async def get_metrics(limit: int = 60) -> dict[str, Any]:
+        """Return per-response metrics for the last N assistant messages."""
+        conn = await _db()
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT id, created_at,
+                       prompt_tokens, completion_tokens,
+                       latency_ms, tool_calls_made,
+                       LENGTH(content) AS char_count
+                FROM buffer
+                WHERE role = 'assistant'
+                ORDER BY id DESC
+                LIMIT $1
+                """,
+                limit,
+            )
+            # Aggregate tool call stats
+            tool_rows = await conn.fetch("""
+                SELECT COALESCE(tool_calls_made, 0) AS n
+                FROM buffer
+                WHERE role = 'assistant'
+                  AND tool_calls_made IS NOT NULL
+                """)
+            total_tool_calls = sum(r["n"] for r in tool_rows)
+            no_tools = await conn.fetchval(
+                "SELECT COUNT(*) FROM buffer WHERE role = 'assistant' AND tool_calls_made IS NULL"
+            )
+            return {
+                "history": [
+                    {
+                        "id": r["id"],
+                        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                        "prompt_tokens": r["prompt_tokens"],
+                        "completion_tokens": r["completion_tokens"],
+                        "latency_ms": r["latency_ms"],
+                        "tool_calls_made": r["tool_calls_made"],
+                        "char_count": r["char_count"],
+                    }
+                    for r in reversed(rows)
+                ],
+                "tool_summary": {
+                    "total_tool_calls": total_tool_calls,
+                    "responses_with_tools": len(tool_rows),
+                    "responses_without_tools": int(no_tools),
+                },
+            }
+        finally:
+            await conn.close()
+
     @app.post("/admin/api/restart/{service}")
     async def restart_service(service: str) -> dict[str, str]:
         allowed = {"nixx-server", "nixx-embed"}

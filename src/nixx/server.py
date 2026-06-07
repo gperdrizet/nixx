@@ -365,9 +365,13 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             )
 
         # Non-streaming with tool execution loop
+        import time as _time
+
         tools = app.state.tools
         tool_defs = tools.to_openai_tools()
         max_tool_rounds = 10  # Prevent infinite loops
+        ns_tool_call_count = 0
+        ns_start = _time.monotonic()
 
         for _ in range(max_tool_rounds):
             _strip_trailing_empty_assistant(messages)
@@ -405,6 +409,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                         "content": tool_result.to_content(),
                     }
                 )
+            ns_tool_call_count += len(result.tool_calls)
 
         content = result.content
 
@@ -422,9 +427,17 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         # Persist the exchange to the buffer.
         if last_user:
             try:
+                ns_elapsed_ms = int((_time.monotonic() - ns_start) * 1000)
                 await memory.save_to_buffer("user", last_user)
                 if content:
-                    await memory.save_to_buffer("assistant", content)
+                    await memory.save_to_buffer(
+                        "assistant",
+                        content,
+                        prompt_tokens=result.prompt_tokens or None,
+                        completion_tokens=result.completion_tokens or None,
+                        latency_ms=ns_elapsed_ms,
+                        tool_calls_made=ns_tool_call_count if ns_tool_call_count else None,
+                    )
             except Exception as exc:
                 logger.warning("Buffer write failed: %s", exc)
 
@@ -809,11 +822,15 @@ async def _chat_event_stream(
     app: FastAPI | None = None,
     config: NixxConfig | None = None,
 ) -> AsyncGenerator[str, None]:
+    import time
+
     accumulated = ""
     tool_defs = tools.to_openai_tools() if tools else None
     max_tool_rounds = 10
     recent_tool_names: list[str] = []  # for stuck-loop detection
     tool_calls_made = False
+    tool_call_count = 0
+    stream_start = time.monotonic()
 
     # --- Resume detection: if the last non-system message is an assistant turn
     # with tool_calls, the user approved the tool plan and we skip first-pass
@@ -965,6 +982,7 @@ async def _chat_event_stream(
                 tool_calls_made = True
                 break
             tool_calls_made = True
+            tool_call_count += len(pending_tool_calls)
             accumulated = ""
 
     # --- Judge/verification phase: synthesize final answer after tool use ---
@@ -1010,10 +1028,16 @@ async def _chat_event_stream(
     # Write to buffer BEFORE yielding [DONE]
     if memory is not None:
         try:
+            elapsed_ms = int((time.monotonic() - stream_start) * 1000)
             if user_text:
                 await memory.save_to_buffer("user", user_text)
             if accumulated:
-                await memory.save_to_buffer("assistant", accumulated)
+                await memory.save_to_buffer(
+                    "assistant",
+                    accumulated,
+                    latency_ms=elapsed_ms,
+                    tool_calls_made=tool_call_count if tool_call_count else None,
+                )
         except Exception as exc:
             logger.warning("Buffer write failed: %s", exc)
 

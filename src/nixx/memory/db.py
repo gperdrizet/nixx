@@ -167,6 +167,15 @@ async def init_schema(pool: asyncpg.Pool, dimensions: int = 1024) -> None:  # ty
             ON buffer USING gin (tsv);
         """)
 
+        # Inference metrics added later
+        await conn.execute("""
+            ALTER TABLE buffer
+            ADD COLUMN IF NOT EXISTS prompt_tokens   INTEGER,
+            ADD COLUMN IF NOT EXISTS completion_tokens INTEGER,
+            ADD COLUMN IF NOT EXISTS latency_ms      INTEGER,
+            ADD COLUMN IF NOT EXISTS tool_calls_made INTEGER;
+        """)
+
         # ── Persistent server state ──
 
         await conn.execute("""
@@ -212,14 +221,28 @@ async def save_buffer_entry(
     role: str,
     content: str,
     origin: str = "api",
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    latency_ms: int | None = None,
+    tool_calls_made: int | None = None,
 ) -> int:
     """Append a message to the buffer. Returns the new id."""
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "INSERT INTO buffer (role, content, origin) VALUES ($1, $2, $3) RETURNING id",
+            """
+            INSERT INTO buffer (role, content, origin,
+                                prompt_tokens, completion_tokens,
+                                latency_ms, tool_calls_made)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id
+            """,
             role,
             content,
             origin,
+            prompt_tokens,
+            completion_tokens,
+            latency_ms,
+            tool_calls_made,
         )
         return int(row["id"])
 

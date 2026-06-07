@@ -80,11 +80,21 @@
 
   <div class="charts">
     <div class="chart-card">
-        <div class="chart-title">response length over time (chars)</div>
-        <div class="chart-wrap"><canvas id="token-chart"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">messages by role</div>
+      <div class="chart-title">response latency (ms)</div>
+      <div class="chart-wrap"><canvas id="latency-chart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">tokens generated per response</div>
+      <div class="chart-wrap"><canvas id="tokens-chart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">tool use vs plain responses</div>
+      <div class="chart-wrap"><canvas id="tool-donut-chart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">tokens generated &amp; tool calls over time</div>
+      <div class="chart-wrap"><canvas id="combined-chart"></canvas></div>
+    </div>
   </div>
 
   <div class="section-title">recent buffer</div>
@@ -98,17 +108,24 @@
 
 <script>
   const API = window.location.origin;
-  let tokenChart = null, splitChart = null;
+  let latencyChart = null, tokensChart = null, toolDonutChart = null, combinedChart = null;
 
-  const CHART_DEFAULTS = {
+  const BAR_DEFAULTS = {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
     plugins: { legend: { display: false } },
     scales: {
-      x: { ticks: { color: '#64748b', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#2d2d4e' } },
-      y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' } },
+      x: { ticks: { color: '#64748b', maxTicksLimit: 10, font: { size: 10 } }, grid: { color: '#2d2d4e' } },
+      y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' }, beginAtZero: true },
     },
+  };
+
+  const DONUT_DEFAULTS = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: { legend: { display: true, position: 'bottom', labels: { color: '#e2e8f0', font: { size: 11 } } } },
   };
 
   function statCard(title, value, sub = '') {
@@ -159,11 +176,21 @@
     return String(n);
   }
 
+  function updateOrCreate(chartRef, id, type, data, options) {
+    if (chartRef) {
+      chartRef.data = data;
+      chartRef.update();
+      return chartRef;
+    }
+    return new Chart(document.getElementById(id), { type, data, options });
+  }
+
   async function refresh() {
     document.getElementById('ts').textContent = new Date().toLocaleTimeString();
 
-    const [statusResp, bufferResp] = await Promise.all([
+    const [statusResp, metricsResp, bufferResp] = await Promise.all([
       fetch(`${API}/admin/api/status`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/admin/api/metrics?limit=60`).then(r => r.json()).catch(() => null),
       fetch(`${API}/admin/api/recent-buffer`).then(r => r.json()).catch(() => null),
     ]);
 
@@ -185,55 +212,70 @@
       ].join('');
     }
 
-    // Message history chart
-    const tokenResp = await fetch(`${API}/admin/api/message-history`).then(r => r.json()).catch(() => null);
-    if (tokenResp?.history?.length) {
-      const h = tokenResp.history;
-      const asstMsgs = h.filter(r => r.role === 'assistant');
-      const labels = asstMsgs.map((_, i) => i + 1);
-      const chars = asstMsgs.map(r => r.char_count || 0);
-      const userCount = h.filter(r => r.role === 'user').length;
-      const asstCount = asstMsgs.length;
+    // Charts
+    if (metricsResp?.history?.length) {
+      const h = metricsResp.history;
+      const labels = h.map((_, i) => i + 1);
 
-      if (tokenChart) {
-        tokenChart.data.labels = labels;
-        tokenChart.data.datasets[0].data = chars;
-        tokenChart.update();
-      } else {
-        tokenChart = new Chart(document.getElementById('token-chart'), {
-          type: 'bar',
-          data: {
-            labels,
-            datasets: [{ data: chars, backgroundColor: '#4f46e5', borderRadius: 2 }],
-          },
-          options: { ...CHART_DEFAULTS },
-        });
-      }
+      // 1. Latency bar chart
+      const latencies = h.map(r => r.latency_ms ?? null);
+      latencyChart = updateOrCreate(latencyChart, 'latency-chart', 'bar', {
+        labels,
+        datasets: [{ data: latencies, backgroundColor: '#eab308', borderRadius: 2, spanGaps: true }],
+      }, { ...BAR_DEFAULTS, scales: { ...BAR_DEFAULTS.scales, y: { ...BAR_DEFAULTS.scales.y, title: { display: true, text: 'ms', color: '#64748b', font: { size: 10 } } } } });
 
-      if (splitChart) {
-        splitChart.data.datasets[0].data = [userCount, asstCount];
-        splitChart.update();
-      } else {
-        splitChart = new Chart(document.getElementById('split-chart'), {
-          type: 'doughnut',
-          data: {
-            labels: ['user', 'assistant'],
-            datasets: [{
-              data: [userCount, asstCount],
-              backgroundColor: ['#4f46e5', '#22c55e'],
-              borderWidth: 0,
-            }],
+      // 2. Tokens generated bar chart
+      const tokens = h.map(r => r.completion_tokens ?? null);
+      const hasTokens = tokens.some(v => v != null);
+      tokensChart = updateOrCreate(tokensChart, 'tokens-chart', 'bar', {
+        labels,
+        datasets: [{ data: hasTokens ? tokens : h.map(r => r.char_count), backgroundColor: '#4f46e5', borderRadius: 2 }],
+      }, { ...BAR_DEFAULTS, plugins: { ...BAR_DEFAULTS.plugins, subtitle: { display: !hasTokens, text: '(char count - tokens not yet recorded)', color: '#64748b', font: { size: 9 } } } });
+
+      // 3. Tool use donut
+      const ts = metricsResp.tool_summary;
+      toolDonutChart = updateOrCreate(toolDonutChart, 'tool-donut-chart', 'doughnut', {
+        labels: ['with tools', 'plain'],
+        datasets: [{ data: [ts.responses_with_tools, ts.responses_without_tools], backgroundColor: ['#22c55e', '#4f46e5'], borderWidth: 0 }],
+      }, DONUT_DEFAULTS);
+
+      // 4. Combined: tokens + tool calls over time (dual Y)
+      const toolCalls = h.map(r => r.tool_calls_made ?? 0);
+      const combinedData = {
+        labels,
+        datasets: [
+          {
+            label: 'tokens',
+            data: hasTokens ? tokens : h.map(r => r.char_count),
+            backgroundColor: 'rgba(79,70,229,0.6)',
+            borderRadius: 2,
+            type: 'bar',
+            yAxisID: 'y',
           },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            plugins: {
-              legend: { display: true, position: 'bottom', labels: { color: '#e2e8f0', font: { size: 11 } } },
-            },
+          {
+            label: 'tool calls',
+            data: toolCalls,
+            borderColor: '#22c55e',
+            backgroundColor: '#22c55e',
+            type: 'line',
+            yAxisID: 'y1',
+            tension: 0.3,
+            pointRadius: 3,
           },
-        });
-      }
+        ],
+      };
+      const combinedOpts = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: { legend: { display: true, position: 'bottom', labels: { color: '#e2e8f0', font: { size: 11 } } } },
+        scales: {
+          x: { ticks: { color: '#64748b', maxTicksLimit: 10, font: { size: 10 } }, grid: { color: '#2d2d4e' } },
+          y: { position: 'left', ticks: { color: '#4f46e5', font: { size: 10 } }, grid: { color: '#2d2d4e' }, beginAtZero: true },
+          y1: { position: 'right', ticks: { color: '#22c55e', font: { size: 10 } }, grid: { drawOnChartArea: false }, beginAtZero: true },
+        },
+      };
+      combinedChart = updateOrCreate(combinedChart, 'combined-chart', 'bar', combinedData, combinedOpts);
     }
 
     // Recent buffer

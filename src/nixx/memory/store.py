@@ -42,9 +42,27 @@ class MemoryStore:
         self._llm = OpenAIClient(base_url=config.llm_base_url, api_key=config.llm_api_key)
         self._embedder = OpenAIClient(base_url=config.embedding_base_url)
 
-    async def save_to_buffer(self, role: str, content: str, origin: str = "api") -> int:
+    async def save_to_buffer(
+        self,
+        role: str,
+        content: str,
+        origin: str = "api",
+        prompt_tokens: int | None = None,
+        completion_tokens: int | None = None,
+        latency_ms: int | None = None,
+        tool_calls_made: int | None = None,
+    ) -> int:
         """Append a message to the persistent buffer. Returns the new id."""
-        return await save_buffer_entry(self._pool, role=role, content=content, origin=origin)
+        return await save_buffer_entry(
+            self._pool,
+            role=role,
+            content=content,
+            origin=origin,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            latency_ms=latency_ms,
+            tool_calls_made=tool_calls_made,
+        )
 
     async def get_source_range(self) -> tuple[int, int | None]:
         """Return (start_id, end_id) spanning from after the last source to current max buffer id.
