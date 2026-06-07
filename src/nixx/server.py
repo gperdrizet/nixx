@@ -140,12 +140,17 @@ async def _assemble_messages(
 
     from nixx.config import _NIXX_ROOT
 
-    file_access_block = f"\n\n## File access\n\nScratch directory: {config.scratch_dir}"
-    file_access_block += f"\nSource directory (nixx): {_NIXX_ROOT}"
+    file_access_block = (
+        "\n\n## File access\n\nYou can read and write files in any of these directories:\n"
+    )
+    file_access_block += f"\n- Scratch: {config.scratch_dir}"
+    file_access_block += f"\n- Source (nixx): {_NIXX_ROOT}"
     if getattr(app.state, "project_dir", None):
-        file_access_block += f"\nProject directory: {app.state.project_dir}"
+        file_access_block += f"\n- Project: {app.state.project_dir}"
     else:
-        file_access_block += "\nNo project directory set."
+        file_access_block += (
+            "\n\nNo project directory is currently set (use /project <dir> in the TUI to set one)."
+        )
 
     system_content = (
         SYSTEM_PROMPT
