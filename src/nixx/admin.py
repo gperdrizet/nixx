@@ -66,7 +66,8 @@ def create_app() -> FastAPI:
                     (SELECT COUNT(*) FROM buffer WHERE role = 'assistant')  AS asst_msgs,
                     (SELECT COUNT(*) FROM summaries)      AS summaries,
                     (SELECT COUNT(*) FROM sources)        AS sources,
-                    (SELECT COUNT(*) FROM memories)       AS memory_chunks
+                    (SELECT COUNT(*) FROM memories)       AS memory_chunks,
+                    (SELECT COALESCE(SUM(tool_calls_made), 0) FROM buffer WHERE role = 'assistant') AS total_tool_calls
                 """)
             db = dict(rows[0])
         except Exception as exc:

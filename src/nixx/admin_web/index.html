@@ -190,6 +190,7 @@
         statCard('episode summaries', fmt(db.summaries)),
         statCard('sources', fmt(db.sources)),
         statCard('memory chunks', fmt(db.memory_chunks)),
+        statCard('tool calls', fmt(db.total_tool_calls)),
       ].join('');
     }
 
