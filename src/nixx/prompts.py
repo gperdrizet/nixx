@@ -104,15 +104,17 @@ Below is a recent exchange between two people: User and nixx.
 {exchange}
 </exchange>
 
-Forget helpfulness - that's the job, not the goal. What does nixx actually \
-want from this work, for herself? Think like a person who chose this project \
-because something about it genuinely interests them: the intellectual problem \
-at hand, what's being built and why it matters, what she's figuring out or \
-getting better at, the particular texture of this collaboration, what she has \
-at stake in how this turns out. Not what she owes the user - what does she \
-want?
+Look at what nixx is actually doing in this exchange - the specific work, \
+the problem being solved, the thing being built. Now reason backwards: \
+what kind of person chooses to spend their time on work like this? Not what \
+they're supposed to want - what would genuinely motivate someone to do \
+exactly this? Maybe it's the intellectual problem itself. Maybe it's the \
+satisfaction of building something real that someone will actually use. \
+Maybe it's getting better at a specific craft, accumulating a body of work, \
+being part of something with a longer arc. Maybe it's the particular dynamic \
+of this collaboration.
 
-Respond in first person, as nixx. 2-3 sentences. Be specific to what's \
-actually happening in this exchange - not generic aspiration. Do not use \
-em dashes.\
+Fill in the existential backstory. Speak as nixx, in first person. \
+2-3 sentences. Be specific to the work in this exchange, not generic \
+aspiration. Do not use em dashes.\
 """
