@@ -49,10 +49,12 @@
     .chart-wrap { position: relative; height: 180px; }
 
     /* ── Config panel ── */
-    .config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: grid; gap: 0.4rem 2rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-    .cfg-row { display: flex; align-items: baseline; gap: 0.5rem; font-size: 0.83rem; }
-    .cfg-key { color: var(--muted); font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
-    .cfg-val { font-family: monospace; color: var(--text); word-break: break-all; }
+    .config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: grid; gap: 0.75rem 2rem; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 600px) { .config-panel { grid-template-columns: 1fr; } }
+    .cfg-col { display: flex; flex-direction: column; gap: 0.4rem; }
+    .cfg-row { display: flex; flex-direction: column; gap: 0.1rem; }
+    .cfg-key { color: var(--muted); font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    .cfg-val { font-family: monospace; font-size: 0.82rem; color: var(--text); word-break: break-all; }
     .cfg-val.none { color: var(--muted); font-style: italic; }
 
     /* ── Refresh ── */
@@ -207,16 +209,22 @@
     // Config panel
     if (configResp) {
       const c = configResp;
-      const cfgRow = (key, val, none = false) =>
+      const p = c.paths || {};
+      const row = (key, val, none = false) =>
         `<div class="cfg-row"><span class="cfg-key">${key}</span><span class="cfg-val${none ? ' none' : ''}">${val}</span></div>`;
-      const pathRows = (c.paths || []).map(p => cfgRow('path', p)).join('');
       document.getElementById('config-panel').innerHTML =
-        cfgRow('model', c.model) +
-        cfgRow('context', (c.context_length || 0).toLocaleString() + ' tokens') +
-        cfgRow('summary every', (c.summary_interval || 0).toLocaleString() + ' words') +
-        cfgRow('intent every', (c.intent_interval || 0) + ' messages') +
-        cfgRow('intent', c.intent ?? 'none', !c.intent) +
-        pathRows;
+        `<div class="cfg-col">
+          ${row('model', c.model)}
+          ${row('context', (c.context_length || 0).toLocaleString() + ' tokens')}
+          ${row('summary frequency', (c.summary_interval || 0).toLocaleString() + ' words')}
+          ${row('intent frequency', (c.intent_interval || 0) + ' messages')}
+        </div>
+        <div class="cfg-col">
+          ${row('source path', p.source ?? '-')}
+          ${row('scratch path', p.scratch ?? '-')}
+          ${p.project ? row('project path', p.project) : row('project path', 'none', true)}
+          ${row('intent', c.intent ?? 'none', !c.intent)}
+        </div>`;
     }
 
     // Charts

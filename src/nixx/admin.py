@@ -223,7 +223,11 @@ def create_app() -> FastAPI:
             "summary_interval": cfg.summary_interval,
             "intent_interval": cfg.intent_interval,
             "intent": intent,
-            "paths": paths,
+            "paths": {
+                "source": str(_NIXX_ROOT),
+                "scratch": str(cfg.scratch_dir),
+                "project": project_dir,
+            },
         }
 
     # ── Dashboard HTML ────────────────────────────────────────────────────────
