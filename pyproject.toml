@@ -47,8 +47,15 @@ target-version = ['py312']
 line-length = 100
 target-version = "py312"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"nixx" = ["web/*", "admin_web/*"]
+
 [project.scripts]
 nixx = "nixx.cli:main"
+nixx-admin = "nixx.admin:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

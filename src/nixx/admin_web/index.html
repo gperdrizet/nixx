@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>nixx admin</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f1a; --surface: #1a1a2e; --surface2: #16213e;
+      --accent: #4f46e5; --text: #e2e8f0; --muted: #64748b;
+      --border: #2d2d4e; --green: #22c55e; --yellow: #eab308; --red: #ef4444;
+    }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; font-size: 15px; line-height: 1.5; }
+    #app { max-width: 960px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.3rem; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+    .subtitle { font-size: 0.8rem; color: var(--muted); margin-bottom: 2rem; }
+
+    /* ── Grid ── */
+    .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem 1.25rem; }
+    .card-title { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.4rem; }
+    .card-value { font-size: 1.6rem; font-weight: 700; }
+    .card-sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
+
+    /* ── Services ── */
+    .services { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .svc { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; min-width: 180px; }
+    .svc-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .svc-dot.active { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .svc-dot.inactive, .svc-dot.failed { background: var(--red); }
+    .svc-dot.unknown { background: var(--muted); }
+    .svc-info { flex: 1; min-width: 0; }
+    .svc-name { font-size: 0.85rem; font-weight: 600; font-family: monospace; }
+    .svc-state { font-size: 0.72rem; color: var(--muted); }
+    .restart-btn {
+      padding: 0.3rem 0.6rem; border-radius: 0.3rem; border: 1px solid var(--border);
+      background: var(--surface2); color: var(--text); font-size: 0.75rem; cursor: pointer;
+    }
+    .restart-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .restart-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Charts ── */
+    .charts { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; margin-bottom: 1.5rem; }
+    @media (max-width: 600px) { .charts { grid-template-columns: 1fr; } }
+    .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem; }
+    .chart-title { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .chart-wrap { position: relative; height: 180px; }
+
+    /* ── Recent buffer ── */
+    .section-title { font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .buffer-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .buffer-table th { text-align: left; padding: 0.4rem 0.6rem; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500; }
+    .buffer-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .buffer-table tr:last-child td { border-bottom: none; }
+    .role-user { color: var(--accent); font-weight: 600; }
+    .role-assistant { color: var(--green); font-weight: 600; }
+    .role-system { color: var(--muted); font-style: italic; }
+    .snippet { color: var(--muted); max-width: 500px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Refresh ── */
+    #refresh-info { font-size: 0.72rem; color: var(--muted); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
+    #refresh-btn { padding: 0.25rem 0.6rem; border-radius: 0.3rem; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 0.75rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <h1>nixx</h1>
+  <div class="subtitle">admin dashboard · pyrite · <span id="ts">-</span></div>
+
+  <div id="refresh-info">
+    <span>auto-refresh every 30s</span>
+    <button id="refresh-btn">↻ refresh now</button>
+  </div>
+
+  <div class="services" id="services-row"></div>
+
+  <div class="grid" id="stats-grid"></div>
+
+  <div class="charts">
+    <div class="chart-card">
+        <div class="chart-title">response length over time (chars)</div>
+        <div class="chart-wrap"><canvas id="token-chart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">messages by role</div>
+  </div>
+
+  <div class="section-title">recent buffer</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:0.5rem;overflow:hidden;">
+    <table class="buffer-table">
+      <thead><tr><th>#</th><th>role</th><th>snippet</th><th>time</th></tr></thead>
+      <tbody id="buffer-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const API = window.location.origin;
+  let tokenChart = null, splitChart = null;
+
+  const CHART_DEFAULTS = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#64748b', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#2d2d4e' } },
+      y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' } },
+    },
+  };
+
+  function statCard(title, value, sub = '') {
+    return `<div class="card"><div class="card-title">${title}</div><div class="card-value">${value}</div>${sub ? `<div class="card-sub">${sub}</div>` : ''}</div>`;
+  }
+
+  function svcHtml(svc) {
+    const canRestart = svc.name !== 'docker';
+    const restartBtn = canRestart
+      ? `<button class="restart-btn" onclick="restartService('${svc.name}', this)">restart</button>`
+      : '';
+    return `
+      <div class="svc">
+        <div class="svc-dot ${svc.state}"></div>
+        <div class="svc-info">
+          <div class="svc-name">${svc.name}</div>
+          <div class="svc-state">${svc.state}</div>
+        </div>
+        ${restartBtn}
+      </div>`;
+  }
+
+  async function restartService(name, btn) {
+    if (!confirm(`Restart ${name}?`)) return;
+    btn.disabled = true;
+    btn.textContent = 'restarting…';
+    try {
+      const r = await fetch(`${API}/admin/api/restart/${name}`, { method: 'POST' });
+      if (!r.ok) {
+        const d = await r.json();
+        alert(`Error: ${d.detail}`);
+      } else {
+        btn.textContent = 'done';
+        setTimeout(() => refresh(), 3000);
+      }
+    } catch (e) {
+      alert(`Error: ${e.message}`);
+      btn.disabled = false;
+      btn.textContent = 'restart';
+    }
+  }
+  window.restartService = restartService;
+
+  function fmt(n) {
+    if (n == null) return '-';
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+    return String(n);
+  }
+
+  async function refresh() {
+    document.getElementById('ts').textContent = new Date().toLocaleTimeString();
+
+    const [statusResp, bufferResp] = await Promise.all([
+      fetch(`${API}/admin/api/status`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/admin/api/recent-buffer`).then(r => r.json()).catch(() => null),
+    ]);
+
+    // Services
+    if (statusResp?.services) {
+      document.getElementById('services-row').innerHTML = statusResp.services.map(svcHtml).join('');
+    }
+
+    // Stat cards
+    if (statusResp?.db) {
+      const db = statusResp.db;
+      document.getElementById('stats-grid').innerHTML = [
+        statCard('buffer messages', fmt(db.buffer_rows)),
+        statCard('user messages', fmt(db.user_msgs)),
+        statCard('assistant messages', fmt(db.asst_msgs)),
+        statCard('episode summaries', fmt(db.summaries)),
+        statCard('sources', fmt(db.sources)),
+        statCard('memory chunks', fmt(db.memory_chunks)),
+      ].join('');
+    }
+
+    // Message history chart
+    const tokenResp = await fetch(`${API}/admin/api/message-history`).then(r => r.json()).catch(() => null);
+    if (tokenResp?.history?.length) {
+      const h = tokenResp.history;
+      const asstMsgs = h.filter(r => r.role === 'assistant');
+      const labels = asstMsgs.map((_, i) => i + 1);
+      const chars = asstMsgs.map(r => r.char_count || 0);
+      const userCount = h.filter(r => r.role === 'user').length;
+      const asstCount = asstMsgs.length;
+
+      if (tokenChart) {
+        tokenChart.data.labels = labels;
+        tokenChart.data.datasets[0].data = chars;
+        tokenChart.update();
+      } else {
+        tokenChart = new Chart(document.getElementById('token-chart'), {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{ data: chars, backgroundColor: '#4f46e5', borderRadius: 2 }],
+          },
+          options: { ...CHART_DEFAULTS },
+        });
+      }
+
+      if (splitChart) {
+        splitChart.data.datasets[0].data = [userCount, asstCount];
+        splitChart.update();
+      } else {
+        splitChart = new Chart(document.getElementById('split-chart'), {
+          type: 'doughnut',
+          data: {
+            labels: ['user', 'assistant'],
+            datasets: [{
+              data: [userCount, asstCount],
+              backgroundColor: ['#4f46e5', '#22c55e'],
+              borderWidth: 0,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+              legend: { display: true, position: 'bottom', labels: { color: '#e2e8f0', font: { size: 11 } } },
+            },
+          },
+        });
+      }
+    }
+
+    // Recent buffer
+    if (bufferResp?.entries) {
+      const tbody = document.getElementById('buffer-body');
+      tbody.innerHTML = bufferResp.entries.map(e => {
+        const roleClass = `role-${e.role}`;
+        const time = e.created_at ? new Date(e.created_at).toLocaleTimeString() : '-';
+        return `<tr>
+          <td style="color:var(--muted);font-family:monospace">${e.id}</td>
+          <td class="${roleClass}">${e.role}</td>
+          <td class="snippet">${e.snippet.replace(/</g, '&lt;')}</td>
+          <td style="color:var(--muted);font-size:0.75rem;white-space:nowrap">${time}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  document.getElementById('refresh-btn').addEventListener('click', refresh);
+  refresh();
+  setInterval(refresh, 30000);
+</script>
+</body>
+</html>
