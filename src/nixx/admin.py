@@ -7,11 +7,13 @@ uvicorn nixx.admin:create_app --factory --host 100.64.0.2 --port 8001
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
 
 import asyncpg
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
@@ -87,7 +89,20 @@ def create_app() -> FastAPI:
             _service_status("postgresql", "docker"),
             {**_service_status("nixx-embed"), "model": cfg.embedding_model},
             {**_service_status("llamacpp", "llamacpp.service"), "model": cfg.llm_model},
+            {**_service_status("nixx-image"), "on_demand": True, "model": "Schnell + Kontext [dev]"},
         ]
+        # SearXNG: HTTP probe (Docker container, no systemd unit)
+        searxng_state = "unknown"
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                r = await client.get(cfg.searxng_url + "/healthz")
+                searxng_state = "active" if r.status_code == 200 else "inactive"
+        except Exception:
+            searxng_state = "inactive"
+        services.append({"name": "searxng", "state": searxng_state, "uptime": ""})
+        # Count generated images from scratch dir
+        images_dir = cfg.scratch_dir / "images"
+        images_generated = len(list(images_dir.glob("*.png"))) if images_dir.exists() else 0
         conn = await _db()
         try:
             rows = await conn.fetch("""
@@ -98,9 +113,13 @@ def create_app() -> FastAPI:
                     (SELECT COUNT(*) FROM summaries)      AS summaries,
                     (SELECT COUNT(*) FROM sources)        AS sources,
                     (SELECT COUNT(*) FROM memories)       AS memory_chunks,
-                    (SELECT COALESCE(SUM(tool_calls_made), 0) FROM buffer WHERE role = 'assistant') AS total_tool_calls
+                    (SELECT COALESCE(SUM(tool_calls_made), 0) FROM buffer WHERE role = 'assistant') AS total_tool_calls,
+                    (SELECT COALESCE(SUM(prompt_tokens), 0) + COALESCE(SUM(completion_tokens), 0) FROM buffer WHERE role = 'assistant') AS total_tokens,
+                    (SELECT COALESCE(SUM(prompt_tokens), 0) FROM buffer WHERE role = 'assistant') AS total_prompt_tokens,
+                    (SELECT COALESCE(SUM(completion_tokens), 0) FROM buffer WHERE role = 'assistant') AS total_completion_tokens
                 """)
             db = dict(rows[0])
+            db["images_generated"] = images_generated
         except Exception as exc:
             db = {"error": str(exc)}
         finally:
@@ -165,6 +184,38 @@ def create_app() -> FastAPI:
     async def get_metrics(limit: int = 60) -> dict[str, Any]:
         """Return per-response metrics for the last N assistant messages."""
         conn = await _db()
+        # Read persistent image job log (survives image service restarts)
+        _image_job_log = Path.home() / "nixx_scratch" / "image_jobs.jsonl"
+        image_jobs: list[dict[str, Any]] = []
+        if _image_job_log.exists():
+            try:
+                with _image_job_log.open() as _f:
+                    for _line in _f:
+                        _line = _line.strip()
+                        if _line:
+                            image_jobs.append(json.loads(_line))
+            except Exception:
+                pass
+        # Merge with live in-memory jobs (may include jobs not yet in the log)
+        live_job_ids = {j["job_id"] for j in image_jobs}
+        try:
+            async with httpx.AsyncClient(timeout=1.0) as client:
+                r = await client.get("http://127.0.0.1:8090/jobs")
+                if r.status_code == 200:
+                    for j in r.json().get("jobs", []):
+                        if j.get("job_id") not in live_job_ids:
+                            image_jobs.append(j)
+        except Exception:
+            pass
+        # Fetch per-tool usage from nixx-server (best-effort)
+        tool_usage: dict[str, int] = {}
+        try:
+            async with httpx.AsyncClient(timeout=1.0) as client:
+                r = await client.get("http://127.0.0.1:8000/v1/debug/tool-usage")
+                if r.status_code == 200:
+                    tool_usage = r.json().get("tool_usage", {})
+        except Exception:
+            pass
         try:
             rows = await conn.fetch(
                 """
@@ -208,6 +259,18 @@ def create_app() -> FastAPI:
                     "responses_with_tools": len(tool_rows),
                     "responses_without_tools": int(no_tools),
                 },
+                "image_jobs": [
+                    {
+                        "job_id": j.get("job_id"),
+                        "status": j.get("status"),
+                        "type": j.get("type"),
+                        "latency_ms": j.get("latency_ms"),
+                        "submitted_at": j.get("submitted_at"),
+                    }
+                    for j in image_jobs
+                    if j.get("status") == "done" and j.get("latency_ms") is not None
+                ],
+                "tool_usage": tool_usage,
             }
         finally:
             await conn.close()
@@ -257,12 +320,24 @@ def create_app() -> FastAPI:
             "web_search",
             "read_webpage",
             "validate_and_commit",
+            "generate_image",
+            "edit_image",
             "search_transcript",
             "view_transcript",
         ]
+        # Fetch runtime context length from nixx-server /health (auto-fetched from llama.cpp
+        # at startup, so more accurate than cfg.llm_context_length which is the .env default)
+        runtime_ctx = cfg.llm_context_length
+        try:
+            async with httpx.AsyncClient(timeout=1.0) as client:
+                hr = await client.get("http://127.0.0.1:8000/health")
+                if hr.status_code == 200:
+                    runtime_ctx = int(hr.json().get("context_length", runtime_ctx))
+        except Exception:
+            pass
         return {
             "model": cfg.llm_model,
-            "context_length": cfg.llm_context_length,
+            "context_length": runtime_ctx,
             "summary_interval": cfg.summary_interval,
             "intent_interval": cfg.intent_interval,
             "intent": intent,
@@ -289,11 +364,10 @@ def create_app() -> FastAPI:
 def main() -> None:
     import uvicorn
 
-    # Bind to Tailscale IP only
     uvicorn.run(
         "nixx.admin:create_app",
         factory=True,
-        host="100.64.0.2",
+        host="0.0.0.0",
         port=8001,
         log_level="info",
     )

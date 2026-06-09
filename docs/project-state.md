@@ -17,12 +17,16 @@ workspaces and conversations - nixx remembers everything across sessions.
 
 | Process | Command / binary | Port | User | Notes |
 |---|---|---|---|---|
-| nixx API server | `nixx serve` via pipx | 8000 | siderealyear | FastAPI + Uvicorn |
+| nixx API server | `nixx serve` via pipx | 8000 | siderealyear | FastAPI + Uvicorn. Serves API + PWA at `/app`. |
+| nixx-admin | `nixx-admin` via pipx | 8001 | siderealyear | Admin dashboard, binds to 0.0.0.0:8001. Proxied at `https://nixx.perdrizet.org/admin`. |
+| nixx-image | `nixx-image` via dedicated venv | 8090 | siderealyear | On-demand FLUX image service. `Restart=no` - stays dead until explicitly started. Auto-shuts-down after 10 min idle (never while a job is running). |
 | LLM server | llama.cpp `llama-server` | 8502 | llama | gpt-oss-20b-mxfp4.gguf |
 | Embed server | llama.cpp `llama-server` | 8082 | llama | mxbai-embed-large-v1-f16.gguf |
-| pgweb | `/usr/local/bin/pgweb` | 8081 | siderealyear | DB browser |
-| PostgreSQL | Docker container | 5432 | postgres | `student-postgres` container; starts automatically with Docker. Managed via `~/postgreSQL-server/docker-compose.yml` (service name: `postgres`). |
-| SearXNG | Docker container | 8888 | - | `services/searxng/`, `docker compose up -d` |
+| PostgreSQL | Docker container | 5432 | postgres | `student-postgres` container; starts automatically with Docker. Managed via `~/postgreSQL-server/docker-compose.yml`. |
+| pgadmin | Docker container | 8088 | - | `dpage/pgadmin4`, binds to Tailscale IP (100.64.0.2:8088). DB browser. |
+| SearXNG | Docker container | 8888 | - | `services/searxng/`, `docker compose up -d`. Binds to 127.0.0.1. |
+| Grafana | Docker container | 3000 | - | Metrics dashboard. Paired with `postgres-exporter` on port 9187. |
+| postgres-exporter | Docker container | 9187 | - | Exports PostgreSQL metrics for Grafana. |
 
 All services run under `nixx.target` but **restarting the target does not cascade to individual
 services**. To pick up code changes: `sudo systemctl restart nixx-server`.
@@ -31,10 +35,25 @@ services**. To pick up code changes: `sudo systemctl restart nixx-server`.
 
 ## Models
 
-Both models live in `/opt/models/`, owned by `llama:llama`:
+LLM and embed models live in `/opt/models/`, owned by `llama:llama`:
 
 - **LLM**: `gpt-oss-20b-mxfp4.gguf` — served at port 8502, OpenAI-compatible API
 - **Embeddings**: `mxbai-embed-large-v1-f16.gguf` — served at port 8082, 1024-dimensional vectors
+
+FLUX image models are HuggingFace repos cached in `/mnt/fast_scratch/huggingface_transformers_cache` (fast NVMe):
+
+- **FLUX.1 Schnell**: `black-forest-labs/FLUX.1-schnell` — Apache 2.0, no token needed, 4-step default
+- **FLUX.1 Kontext [dev]**: `black-forest-labs/FLUX.1-Kontext-dev` — gated (requires `HF_READ_TOKEN` in `.env`), 28-step default
+
+GPU assignment: llamacpp uses device 0 (P100, 16 GB, ~13 GB used). nixx-image uses device 1 (GTX 1070, 8 GB) via `CUDA_VISIBLE_DEVICES=1`.
+
+- **Schnell**: loaded with `.to("cuda")`, no offloading. VAE slicing+tiling enabled. ~4 min total.
+- **Kontext [dev]**: full CPU mode - no `.to("cuda")` calls at all. Flux transformer double-stream attention allocates ~6.77 GiB in one tensor, larger than 8 GB VRAM at any resolution. CPU inference takes ~2-3 hours. `enable_attention_slicing()` has no effect (doesn't hook into `dispatch_attention_fn → _native_attention` in Flux). VAE slicing+tiling enabled.
+
+Performance benchmarks (GTX 1070, NVMe model cache):
+- Schnell cold load: ~6 seconds from NVMe
+- Schnell 4-step inference: ~30 seconds (GPU, `.to("cuda")`)
+- Kontext inference: ~2-3 hours (CPU, 28 steps)
 
 ---
 
@@ -58,7 +77,7 @@ PostgreSQL database: `nixx`. All tables in public schema.
 | `memories` | Embedded chunks for semantic recall. Has `embedding vector(1024)`, `source_id FK → sources`, `metadata JSONB`. |
 | `source_projects` | Maps sources to project names. PK is `(source_id, project)`. |
 | `source_edges` | Knowledge graph edges between sources. Has `relation TEXT`, `weight FLOAT`, `activations INT`, `last_activated`. PK is `(from_id, to_id)`. |
-| `state` | Persistent server state (key/value). Currently stores `intent`. Survives restarts. |
+| `state` | Persistent server state (key/value). Stores `intent`, `project_dir`, `tool_usage` (JSON). Survives restarts. |
 
 Schema is initialised on server startup via `init_schema()` in `memory/db.py`. Migrations are
 applied inline with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
@@ -74,9 +93,10 @@ Unit files live in `scripts/`, symlinked into `/etc/systemd/system/`:
 | File | Description |
 |---|---|
 | `scripts/nixx.target` | Groups all nixx services |
-| `scripts/nixx-server.service` | API server, `User=siderealyear`, uses `~/.local/bin/nixx serve`, reads `/home/siderealyear/nixx/.env` |
+| `scripts/nixx-server.service` | API server, `User=siderealyear`, uses `~/.local/bin/nixx serve`, reads `/home/siderealyear/nixx/.env`. `NoNewPrivileges` and `PrivateTmp` removed (were blocking sudo). |
+| `scripts/nixx-admin.service` | Admin dashboard, `User=siderealyear`, binds to Tailscale IP 100.64.0.2:8001. |
 | `scripts/nixx-embed.service` | Embed server, `User=llama`, model at `/opt/models/mxbai-embed-large-v1-f16.gguf` |
-| `scripts/nixx-pgweb.service` | pgweb browser, `User=siderealyear`, `--listen=8081` |
+| `/etc/systemd/system/nixx-image.service` | On-demand image service. Not in `scripts/` - managed directly in `/etc/systemd/system/`. `Restart=no`, `CUDA_VISIBLE_DEVICES=1`, `HF_HOME=/mnt/fast_scratch/huggingface_transformers_cache`. Venv: `~/.local/share/pipx/venvs/nixx-image/`. |
 
 All services are enabled for auto-boot. Docker starts first, which brings up `student-postgres` (restart policy: unless-stopped). `nixx-server` and `nixx-embed` start after Docker. `llamacpp` starts independently. Allow ~60 seconds after boot for llamacpp to load the model before the first inference request.
 
@@ -119,7 +139,11 @@ src/nixx/
     shadow.py     — shadow_backup() — auto-snapshot before file modifications
     web_search.py — WebSearchTool (SearXNG JSON API, requires X-Forwarded-For header)
     read_webpage.py — ReadWebpageTool (httpx + BeautifulSoup, 8000 char limit)
+    image_tools.py — GenerateImageTool (Schnell, ~4 min), EditImageTool (Kontext, ~25 min). Both auto-start nixx-image via `sudo systemctl start nixx-image` if not running.
     registry.py   — ToolRegistry: registers tools, builds OpenAI tool defs, executes calls
+  image_service/
+    __init__.py
+    app.py        — FastAPI image service: /generate (Schnell), /edit (Kontext), /jobs, /health. Lazy-loads models on first request, shuts down after 10 min idle.
   tui/
     __init__.py
     app.py        — NixxApp (Textual): full chat UI
@@ -134,7 +158,7 @@ All settings read from `.env` with `NIXX_` prefix. Key fields:
 | Setting | Default | Notes |
 |---|---|---|
 | `host` / `port` | `127.0.0.1` / `8000` | API server bind |
-| `llm_base_url` | `http://localhost:8080` | Overridden in .env to `https://promptlyapi.com/v1` (remote inference API) |
+| `llm_base_url` | `http://localhost:8080` | Overridden in .env to `http://localhost:8502` (local llamacpp) |
 | `llm_model` | `gpt-oss-20b` | |
 | `llm_context_length` | `8192` | Auto-fetched from LLM `/props` at startup (overrides .env value). Fallback if fetch fails. |
 | `max_history_tokens` | `16384` | Max tokens of conversation history per request, independent of context length. Prevents slow prefill on long sessions. |
@@ -182,11 +206,24 @@ POST /v1/intent/derive           — trigger intent derivation immediately
 GET  /v1/project                 — get scratch_dir + current project directory
 POST /v1/project                 — set project directory (body: {directory})
 DELETE /v1/project               — clear project directory
-```
+GET  /v1/image/jobs              — proxy to nixx-image /jobs (returns empty list if service is down)
+GET  /v1/files                   — list scratch directory (optional ?subdir=)
+GET  /v1/files/download          — download a file (?path=relative/path)
+DELETE /v1/files                 — delete a file (?path=relative/path)
 
 ---
 
-## TUI (app.py)
+## PWA (web client)
+
+Served by nixx-server at `/app`. Static files in `src/nixx/web/` - live from source because nixx is installed with `pipx install --editable .`. No reinstall needed for static file changes; `sudo systemctl restart nixx-server` required for `.py` changes.
+
+Public HTTPS endpoint: `https://nixx.perdrizet.org` (nginx on gatekeeper VPS, proxies over Tailscale to 100.64.0.2:8000). Protected with HTTP basic auth (`/etc/nginx/nixx.htpasswd` on gatekeeper). Admin dashboard proxied at `/admin` → 100.64.0.2:8001. Nginx config: `/etc/nginx/conf.d/nixx.conf` on gatekeeper.
+
+Installed as a PWA on Android (Chrome → Add to home screen → Install). Manifest at `/app/manifest.json` with 192×512 PNG icons (`icon-192.png`, `icon-512.png`) generated at `src/nixx/web/`. True standalone mode requires HTTPS + PNG icons ≥ 192×192 - SVG-only manifests are not installable by Chrome.
+
+Status bar is a single centered line: `recall · intent · context N% · summary N%`. `recall` and `intent` are clickable toggle pills (green=on, muted=off). Context and summary show fill % in green/yellow/red. Tab bar is at the bottom (mobile nav pattern). Admin tab uses a relative iframe src `/admin`.
+
+Service worker (`sw.js`) caches only the app shell (`/app/`, manifest, icon). API calls are never cached. If the PWA shows stale content after an update: hard-reload in browser, or bump `CACHE` version in `sw.js` to force SW replacement.
 
 Key classes:
 - `NixxApp` — main Textual app
@@ -266,6 +303,8 @@ project directory. The project directory is set via `/project <dir>` in the TUI 
 | `view_transcript` | Retrieve buffer entries by ID range |
 | `web_search` | SearXNG JSON API, top 5 results (title/URL/snippet). Requires `X-Forwarded-For: 127.0.0.1` header. SearXNG container must be running. |
 | `read_webpage` | Fetch URL, strip HTML, return up to 8000 chars of text |
+| `generate_image` | Generate image via FLUX.1 Schnell (~4 min, 4 steps default). Auto-starts nixx-image service. Output to `~/nixx_scratch/images/`. |
+| `edit_image` | Edit image via FLUX.1 Kontext [dev] (~25 min, 28 steps default). Auto-starts nixx-image service. |
 
 Shadow backups are stored at `~/.nixx/shadows/` with timestamps, preserving directory structure.
 
@@ -284,18 +323,20 @@ before execution. The TUI renders a dim inline `calling tool: <name>` message.
   port (8502) is set in `.env`.
 - DB table for episodic summaries is `summaries` (not `episodic_summaries`).
 - `pre-commit` hook requires venv activated. Bypass with `git -c core.hooksPath=/dev/null commit`.
-- `llm_context_length` in `.env` is overridden at startup by the `/props` fetch. The running
-  value can be verified at `GET /health` (`context_length` field) or from server logs at startup.
-  The `/props` fetch hits `model.perdrizet.org` - if WireGuard is down at startup it will fail and
-  fall back to 8192. The `/health` route retries the fetch, so restarting nixx-server after
-  the tunnel is up is enough.
+- `llm_context_length` in `.env` is overridden at startup by the `/props` fetch from the local
+  llamacpp server (port 8502). The running value can be verified at `GET /health` (`context_length`
+  field) or from server logs at startup. If llamacpp isn't up yet when nixx-server starts, the fetch
+  fails silently and falls back to 8192. The `/health` route retries the fetch.
 - `/props` returns `n_ctx` under `default_generation_settings`, not at the top level.
-- SearXNG requires `X-Forwarded-For: 127.0.0.1` header on requests and `format=json` must be
+- nixx-image has `Restart=no` by design - it stays dead after idle shutdown. `sudo systemctl start nixx-image` to bring it up. Tools do this automatically.
+- Completed image jobs (both generate and edit) are appended to `~/nixx_scratch/image_jobs.jsonl` for persistence across service restarts. Admin metrics reads this file first, then merges live in-memory jobs.
+- `tool_usage` is persisted in the `state` table (key `tool_usage`, JSON). Loaded on startup, saved after every tool call. No longer lost on restart.
+- Kontext runs fully on CPU (no CUDA calls). Schnell runs fully on GPU (`.to("cuda")`). Do not add `enable_sequential_cpu_offload()` to either - Schnell doesn't need it, Kontext can't use GPU at all.
+- `transformers` pinned to `<4.52` in the nixx-image venv. 4.52+ requires `torch.float8_e8m0fnu` which needs torch 2.7; image venv has torch 2.6+cu124.
+- HF Kontext model is gated - `HF_READ_TOKEN` must be in `.env` and `huggingface-cli login` must have been run once to persist the token to `~/.cache/huggingface/token`.
+- `NoNewPrivileges=true` and `PrivateTmp=true` removed from nixx-server and nixx-admin service units - they blocked `sudo systemctl start nixx-image` from within the process.
+- Sudoers rule for image service: `/etc/sudoers.d/nixx-admin` allows `NOPASSWD` for `systemctl start/stop nixx-image`.
+- SearXNG requires `X-Forwarded-For: 127.0.0.1` header on requests, and `format=json` must be
   explicitly listed in `settings.yml` under `search.formats`. If the container is restarted after
-  changing settings.yml, use `docker compose down && docker compose up -d` (not just `restart`) to
-  ensure the bind-mount file is re-read correctly.
-- `wg-quick@wg0` uses a hostname endpoint (`perdrizet.org:51820`). If it starts before DNS is
-  available it fails silently and stays down. Fixed by
-  `/etc/systemd/system/wg-quick@wg0.service.d/wait-for-network.conf` with
-  `After=network-online.target`. If the tunnel is down, `model.perdrizet.org` will be unreachable
-  and all LLM calls will 504. Check with `sudo systemctl status wg-quick@wg0`.
+  changing `settings.yml`, use `docker compose down && docker compose up -d` (not just `restart`)
+  to ensure the bind-mount file is re-read.

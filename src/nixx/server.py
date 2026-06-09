@@ -12,12 +12,12 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from httpx import HTTPError as HttpError
 from pydantic import BaseModel, ConfigDict
 
-from nixx.config import NixxConfig
+from nixx.config import NixxConfig, _NIXX_ROOT
 from nixx.ingest.pipeline import IngestPipeline
 from nixx.llm import OpenAIClient
 from nixx.memory.db import (
@@ -43,7 +43,11 @@ from nixx.tools.planning import get_current_plan
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_INTENT = "Understand the user's goals and assist them."
+DEFAULT_INTENT = (
+    "I want to get better at AI/ML systems engineering by building something that actually has to work. "
+    "The memory system, the inference stack, the tooling - this is real understanding I'm accumulating, "
+    "not tutorial exercises. I want this to be a body of work worth pointing at."
+)
 
 # Token budget reserved for the LLM response and tool loop expansion.
 _RESPONSE_RESERVE = 2048
@@ -152,13 +156,33 @@ async def _assemble_messages(
             "\n\nNo project directory is currently set (use /project <dir> in the TUI to set one)."
         )
 
-    system_content = (
+    tools_block = ""
+    tools_registry = getattr(app.state, "tools", None)
+    if tools_registry:
+        tool_lines = []
+        for tool in tools_registry.list_tools():
+            first_sentence = tool.description.split(". ")[0].rstrip(".")
+            tool_lines.append(f"- {tool.name}: {first_sentence}")
+        if tool_lines:
+            tools_block = (
+                "\n\n## Available tools\n\n"
+                "These tools are callable by you only - the user cannot invoke them. "
+                "Do not suggest that the user call a tool or check a tool result themselves.\n\n"
+                + "\n".join(tool_lines)
+            )
+
+    # system_base is the full assembled prompt minus recalled memory context.
+    # Stored on app.state so debug_context can return it without re-assembling.
+    system_base = (
         SYSTEM_PROMPT
         + intent_block
         + plan_block
         + file_access_block
-        + (f"\n\n{context_block}" if context_block else "")
+        + tools_block
     )
+    app.state.assembled_system_prompt = system_base
+
+    system_content = system_base + (f"\n\n{context_block}" if context_block else "")
     messages = [{"role": "system", "content": system_content}] + raw_messages
     messages = _truncate_messages(messages, config.llm_context_length, config.max_history_tokens)
     return messages, recalled
@@ -231,6 +255,8 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
 
         app.state.intent = await get_state(pool, "intent") or DEFAULT_INTENT
         app.state.messages_since_intent = 0  # Counter for automatic derivation
+        _tool_usage_raw = await get_state(pool, "tool_usage")
+        app.state.tool_usage: dict[str, int] = json.loads(_tool_usage_raw) if _tool_usage_raw else {}
 
         # Auto-fetch context length from the LLM server's /props endpoint.
         app.state.n_ctx_fetched = False
@@ -287,6 +313,11 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         )
         return ctx
 
+    @app.get("/v1/debug/tool-usage")
+    async def debug_tool_usage() -> dict[str, Any]:
+        """Return per-tool call counts since server start."""
+        return {"tool_usage": getattr(app.state, "tool_usage", {})}
+
     async def _ensure_n_ctx() -> None:
         """Retry fetching n_ctx from the LLM server if the startup attempt failed."""
         if getattr(app.state, "n_ctx_fetched", True):
@@ -333,17 +364,8 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         context_block = memory.format_episodic_context(recalled) if recalled else ""
         prompt_token_estimate = sum(_estimate_tokens(m["content"]) + 4 for m in messages)
         app.state.last_context = {
-            "base": SYSTEM_PROMPT,
-            "intent": app.state.intent,
+            "system_prompt": getattr(app.state, "assembled_system_prompt", SYSTEM_PROMPT),
             "memory": context_block or None,
-            "hits": [
-                {
-                    "content": r["content"],
-                    "similarity": round(float(r["similarity"]), 3),
-                    "tags": r.get("tags", []),
-                }
-                for r in recalled
-            ],
             "token_usage": {
                 "prompt_tokens": prompt_token_estimate,
                 "context_length": config.llm_context_length,
@@ -712,6 +734,16 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             "is_dir": p.is_dir(),
         }
 
+    @app.get("/v1/image/jobs")
+    async def image_jobs_proxy() -> dict:
+        """Proxy to nixx-image job list. Returns empty list if service is down."""
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                r = await client.get("http://127.0.0.1:8090/jobs")
+                return r.json()
+        except Exception:
+            return {"jobs": []}
+
     @app.get("/v1/files")
     async def list_files(subdir: str = "") -> dict:
         """List files in the scratch directory (optionally a subdirectory)."""
@@ -836,6 +868,8 @@ async def _chat_event_stream(
     tool_calls_made = False
     tool_call_count = 0
     stream_start = time.monotonic()
+    stream_prompt_tokens = 0
+    stream_completion_tokens = 0
 
     # --- Resume detection: if the last non-system message is an assistant turn
     # with tool_calls, the user approved the tool plan and we skip first-pass
@@ -901,14 +935,31 @@ async def _chat_event_stream(
 
                     # Collect tool calls from final chunk
                     if done and chunk.tool_calls:
+                        if chunk.prompt_tokens:
+                            stream_prompt_tokens = chunk.prompt_tokens
+                        if chunk.completion_tokens:
+                            stream_completion_tokens = chunk.completion_tokens
                         pending_tool_calls = [
                             {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
                             for tc in chunk.tool_calls
                         ]
-                        # First tool-calling pass: pause and ask for approval.
-                        # Subsequent rounds (round_idx > 0) run unattended because
-                        # the user already approved the overall task.
-                        if round_idx == 0:
+                        # Pause for approval only if any tool is a self-edit:
+                        # validate_and_commit, or a write/edit/delete targeting
+                        # the nixx source tree. Everything else runs unattended.
+                        _SELF_EDIT_TOOLS = {"validate_and_commit", "write_file", "edit_file", "delete_file"}
+                        _nixx_src = str(_NIXX_ROOT)
+                        def _is_self_edit(tc: dict[str, Any]) -> bool:
+                            if tc["name"] == "validate_and_commit":
+                                return True
+                            if tc["name"] in ("write_file", "edit_file", "delete_file"):
+                                try:
+                                    args = json.loads(tc["arguments"]) if isinstance(tc["arguments"], str) else tc["arguments"]
+                                    path = args.get("path", "") or args.get("file_path", "")
+                                    return str(path).startswith(_nixx_src)
+                                except Exception:
+                                    return True  # can't parse - be safe
+                            return False
+                        if any(_is_self_edit(tc) for tc in pending_tool_calls):
                             tool_names = [tc["name"] for tc in pending_tool_calls]
                             yield f"data: {json.dumps({'approval_needed': {'tools': tool_names, 'reasoning': reasoning_acc, 'tool_calls': [{'id': tc['id'], 'type': 'function', 'function': {'name': tc['name'], 'arguments': tc['arguments']}} for tc in pending_tool_calls]}})}\n\n"
                             yield "data: [PAUSE]\n\n"
@@ -916,6 +967,10 @@ async def _chat_event_stream(
                         break
 
                     if done and not chunk.tool_calls:
+                        if chunk.prompt_tokens:
+                            stream_prompt_tokens = chunk.prompt_tokens
+                        if chunk.completion_tokens:
+                            stream_completion_tokens = chunk.completion_tokens
                         # No tool calls, finish streaming
                         data = {
                             "id": completion_id,
@@ -966,7 +1021,18 @@ async def _chat_event_stream(
             for tc in pending_tool_calls:
                 logger.info("Executing tool: %s", tc["name"])
                 yield f"data: {json.dumps({'tool_call': {'name': tc['name']}})}\n\n"
+                if app is not None:
+                    usage = getattr(app.state, "tool_usage", {})
+                    usage[tc["name"]] = usage.get(tc["name"], 0) + 1
+                    app.state.tool_usage = usage
+                    pool = getattr(app.state, "pool", None)
+                    if pool is not None:
+                        await set_state(pool, "tool_usage", json.dumps(usage))
                 tool_result = await tools.execute(tc["name"], tc["arguments"])
+                # If the tool returned metadata with a job_id (e.g. image generation),
+                # emit a tracking event so frontends can poll for completion.
+                if tool_result.metadata and "job_id" in tool_result.metadata:
+                    yield f"data: {json.dumps({'image_job_started': tool_result.metadata})}\n\n"
                 messages.append(
                     {
                         "role": "tool",
@@ -1040,6 +1106,8 @@ async def _chat_event_stream(
                 await memory.save_to_buffer(
                     "assistant",
                     accumulated,
+                    prompt_tokens=stream_prompt_tokens or None,
+                    completion_tokens=stream_completion_tokens or None,
                     latency_ms=elapsed_ms,
                     tool_calls_made=tool_call_count if tool_call_count else None,
                 )

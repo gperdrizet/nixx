@@ -13,7 +13,7 @@
       --border: #2d2d4e; --green: #22c55e; --yellow: #eab308; --red: #ef4444;
     }
     body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; font-size: 15px; line-height: 1.5; }
-    #app { max-width: 960px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    #app { max-width: 1200px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
     h1 { font-size: 1.3rem; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; margin-bottom: 0.25rem; }
     .subtitle { font-size: 0.8rem; color: var(--muted); margin-bottom: 2rem; }
 
@@ -30,6 +30,7 @@
     .svc-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
     .svc-dot.active { background: var(--green); box-shadow: 0 0 6px var(--green); }
     .svc-dot.inactive, .svc-dot.failed { background: var(--red); }
+    .svc-dot.inactive.on-demand { background: var(--muted); }
     .svc-dot.unknown { background: var(--muted); }
     .svc-info { flex: 1; min-width: 0; }
     .svc-name { font-size: 0.85rem; font-weight: 600; font-family: monospace; }
@@ -67,7 +68,7 @@
     .cheat-title { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.75rem; }
     .cheat-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
     .cheat-table tr + tr td { padding-top: 0.3rem; }
-    .cheat-table td:first-child { font-family: monospace; color: var(--accent); white-space: nowrap; padding-right: 1rem; vertical-align: top; }
+    .cheat-table td:first-child { font-family: monospace; color: var(--accent); word-break: break-all; padding-right: 1rem; vertical-align: top; }
     .cheat-table td:last-child { color: var(--muted); }
 
     /* ── Refresh ── */
@@ -79,11 +80,8 @@
 </head>
 <body>
 <div id="app">
-  <h1>nixx</h1>
-  <div class="subtitle">admin dashboard · pyrite · <span id="ts">-</span></div>
-
   <div id="refresh-info">
-    <span>auto-refresh every 30s</span>
+    <span>auto-refresh every 30s · <span id="ts">-</span></span>
     <button id="refresh-btn">↻ refresh now</button>
     <a class="ext-link" href="http://100.64.0.2:8088" target="_blank">pgAdmin ↗</a>
     <a class="ext-link" href="http://100.64.0.2:3000" target="_blank">Grafana ↗</a>
@@ -95,20 +93,36 @@
 
   <div class="charts">
     <div class="chart-card">
-      <div class="chart-title">response latency (ms)</div>
+      <div class="chart-title">response latency (all time)</div>
+      <div class="chart-wrap"><canvas id="response-time-chart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">response latency (24hr)</div>
       <div class="chart-wrap"><canvas id="latency-chart"></canvas></div>
     </div>
     <div class="chart-card">
-      <div class="chart-title">tokens generated per response</div>
+      <div class="chart-title">response length</div>
       <div class="chart-wrap"><canvas id="tokens-chart"></canvas></div>
     </div>
     <div class="chart-card">
-      <div class="chart-title">tool use vs plain responses</div>
+      <div class="chart-title">response types</div>
       <div class="chart-wrap"><canvas id="tool-donut-chart"></canvas></div>
     </div>
     <div class="chart-card">
-      <div class="chart-title">tokens generated &amp; tool calls over time</div>
-      <div class="chart-wrap"><canvas id="combined-chart"></canvas></div>
+      <div class="chart-title">tool calls per response</div>
+      <div class="chart-wrap"><canvas id="tool-iters-chart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">tool usage</div>
+      <div class="chart-wrap"><canvas id="tool-usage-chart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">image generation time</div>
+      <div class="chart-wrap"><canvas id="img-gen-chart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">image editing time</div>
+      <div class="chart-wrap"><canvas id="img-edit-chart"></canvas></div>
     </div>
   </div>
 
@@ -157,7 +171,55 @@
         <tr><td>sudo systemctl restart nixx-server</td><td>restart API server</td></tr>
         <tr><td>sudo systemctl restart nixx-admin</td><td>restart admin dashboard</td></tr>
         <tr><td>sudo systemctl restart nixx-embed</td><td>restart embedding server</td></tr>
-        <tr><td>journalctl -u nixx-server -f</td><td>tail server logs</td></tr>
+      </table>
+    </div>
+    <div class="cheat-card">
+      <div class="cheat-title">systemctl &amp; logs</div>
+      <table class="cheat-table">
+        <tr><td>journalctl -u nixx-server -f</td><td>follow server logs (newest at bottom)</td></tr>
+        <tr><td>journalctl -u nixx-admin -f</td><td>follow admin logs</td></tr>
+        <tr><td>journalctl -u nixx-image -f</td><td>follow image service logs</td></tr>
+        <tr><td>journalctl -u nixx-embed -f</td><td>follow embedding server logs</td></tr>
+        <tr><td>journalctl -u llamacpp -f</td><td>follow llama.cpp logs</td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td>journalctl -u nixx-server -n 50 --no-pager</td><td>last 50 lines, no pager</td></tr>
+        <tr><td>journalctl -u nixx-server --since today --no-pager</td><td>logs since midnight</td></tr>
+        <tr><td>journalctl -u nixx-server -p err --no-pager</td><td>errors only</td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td>sudo systemctl start nixx-image</td><td>wake image service</td></tr>
+        <tr><td>sudo systemctl stop nixx-image</td><td>stop image service</td></tr>
+        <tr><td>systemctl status nixx-server</td><td>full service status</td></tr>
+        <tr><td>systemctl list-units 'nixx*'</td><td>all nixx units</td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td>cd ~/nixx/services/searxng</td><td>&nbsp;</td></tr>
+        <tr><td>&nbsp;&nbsp;docker compose up -d</td><td>start searxng</td></tr>
+        <tr><td>&nbsp;&nbsp;docker compose down</td><td>stop searxng</td></tr>
+      </table>
+    </div>
+    <div class="cheat-card">
+      <div class="cheat-title">useful SQL</div>
+      <table class="cheat-table">
+        <tr><td colspan="2" style="color:var(--muted);font-size:0.72rem;padding-bottom:0.3rem">-- recent conversation</td></tr>
+        <tr><td>SELECT role, LEFT(content,120), created_at</td><td>&nbsp;</td></tr>
+        <tr><td>&nbsp;&nbsp;FROM buffer ORDER BY id DESC LIMIT 20;</td><td>last 20 messages</td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td colspan="2" style="color:var(--muted);font-size:0.72rem;padding-bottom:0.3rem">-- summaries</td></tr>
+        <tr><td>SELECT id, created_at, LEFT(summary,100)</td><td>&nbsp;</td></tr>
+        <tr><td>&nbsp;&nbsp;FROM summaries ORDER BY id DESC LIMIT 10;</td><td>recent summaries</td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td colspan="2" style="color:var(--muted);font-size:0.72rem;padding-bottom:0.3rem">-- semantic memory</td></tr>
+        <tr><td>SELECT id, name, created_at FROM sources;</td><td>all sources</td></tr>
+        <tr><td>SELECT COUNT(*), source_id FROM memories</td><td>&nbsp;</td></tr>
+        <tr><td>&nbsp;&nbsp;GROUP BY source_id;</td><td>chunks per source</td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td colspan="2" style="color:var(--muted);font-size:0.72rem;padding-bottom:0.3rem">-- metrics</td></tr>
+        <tr><td>SELECT AVG(latency_ms), MAX(latency_ms),</td><td>&nbsp;</td></tr>
+        <tr><td>&nbsp;&nbsp;AVG(completion_tokens) FROM buffer</td><td>&nbsp;</td></tr>
+        <tr><td>&nbsp;&nbsp;WHERE role = 'assistant';</td><td>avg latency &amp; tokens</td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td colspan="2" style="color:var(--muted);font-size:0.72rem;padding-bottom:0.3rem">-- state</td></tr>
+        <tr><td>SELECT key, value FROM state;</td><td>intent, project_dir…</td></tr>
+        <tr><td>DELETE FROM buffer;</td><td>wipe conversation</td></tr>
       </table>
     </div>
   </div>
@@ -166,7 +228,8 @@
 
 <script>
   const API = window.location.origin;
-  let latencyChart = null, tokensChart = null, toolDonutChart = null, combinedChart = null;
+  let latencyChart = null, tokensChart = null, toolDonutChart = null;
+  let imgGenChart = null, imgEditChart = null, toolItersChart = null, toolUsageChart = null, responseTimeChart = null;
 
   const BAR_DEFAULTS = {
     responsive: true,
@@ -195,12 +258,18 @@
     const restartBtn = canRestart
       ? `<button class="restart-btn" onclick="restartService('${svc.name}', this)">restart</button>`
       : '';
+    const onDemand = svc.on_demand ? ' on-demand' : '';
+    const isOptional = svc.on_demand || svc.name === 'searxng';
+    const stateLabel = (isOptional && svc.state === 'inactive')
+      ? (svc.name === 'searxng' ? 'down (optional)' : 'idle (on-demand)')
+      : svc.state;
+    const dotClass = (isOptional && svc.state === 'inactive') ? svc.state + onDemand : svc.state;
     return `
       <div class="svc">
-        <div class="svc-dot ${svc.state}"></div>
+        <div class="svc-dot ${dotClass}"></div>
         <div class="svc-info">
           <div class="svc-name">${svc.name}</div>
-          <div class="svc-state">${svc.state}${svc.uptime ? ` · ${svc.uptime}` : ''}</div>
+          <div class="svc-state">${stateLabel}${svc.uptime ? ` · ${svc.uptime}` : ''}</div>
           ${svc.model ? `<div class="svc-meta">${svc.model}</div>` : ''}
         </div>
         ${restartBtn}
@@ -261,16 +330,21 @@
     // Stat cards
     if (statusResp?.db) {
       const db = statusResp.db;
-      const ctxLen = configResp?.context_length;
+      const history = metricsResp?.history ?? [];
+      const plainRows = history.filter(r => r.latency_ms != null && !r.tool_calls_made);
+      const toolRows  = history.filter(r => r.latency_ms != null && r.tool_calls_made);
+      const meanMs = rows => rows.length ? Math.round(rows.reduce((s, r) => s + r.latency_ms, 0) / rows.length) : null;
+      const fmtMs = ms => ms == null ? '—' : ms >= 60000 ? `${(ms/60000).toFixed(1)}m` : `${(ms/1000).toFixed(1)}s`;
+
       document.getElementById('stats-grid').innerHTML = [
-        statCard('buffer messages', fmt(db.buffer_rows)),
-        statCard('user messages', fmt(db.user_msgs)),
-        statCard('assistant messages', fmt(db.asst_msgs)),
-        statCard('episode summaries', fmt(db.summaries)),
-        statCard('sources', fmt(db.sources)),
-        statCard('memory chunks', fmt(db.memory_chunks)),
+        statCard('response latency', fmtMs(meanMs(plainRows)), `${plainRows.length} responses`),
+        statCard('tool loop latency', fmtMs(meanMs(toolRows)), `${toolRows.length} responses`),
+        statCard('total tokens used', fmt(db.total_tokens), `${fmt(db.total_prompt_tokens)} in · ${fmt(db.total_completion_tokens)} out`),
+        statCard('messages', `${fmt(db.buffer_rows)} | ${fmt(db.user_msgs)} | ${fmt(db.asst_msgs)}`, 'total | user | assistant'),
+        statCard('context size', configResp?.context_length ? fmt(configResp.context_length) + ' tokens' : '—'),
+        statCard('episodic memories', fmt(db.summaries)),
+        statCard('mean messages per memory', db.summaries ? fmt(Math.round(db.buffer_rows / db.summaries)) : '—'),
         statCard('tool calls', fmt(db.total_tool_calls)),
-        statCard('context size', ctxLen ? fmt(ctxLen) + ' tok' : '-'),
       ].join('');
     }
 
@@ -299,67 +373,172 @@
     // Charts
     if (metricsResp?.history?.length) {
       const h = metricsResp.history;
-      const labels = h.map((_, i) => i + 1);
+      const fmtTime = iso => iso ? iso.slice(11, 16) : '';
+      const labels = h.map(r => fmtTime(r.created_at));
 
-      // 1. Latency bar chart
-      const latencies = h.map(r => r.latency_ms ?? null);
-      latencyChart = updateOrCreate(latencyChart, 'latency-chart', 'bar', {
-        labels,
-        datasets: [{ data: latencies, backgroundColor: '#eab308', borderRadius: 2, spanGaps: true }],
-      }, { ...BAR_DEFAULTS, scales: { ...BAR_DEFAULTS.scales, y: { ...BAR_DEFAULTS.scales.y, title: { display: true, text: 'ms', color: '#64748b', font: { size: 10 } } } } });
+      // 1. Latency line chart — simple vs tool-use LLM responses (last 6 h)
+      const sixHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+      const h6 = h.filter(r => r.created_at && new Date(r.created_at).getTime() >= sixHoursAgo);
+      const latencyLabels = h6.map(r => fmtTime(r.created_at));
+      const simpleLatencies = h6.map(r => (!r.tool_calls_made) ? (r.latency_ms ?? null) : null);
+      const toolLatencies   = h6.map(r =>   r.tool_calls_made  ? (r.latency_ms ?? null) : null);
 
-      // 2. Tokens generated bar chart
-      const tokens = h.map(r => r.completion_tokens ?? null);
-      const hasTokens = tokens.some(v => v != null);
-      tokensChart = updateOrCreate(tokensChart, 'tokens-chart', 'bar', {
-        labels,
-        datasets: [{ data: hasTokens ? tokens : h.map(r => r.char_count), backgroundColor: '#4f46e5', borderRadius: 2 }],
-      }, { ...BAR_DEFAULTS, plugins: { ...BAR_DEFAULTS.plugins, subtitle: { display: !hasTokens, text: '(char count - tokens not yet recorded)', color: '#64748b', font: { size: 9 } } } });
-
-      // 3. Tool use donut
-      const ts = metricsResp.tool_summary;
-      toolDonutChart = updateOrCreate(toolDonutChart, 'tool-donut-chart', 'doughnut', {
-        labels: ['with tools', 'plain'],
-        datasets: [{ data: [ts.responses_with_tools, ts.responses_without_tools], backgroundColor: ['#22c55e', '#4f46e5'], borderWidth: 0 }],
-      }, DONUT_DEFAULTS);
-
-      // 4. Combined: tokens + tool calls over time (dual Y)
-      const toolCalls = h.map(r => r.tool_calls_made ?? 0);
-      const combinedData = {
-        labels,
+      const latencyData = {
+        labels: latencyLabels,
         datasets: [
           {
-            label: 'tokens',
-            data: hasTokens ? tokens : h.map(r => r.char_count),
-            backgroundColor: 'rgba(79,70,229,0.6)',
-            borderRadius: 2,
-            type: 'bar',
-            yAxisID: 'y',
-          },
-          {
-            label: 'tool calls',
-            data: toolCalls,
+            label: 'simple reply',
+            data: simpleLatencies,
             borderColor: '#22c55e',
-            backgroundColor: '#22c55e',
-            type: 'line',
-            yAxisID: 'y1',
+            backgroundColor: 'rgba(34,197,94,0.15)',
+            pointBackgroundColor: '#22c55e',
             tension: 0.3,
             pointRadius: 3,
+            spanGaps: false,
+          },
+          {
+            label: 'tool use reply',
+            data: toolLatencies,
+            borderColor: '#a855f7',
+            backgroundColor: 'rgba(168,85,247,0.15)',
+            pointBackgroundColor: '#a855f7',
+            tension: 0.3,
+            pointRadius: 4,
+            spanGaps: false,
           },
         ],
       };
-      const combinedOpts = {
+      const latencyOpts = {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        plugins: { legend: { display: true, position: 'bottom', labels: { color: '#e2e8f0', font: { size: 11 } } } },
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { color: '#e2e8f0', font: { size: 10 }, boxWidth: 12 } },
+        },
         scales: {
           x: { ticks: { color: '#64748b', maxTicksLimit: 10, font: { size: 10 } }, grid: { color: '#2d2d4e' } },
-          y: { position: 'left', ticks: { color: '#4f46e5', font: { size: 10 } }, grid: { color: '#2d2d4e' }, beginAtZero: true },
-          y1: { position: 'right', ticks: { color: '#22c55e', font: { size: 10 } }, grid: { drawOnChartArea: false }, beginAtZero: true },
+          y: {
+            ticks: { color: '#94a3b8', font: { size: 10 } },
+            grid: { color: '#2d2d4e' },
+            beginAtZero: true,
+            title: { display: true, text: 'ms', color: '#64748b', font: { size: 9 } },
+          },
         },
       };
-      combinedChart = updateOrCreate(combinedChart, 'combined-chart', 'bar', combinedData, combinedOpts);
+      latencyChart = updateOrCreate(latencyChart, 'latency-chart', 'line', latencyData, latencyOpts);
+
+      // 2. Tokens per response — histogram (completion_tokens only, no char_count fallback)
+      const tokenVals = h.map(r => r.completion_tokens).filter(v => v != null);
+      if (tokenVals.length) {
+        const BIN_SIZE = 100;
+        const maxTok = Math.max(...tokenVals);
+        const nBins = Math.ceil((maxTok + 1) / BIN_SIZE);
+        const binCounts = Array(nBins).fill(0);
+        tokenVals.forEach(v => binCounts[Math.floor(v / BIN_SIZE)]++);
+        const binLabels = Array.from({length: nBins}, (_, i) => `${(i + 1) * BIN_SIZE}`);
+        tokensChart = updateOrCreate(tokensChart, 'tokens-chart', 'bar', {
+          labels: binLabels,
+          datasets: [{ data: binCounts, backgroundColor: '#4f46e5', borderRadius: 2, barPercentage: 0.95, categoryPercentage: 1.0 }],
+        }, {
+          ...BAR_DEFAULTS,
+          scales: {
+            x: { ticks: { color: '#64748b', maxTicksLimit: 12, font: { size: 9 }, maxRotation: 45 }, grid: { color: '#2d2d4e' }, title: { display: true, text: 'tokens', color: '#64748b', font: { size: 9 } } },
+            y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' }, beginAtZero: true, title: { display: true, text: 'responses', color: '#64748b', font: { size: 9 } } },
+          },
+        });
+      }
+
+      // 3. Tool use donut — plain / tool use / image gen
+      const ts = metricsResp.tool_summary;
+      const imgGenCount = (metricsResp.image_jobs || []).length;
+      const toolOnlyCount = Math.max(0, ts.responses_with_tools - imgGenCount);
+      toolDonutChart = updateOrCreate(toolDonutChart, 'tool-donut-chart', 'doughnut', {
+        labels: ['plain', 'tool use', 'image gen'],
+        datasets: [{ data: [ts.responses_without_tools, toolOnlyCount, imgGenCount], backgroundColor: ['#4f46e5', '#22c55e', '#a855f7'], borderWidth: 0 }],
+      }, DONUT_DEFAULTS);
+
+      // 4. Image generation time histogram (minutes)
+      // 5. Image editing time histogram (minutes)
+      const imgJobs = metricsResp.image_jobs || [];
+      const makeImgHistogram = (jobs, canvasId, chartRef) => {
+        const vals = jobs.map(j => j.latency_ms / 60000);
+        if (!vals.length) return chartRef;
+        const BIN_MIN = 1;
+        const maxVal = Math.max(...vals);
+        const nBins = Math.max(1, Math.ceil(maxVal / BIN_MIN));
+        const counts = Array(nBins).fill(0);
+        vals.forEach(v => counts[Math.min(Math.floor(v / BIN_MIN), nBins - 1)]++);
+        const binLabels = Array.from({length: nBins}, (_, i) => `${(i + 1) * BIN_MIN}m`);
+        return updateOrCreate(chartRef, canvasId, 'bar', {
+          labels: binLabels,
+          datasets: [{ data: counts, backgroundColor: '#a855f7', borderRadius: 2, barPercentage: 0.95, categoryPercentage: 1.0 }],
+        }, {
+          ...BAR_DEFAULTS,
+          scales: {
+            x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' }, title: { display: true, text: 'minutes', color: '#64748b', font: { size: 9 } } },
+            y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' }, beginAtZero: true, title: { display: true, text: 'jobs', color: '#64748b', font: { size: 9 } } },
+          },
+        });
+      };
+      imgGenChart  = makeImgHistogram(imgJobs.filter(j => j.type === 'generate'), 'img-gen-chart',  imgGenChart);
+      imgEditChart = makeImgHistogram(imgJobs.filter(j => j.type === 'edit'),     'img-edit-chart', imgEditChart);
+
+      // 6. Tool calls per response histogram
+      const toolCallVals = h.map(r => r.tool_calls_made).filter(v => v != null && v > 0);
+      if (toolCallVals.length) {
+        const maxCalls = Math.max(...toolCallVals);
+        const callCounts = Array(maxCalls).fill(0);
+        toolCallVals.forEach(v => callCounts[v - 1]++);
+        const callLabels = Array.from({length: maxCalls}, (_, i) => `${i + 1}`);
+        toolItersChart = updateOrCreate(toolItersChart, 'tool-iters-chart', 'bar', {
+          labels: callLabels,
+          datasets: [{ data: callCounts, backgroundColor: '#22c55e', borderRadius: 2, barPercentage: 0.7, categoryPercentage: 0.8 }],
+        }, {
+          ...BAR_DEFAULTS,
+          scales: {
+            x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' }, title: { display: true, text: 'tool calls', color: '#64748b', font: { size: 9 } } },
+            y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' }, beginAtZero: true, title: { display: true, text: 'responses', color: '#64748b', font: { size: 9 } } },
+          },
+        });
+      }
+
+      // 7. Tool usage horizontal bar chart
+      const toolUsage = metricsResp.tool_usage || {};
+      const toolNames = Object.keys(toolUsage).sort((a, b) => toolUsage[b] - toolUsage[a]);
+      if (toolNames.length) {
+        toolUsageChart = updateOrCreate(toolUsageChart, 'tool-usage-chart', 'bar', {
+          labels: toolNames,
+          datasets: [{ data: toolNames.map(n => toolUsage[n]), backgroundColor: '#22c55e', borderRadius: 2 }],
+        }, {
+          ...BAR_DEFAULTS,
+          indexAxis: 'y',
+          scales: {
+            x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' }, beginAtZero: true, title: { display: true, text: 'calls', color: '#64748b', font: { size: 9 } } },
+            y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#2d2d4e' } },
+          },
+        });
+      }
+
+      // 8. Overall response time histogram (LLM only, no image gen)
+      const rtVals = h.map(r => r.latency_ms).filter(v => v != null);
+      if (rtVals.length) {
+        const RT_BIN = 5000; // 5s bins
+        const maxRt = Math.max(...rtVals);
+        const nRtBins = Math.ceil((maxRt + 1) / RT_BIN);
+        const rtCounts = Array(nRtBins).fill(0);
+        rtVals.forEach(v => rtCounts[Math.min(Math.floor(v / RT_BIN), nRtBins - 1)]++);
+        const rtLabels = Array.from({length: nRtBins}, (_, i) => `${(i + 1) * RT_BIN / 1000}s`);
+        responseTimeChart = updateOrCreate(responseTimeChart, 'response-time-chart', 'bar', {
+          labels: rtLabels,
+          datasets: [{ data: rtCounts, backgroundColor: '#4f46e5', borderRadius: 2, barPercentage: 0.95, categoryPercentage: 1.0 }],
+        }, {
+          ...BAR_DEFAULTS,
+          scales: {
+            x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' }, title: { display: true, text: 'latency', color: '#64748b', font: { size: 9 } } },
+            y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#2d2d4e' }, beginAtZero: true, title: { display: true, text: 'responses', color: '#64748b', font: { size: 9 } } },
+          },
+        });
+      }
     }
 
   }

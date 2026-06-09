@@ -31,6 +31,7 @@
 
     html, body {
       height: 100%;
+      overflow: hidden;
       background: var(--bg);
       color: var(--text);
       font-family: system-ui, -apple-system, sans-serif;
@@ -43,22 +44,10 @@
       display: flex;
       flex-direction: column;
       height: 100dvh;
+      overflow: hidden;
       max-width: 900px;
       margin: 0 auto;
     }
-
-    /* ── Header ── */
-    #header {
-      padding: 0.6rem 1rem;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: var(--surface);
-      flex-shrink: 0;
-    }
-    #header h1 { font-size: 1rem; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; }
-    #header .subtitle { font-size: 0.75rem; color: var(--text-muted); }
 
     /* ── Messages ── */
     #messages {
@@ -96,6 +85,25 @@
       text-align: center;
       padding: 0.25rem;
       background: none;
+    }
+
+    .msg.image {
+      background: var(--asst-bg);
+      border: 1px solid var(--border);
+      padding: 0.5rem;
+      max-width: 540px;
+    }
+    .msg.image img {
+      display: block;
+      max-width: 100%;
+      border-radius: 0.375rem;
+      margin-bottom: 0.4rem;
+    }
+    .msg.image .img-caption {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-family: monospace;
+      word-break: break-all;
     }
 
     /* markdown within assistant messages */
@@ -217,17 +225,39 @@
 
     /* ── Status area ── */
     #status-area {
-      padding: 0.4rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 0.3rem 1rem;
       border-top: 1px solid var(--border);
       font-size: 0.72rem;
-      color: var(--text-muted);
-      display: flex;
-      flex-direction: column;
-      gap: 0.15rem;
-      flex-shrink: 0;
       font-family: monospace;
+      flex-shrink: 0;
+      overflow: hidden;
     }
-    #intent-bar { font-family: system-ui, sans-serif; font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .toggle-pill {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 0.72rem;
+      font-family: monospace;
+      cursor: pointer;
+      color: var(--green);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .toggle-pill.off { color: var(--text-muted); }
+    #context-bar, #summary-bar { color: var(--text-muted); }
+    .toggle-pill {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 0.72rem;
+      font-family: monospace;
+      cursor: pointer;
+      color: var(--green);
+    }
+    .toggle-pill.off { color: var(--text-muted); }
 
     /* ── Input area ── */
     #input-area {
@@ -277,9 +307,10 @@
     /* ── Tab bar ── */
     #tab-bar {
       display: flex;
-      border-bottom: 1px solid var(--border);
+      border-top: 1px solid var(--border);
       background: var(--surface);
       flex-shrink: 0;
+      padding-bottom: env(safe-area-inset-bottom);
     }
     .tab-btn {
       flex: 1;
@@ -295,6 +326,19 @@
       -webkit-tap-highlight-color: transparent;
     }
     .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── Admin panel ── */
+    #admin-panel {
+      display: none;
+      flex: 1;
+      overflow: hidden;
+    }
+    #admin-panel.visible { display: flex; }
+    #admin-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
 
     /* ── Files panel ── */
     #files-panel {
@@ -363,15 +407,6 @@
 </head>
 <body>
   <div id="app">
-    <div id="header">
-      <h1>nixx</h1>
-      <span class="subtitle">personal memory system</span>
-    </div>
-
-    <div id="tab-bar">
-      <button class="tab-btn active" data-tab="chat">chat</button>
-      <button class="tab-btn" data-tab="files">files</button>
-    </div>
 
     <!-- Chat panel -->
     <div id="chat-panel" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
@@ -388,12 +423,14 @@
     </div>
 
     <div id="status-area">
-      <div id="summary-bar"></div>
-      <div id="intent-bar">intent: -</div>
+      <button class="toggle-pill" id="recall-pill" title="Toggle recall">recall</button>
+      <button class="toggle-pill" id="intent-pill" title="Toggle intent injection">intent</button>
+      <span id="context-bar"></span>
+      <span id="summary-bar"></span>
     </div>
 
     <div id="input-area">
-      <textarea id="input" placeholder="Message nixx… (Shift+Enter for newline)" rows="1"></textarea>
+      <textarea id="input" placeholder="Message nixx…" rows="1"></textarea>
       <button id="send-btn" title="Send">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -401,6 +438,11 @@
         </svg>
       </button>
     </div>
+    </div>
+
+    <!-- Admin panel -->
+    <div id="admin-panel">
+      <iframe id="admin-frame" title="Admin dashboard"></iframe>
     </div>
 
     <!-- Files panel -->
@@ -412,6 +454,12 @@
       <div id="files-list">
         <div id="files-empty">No files yet.</div>
       </div>
+    </div>
+
+    <div id="tab-bar">
+      <button class="tab-btn active" data-tab="chat">chat</button>
+      <button class="tab-btn" data-tab="files">files</button>
+      <button class="tab-btn" data-tab="admin">admin</button>
     </div>
   </div>
 
@@ -426,6 +474,8 @@
     let streaming = false;
     let pendingToolCalls = null;
     let currentAssistantEl = null;
+    let summaryInProgress = false;
+    const activeImageJobs = new Map(); // job_id -> {path, intervalId}
 
     // ── DOM refs ───────────────────────────────────────────────────────────────
     const messagesEl    = document.getElementById('messages');
@@ -434,8 +484,10 @@
     const approvalCard  = document.getElementById('approval-card');
     const approvalTools = document.getElementById('approval-tools');
     const approvalReason= document.getElementById('approval-reasoning');
+    const contextBarEl  = document.getElementById('context-bar');
     const summaryBarEl  = document.getElementById('summary-bar');
-    const intentBarEl   = document.getElementById('intent-bar');
+    const recallPill    = document.getElementById('recall-pill');
+    const intentPill    = document.getElementById('intent-pill');
 
     // ── Message rendering ──────────────────────────────────────────────────────
     function addMessage(role, content = '') {
@@ -481,17 +533,65 @@
     }
 
     // ── Status bars ────────────────────────────────────────────────────────────
+    async function refreshContextBar() {
+      try {
+        const r = await fetch(`${API}/v1/debug/context`);
+        if (!r.ok) return;
+        const d = await r.json();
+        const usage = d.token_usage || {};
+        let prompt = usage.prompt_tokens || 0;
+        let ctx = usage.context_length || 0;
+        // Fallback: if no token_usage yet (server just started / no messages sent),
+        // read context_length from /health so the bar shows 0% rather than nothing.
+        if (ctx <= 0) {
+          try {
+            const hr = await fetch(`${API}/health`);
+            if (hr.ok) {
+              const hd = await hr.json();
+              ctx = parseInt(hd.context_length || '0', 10);
+            }
+          } catch { /* ignore */ }
+        }
+        if (ctx <= 0) return;
+        const pct = Math.min(prompt / ctx, 1.0);
+        const filled = Math.round(pct * 20);
+        const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
+        const color = pct < 0.5 ? 'var(--green)' : pct < 0.8 ? 'var(--yellow)' : 'var(--red)';
+        contextBarEl.innerHTML = `<span style="color:${color}">context ${Math.round(pct * 100)}%</span>`;
+      } catch { /* non-fatal */ }
+    }
+
+    async function triggerAutoSummary() {
+      if (summaryInProgress) return;
+      summaryInProgress = true;
+      try {
+        const r = await fetch(`${API}/v1/episodic/summary`, { method: 'POST' });
+        const d = await r.json();
+        if (r.ok) {
+          const tags = (d.tags || []).join(', ') || 'none';
+          const entities = d.entities || {};
+          const entityParts = Object.entries(entities)
+            .filter(([, v]) => Array.isArray(v) && v.length)
+            .map(([k, v]) => `${k}: ${v.join(', ')}`);
+          const entityStr = entityParts.length ? entityParts.join('; ') : 'none';
+          addSystem(
+            `Summary created (buffer ${d.start_buffer_id}\u2013${d.end_buffer_id})\n` +
+            `Tags: ${tags}\nEntities: ${entityStr}\n\n${d.content}`
+          );
+          await refreshStatus();
+        }
+      } catch { /* non-fatal */ } finally {
+        summaryInProgress = false;
+      }
+    }
+
     async function refreshStatus() {
       try {
         const [intentResp, statusResp] = await Promise.all([
           fetch(`${API}/v1/intent`),
           fetch(`${API}/v1/episodic/status`),
         ]);
-        if (intentResp.ok) {
-          const d = await intentResp.json();
-          const text = d.intent ? d.intent.replace(/\n/g, ' ') : null;
-          intentBarEl.textContent = text ? `intent: ${text.slice(0, 150)}` : 'intent: -';
-        }
+        if (intentResp.ok) { /* intent displayed via pill color */ }
         if (statusResp.ok) {
           const d = await statusResp.json();
           if (d.current_words != null && d.interval_words) {
@@ -499,11 +599,11 @@
             const filled = Math.round(pct * 20);
             const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
             const color = pct < 0.5 ? 'var(--green)' : pct < 0.8 ? 'var(--yellow)' : 'var(--red)';
-            summaryBarEl.innerHTML =
-              `<span>summary </span>` +
-              `<span style="color:${color}">${bar}</span>` +
-              ` ${Math.round(pct * 100)}%` +
-              ` <span style="color:var(--text-muted)">(${d.current_words}/${d.interval_words} words)</span>`;
+            summaryBarEl.innerHTML = `<span style="color:${color}">summary ${Math.round(pct * 100)}%</span>`;
+          }
+          updateTogglePills(d.recall_enabled !== false, d.intent_enabled !== false);
+          if (d.summary_due && !summaryInProgress) {
+            triggerAutoSummary();
           }
         }
       } catch { /* non-fatal */ }
@@ -562,6 +662,7 @@
                 assistantEl.remove();
               }
               await refreshStatus();
+              refreshContextBar();
               setIdle();
               return;
             }
@@ -586,6 +687,11 @@
               accumulated = '';
               assistantEl.textContent = '';
               assistantEl.appendChild(cursor);
+              continue;
+            }
+
+            if (data.image_job_started) {
+              startPollingImageJob(data.image_job_started.job_id, data.image_job_started.path || '');
               continue;
             }
 
@@ -636,6 +742,80 @@
       sendBtn.disabled = false;
       inputEl.focus();
     }
+
+    // ── Image job polling ──────────────────────────────────────────────────────
+    function startPollingImageJob(jobId, path) {
+      if (activeImageJobs.has(jobId)) return;
+      const intervalId = setInterval(async () => {
+        try {
+          const r = await fetch(`${API}/v1/image/jobs`);
+          if (!r.ok) return;
+          const d = await r.json();
+          const job = (d.jobs || []).find(j => j.job_id === jobId);
+          if (!job) return;
+          if (job.status === 'done') {
+            clearInterval(intervalId);
+            activeImageJobs.delete(jobId);
+            const latency = job.latency_ms ? ` (${(job.latency_ms / 60000).toFixed(1)}m)` : '';
+            const imgPath = `images/${jobId}.png`;
+            const imgUrl = `${API}/v1/files/download?path=${encodeURIComponent(imgPath)}`;
+            const div = document.createElement('div');
+            div.className = 'msg image';
+            div.innerHTML =
+              `<img src="${imgUrl}" alt="generated image" loading="lazy">` +
+              `<div class="img-caption">✓ Done${latency} · ${path}</div>`;
+            messagesEl.appendChild(div);
+            scrollToBottom();
+          } else if (job.status === 'failed') {
+            clearInterval(intervalId);
+            activeImageJobs.delete(jobId);
+            addSystem(`✗ Image job failed (${jobId.slice(0, 8)})`);
+          }
+        } catch { /* non-fatal, try again next interval */ }
+      }, 15000);
+      activeImageJobs.set(jobId, { path, intervalId });
+    }
+
+    // ── Toggle pills ───────────────────────────────────────────────────────────
+    function updateTogglePills(recallOn, intentOn) {
+      recallPill.textContent = 'recall';
+      recallPill.classList.toggle('off', !recallOn);
+      intentPill.textContent = 'intent';
+      intentPill.classList.toggle('off', !intentOn);
+    }
+
+    async function toggleRecall() {
+      try {
+        const r = await fetch(`${API}/v1/episodic/status`);
+        const d = await r.json();
+        const newVal = !d.recall_enabled;
+        await fetch(`${API}/v1/episodic/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recall_enabled: newVal }),
+        });
+        addSystem(`Recall ${newVal ? 'on' : 'off'}.`);
+        updateTogglePills(newVal, intentPill.classList.contains('off') ? false : true);
+      } catch { addSystem('Failed.'); }
+    }
+
+    async function toggleIntent() {
+      try {
+        const r = await fetch(`${API}/v1/episodic/status`);
+        const d = await r.json();
+        const newVal = !d.intent_enabled;
+        await fetch(`${API}/v1/episodic/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intent_enabled: newVal }),
+        });
+        addSystem(`Intent injection ${newVal ? 'on' : 'off'}.`);
+        updateTogglePills(recallPill.classList.contains('off') ? false : true, newVal);
+      } catch { addSystem('Failed.'); }
+    }
+
+    recallPill.addEventListener('click', toggleRecall);
+    intentPill.addEventListener('click', toggleIntent);
 
     // ── Tool approval ──────────────────────────────────────────────────────────
     function showApproval(data, assistantEl) {
@@ -699,8 +879,7 @@
 
       if (cmd === 'help') {
         addSystem(
-          'Commands: /clear /summary /search "query" /context /recall /intent [text|clear] /project [dir|clear] /threshold [0.0-1.0] /interval [n]\n' +
-          'Enter sends · Shift+Enter = newline'
+          'Commands: /clear /summary /search "query" /context /recall /intent-toggle /intent [text|clear] /project [dir|clear] /threshold [0.0-1.0] /interval [n]'
         );
       } else if (cmd === 'clear') {
         history = [];
@@ -737,17 +916,9 @@
           addSystem(`System prompt (first 800 chars):\n\n${preview}`);
         } catch { addSystem('Failed to fetch context.'); }
       } else if (cmd === 'recall') {
-        try {
-          const r = await fetch(`${API}/v1/episodic/status`);
-          const d = await r.json();
-          const newVal = !d.recall_enabled;
-          await fetch(`${API}/v1/episodic/config`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recall_enabled: newVal }),
-          });
-          addSystem(`Recall ${newVal ? 'on' : 'off'}.`);
-        } catch { addSystem('Failed.'); }
+        await toggleRecall();
+      } else if (cmd === 'intent-toggle') {
+        await toggleIntent();
       } else if (cmd === 'intent') {
         if (!arg) {
           try {
@@ -824,6 +995,8 @@
     // ── Tab switching ──────────────────────────────────────────────────────────
     const chatPanel  = document.getElementById('chat-panel');
     const filesPanel = document.getElementById('files-panel');
+    const adminPanel = document.getElementById('admin-panel');
+    const adminFrame = document.getElementById('admin-frame');
     let currentDir = '';
 
     document.getElementById('tab-bar').addEventListener('click', e => {
@@ -834,7 +1007,12 @@
       const tab = btn.dataset.tab;
       chatPanel.style.display  = tab === 'chat'  ? 'flex' : 'none';
       filesPanel.classList.toggle('visible', tab === 'files');
+      adminPanel.classList.toggle('visible', tab === 'admin');
       if (tab === 'files') loadFiles('');
+      if (tab === 'admin' && !adminFrame.dataset.loaded) {
+        adminFrame.src = '/admin';
+        adminFrame.dataset.loaded = '1';
+      }
     });
 
     // ── File browser ───────────────────────────────────────────────────────────
@@ -971,6 +1149,7 @@
     (async () => {
       await restoreSession();
       await refreshStatus();
+      refreshContextBar();
       inputEl.focus();
     })();
   </script>
