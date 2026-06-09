@@ -689,10 +689,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tui-apppy" class="md-nav__link">
+  <a href="#pwa-web-client" class="md-nav__link">
     <span class="md-ellipsis">
       
-        TUI (app.py)
+        PWA (web client)
       
     </span>
   </a>
@@ -817,7 +817,21 @@ workspaces and conversations - nixx remembers everything across sessions.</p>
 <td><code>nixx serve</code> via pipx</td>
 <td>8000</td>
 <td>siderealyear</td>
-<td>FastAPI + Uvicorn</td>
+<td>FastAPI + Uvicorn. Serves API + PWA at <code>/app</code>.</td>
+</tr>
+<tr>
+<td>nixx-admin</td>
+<td><code>nixx-admin</code> via pipx</td>
+<td>8001</td>
+<td>siderealyear</td>
+<td>Admin dashboard, binds to 0.0.0.0:8001. Proxied at <code>https://nixx.perdrizet.org/admin</code>.</td>
+</tr>
+<tr>
+<td>nixx-image</td>
+<td><code>nixx-image</code> via dedicated venv</td>
+<td>8090</td>
+<td>siderealyear</td>
+<td>On-demand FLUX image service. <code>Restart=no</code> - stays dead until explicitly started. Auto-shuts-down after 10 min idle (never while a job is running).</td>
 </tr>
 <tr>
 <td>LLM server</td>
@@ -834,25 +848,39 @@ workspaces and conversations - nixx remembers everything across sessions.</p>
 <td>mxbai-embed-large-v1-f16.gguf</td>
 </tr>
 <tr>
-<td>pgweb</td>
-<td><code>/usr/local/bin/pgweb</code></td>
-<td>8081</td>
-<td>siderealyear</td>
-<td>DB browser</td>
-</tr>
-<tr>
 <td>PostgreSQL</td>
 <td>Docker container</td>
 <td>5432</td>
 <td>postgres</td>
-<td><code>student-postgres</code> container; starts automatically with Docker. Managed via <code>~/postgreSQL-server/docker-compose.yml</code> (service name: <code>postgres</code>).</td>
+<td><code>student-postgres</code> container; starts automatically with Docker. Managed via <code>~/postgreSQL-server/docker-compose.yml</code>.</td>
+</tr>
+<tr>
+<td>pgadmin</td>
+<td>Docker container</td>
+<td>8088</td>
+<td>-</td>
+<td><code>dpage/pgadmin4</code>, binds to Tailscale IP (100.64.0.2:8088). DB browser.</td>
 </tr>
 <tr>
 <td>SearXNG</td>
 <td>Docker container</td>
 <td>8888</td>
 <td>-</td>
-<td><code>services/searxng/</code>, <code>docker compose up -d</code></td>
+<td><code>services/searxng/</code>, <code>docker compose up -d</code>. Binds to 127.0.0.1.</td>
+</tr>
+<tr>
+<td>Grafana</td>
+<td>Docker container</td>
+<td>3000</td>
+<td>-</td>
+<td>Metrics dashboard. Paired with <code>postgres-exporter</code> on port 9187.</td>
+</tr>
+<tr>
+<td>postgres-exporter</td>
+<td>Docker container</td>
+<td>9187</td>
+<td>-</td>
+<td>Exports PostgreSQL metrics for Grafana.</td>
 </tr>
 </tbody>
 </table>
@@ -860,11 +888,25 @@ workspaces and conversations - nixx remembers everything across sessions.</p>
 services</strong>. To pick up code changes: <code>sudo systemctl restart nixx-server</code>.</p>
 <hr />
 <h2 id="models">Models<a class="headerlink" href="#models" title="Permanent link">&para;</a></h2>
-<p>Both models live in <code>/opt/models/</code>, owned by <code>llama:llama</code>:</p>
+<p>LLM and embed models live in <code>/opt/models/</code>, owned by <code>llama:llama</code>:</p>
 <ul>
 <li><strong>LLM</strong>: <code>gpt-oss-20b-mxfp4.gguf</code> — served at port 8502, OpenAI-compatible API</li>
 <li><strong>Embeddings</strong>: <code>mxbai-embed-large-v1-f16.gguf</code> — served at port 8082, 1024-dimensional vectors</li>
 </ul>
+<p>FLUX image models are HuggingFace repos cached in <code>/mnt/fast_scratch/huggingface_transformers_cache</code> (fast NVMe):</p>
+<ul>
+<li><strong>FLUX.1 Schnell</strong>: <code>black-forest-labs/FLUX.1-schnell</code> — Apache 2.0, no token needed, 4-step default</li>
+<li><strong>FLUX.1 Kontext [dev]</strong>: <code>black-forest-labs/FLUX.1-Kontext-dev</code> — gated (requires <code>HF_READ_TOKEN</code> in <code>.env</code>), 28-step default</li>
+</ul>
+<p>GPU assignment: llamacpp uses device 0 (P100, 16 GB, ~13 GB used). nixx-image uses device 1 (GTX 1070, 8 GB) via <code>CUDA_VISIBLE_DEVICES=1</code>.</p>
+<ul>
+<li><strong>Schnell</strong>: loaded with <code>.to("cuda")</code>, no offloading. VAE slicing+tiling enabled. ~4 min total.</li>
+<li><strong>Kontext [dev]</strong>: full CPU mode - no <code>.to("cuda")</code> calls at all. Flux transformer double-stream attention allocates ~6.77 GiB in one tensor, larger than 8 GB VRAM at any resolution. CPU inference takes ~2-3 hours. <code>enable_attention_slicing()</code> has no effect (doesn't hook into <code>dispatch_attention_fn → _native_attention</code> in Flux). VAE slicing+tiling enabled.</li>
+</ul>
+<p>Performance benchmarks (GTX 1070, NVMe model cache):
+- Schnell cold load: ~6 seconds from NVMe
+- Schnell 4-step inference: ~30 seconds (GPU, <code>.to("cuda")</code>)
+- Kontext inference: ~2-3 hours (CPU, 28 steps)</p>
 <hr />
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <p>nixx is installed into pipx: <code>pipx install --editable .</code>
@@ -907,7 +949,7 @@ server process still needs a restart, but no reinstall is needed.</p>
 </tr>
 <tr>
 <td><code>state</code></td>
-<td>Persistent server state (key/value). Currently stores <code>intent</code>. Survives restarts.</td>
+<td>Persistent server state (key/value). Stores <code>intent</code>, <code>project_dir</code>, <code>tool_usage</code> (JSON). Survives restarts.</td>
 </tr>
 </tbody>
 </table>
@@ -931,15 +973,19 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 </tr>
 <tr>
 <td><code>scripts/nixx-server.service</code></td>
-<td>API server, <code>User=siderealyear</code>, uses <code>~/.local/bin/nixx serve</code>, reads <code>/home/siderealyear/nixx/.env</code></td>
+<td>API server, <code>User=siderealyear</code>, uses <code>~/.local/bin/nixx serve</code>, reads <code>/home/siderealyear/nixx/.env</code>. <code>NoNewPrivileges</code> and <code>PrivateTmp</code> removed (were blocking sudo).</td>
+</tr>
+<tr>
+<td><code>scripts/nixx-admin.service</code></td>
+<td>Admin dashboard, <code>User=siderealyear</code>, binds to Tailscale IP 100.64.0.2:8001.</td>
 </tr>
 <tr>
 <td><code>scripts/nixx-embed.service</code></td>
 <td>Embed server, <code>User=llama</code>, model at <code>/opt/models/mxbai-embed-large-v1-f16.gguf</code></td>
 </tr>
 <tr>
-<td><code>scripts/nixx-pgweb.service</code></td>
-<td>pgweb browser, <code>User=siderealyear</code>, <code>--listen=8081</code></td>
+<td><code>/etc/systemd/system/nixx-image.service</code></td>
+<td>On-demand image service. Not in <code>scripts/</code> - managed directly in <code>/etc/systemd/system/</code>. <code>Restart=no</code>, <code>CUDA_VISIBLE_DEVICES=1</code>, <code>HF_HOME=/mnt/fast_scratch/huggingface_transformers_cache</code>. Venv: <code>~/.local/share/pipx/venvs/nixx-image/</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -980,10 +1026,14 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 <a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>    shadow.py     — shadow_backup() — auto-snapshot before file modifications
 <a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>    web_search.py — WebSearchTool (SearXNG JSON API, requires X-Forwarded-For header)
 <a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>    read_webpage.py — ReadWebpageTool (httpx + BeautifulSoup, 8000 char limit)
-<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>    registry.py   — ToolRegistry: registers tools, builds OpenAI tool defs, executes calls
-<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>  tui/
-<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>    __init__.py
-<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>    app.py        — NixxApp (Textual): full chat UI
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>    image_tools.py — GenerateImageTool (Schnell, ~4 min), EditImageTool (Kontext, ~25 min). Both auto-start nixx-image via `sudo systemctl start nixx-image` if not running.
+<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>    registry.py   — ToolRegistry: registers tools, builds OpenAI tool defs, executes calls
+<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>  image_service/
+<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>    __init__.py
+<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>    app.py        — FastAPI image service: /generate (Schnell), /edit (Kontext), /jobs, /health. Lazy-loads models on first request, shuts down after 10 min idle.
+<a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>  tui/
+<a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>    __init__.py
+<a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a>    app.py        — NixxApp (Textual): full chat UI
 </code></pre></div>
 <hr />
 <h2 id="config-nixxconfig">Config (NixxConfig)<a class="headerlink" href="#config-nixxconfig" title="Permanent link">&para;</a></h2>
@@ -1005,7 +1055,7 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 <tr>
 <td><code>llm_base_url</code></td>
 <td><code>http://localhost:8080</code></td>
-<td>Overridden in .env to <code>https://promptlyapi.com/v1</code> (remote inference API)</td>
+<td>Overridden in .env to <code>http://localhost:8502</code> (local llamacpp)</td>
 </tr>
 <tr>
 <td><code>llm_model</code></td>
@@ -1079,32 +1129,41 @@ at test module scope.</p>
 <hr />
 <h2 id="api-routes">API routes<a class="headerlink" href="#api-routes" title="Permanent link">&para;</a></h2>
 <p>All routes on the nixx server (port 8000):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>GET  /health                     — {status, model, context_length}
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>GET  /v1/debug/context          — last assembled system message + recall hits + token usage
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>POST /v1/chat/completions        — OpenAI-compatible, streaming + non-streaming, tool loop
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>POST /v1/ingest                  — ingest file path or URL → sources + memories
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>POST /v1/sources                 — create source from buffer range
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>GET  /v1/sources                 — list sources (optional ?name= filter)
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>GET  /v1/sources/{id}
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>GET  /v1/sources/{id}/content    — all memory chunks for a source
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>GET  /v1/buffer/session          — buffer entries since last session marker
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>POST /v1/buffer/clear            — write session marker (start new session)
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>GET  /v1/episodic/status         — summary due? current word count, interval, recall_threshold
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>POST /v1/episodic/config         — update interval_words, recall_enabled, recall_threshold at runtime
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>POST /v1/episodic/summary        — create summary now (no body required)
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>POST /v1/episodic/search         — vector search summaries (body: {query, top_k})
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>GET  /v1/episodic/transcript     — buffer entries for a range (?start_id=&amp;end_id=)
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>GET  /v1/episodic/summaries      — list all summaries
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>GET  /v1/intent                  — get current intent + messages_since_derivation
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>POST /v1/intent                  — set intent manually (body: {intent})
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>DELETE /v1/intent                — clear intent
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>POST /v1/intent/derive           — trigger intent derivation immediately
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>GET  /v1/project                 — get scratch_dir + current project directory
-<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>POST /v1/project                 — set project directory (body: {directory})
-<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>DELETE /v1/project               — clear project directory
-</code></pre></div>
+<p>```
+GET  /health                     — {status, model, context_length}
+GET  /v1/debug/context          — last assembled system message + recall hits + token usage
+POST /v1/chat/completions        — OpenAI-compatible, streaming + non-streaming, tool loop
+POST /v1/ingest                  — ingest file path or URL → sources + memories
+POST /v1/sources                 — create source from buffer range
+GET  /v1/sources                 — list sources (optional ?name= filter)
+GET  /v1/sources/{id}
+GET  /v1/sources/{id}/content    — all memory chunks for a source
+GET  /v1/buffer/session          — buffer entries since last session marker
+POST /v1/buffer/clear            — write session marker (start new session)
+GET  /v1/episodic/status         — summary due? current word count, interval, recall_threshold
+POST /v1/episodic/config         — update interval_words, recall_enabled, recall_threshold at runtime
+POST /v1/episodic/summary        — create summary now (no body required)
+POST /v1/episodic/search         — vector search summaries (body: {query, top_k})
+GET  /v1/episodic/transcript     — buffer entries for a range (?start_id=&amp;end_id=)
+GET  /v1/episodic/summaries      — list all summaries
+GET  /v1/intent                  — get current intent + messages_since_derivation
+POST /v1/intent                  — set intent manually (body: {intent})
+DELETE /v1/intent                — clear intent
+POST /v1/intent/derive           — trigger intent derivation immediately
+GET  /v1/project                 — get scratch_dir + current project directory
+POST /v1/project                 — set project directory (body: {directory})
+DELETE /v1/project               — clear project directory
+GET  /v1/image/jobs              — proxy to nixx-image /jobs (returns empty list if service is down)
+GET  /v1/files                   — list scratch directory (optional ?subdir=)
+GET  /v1/files/download          — download a file (?path=relative/path)
+DELETE /v1/files                 — delete a file (?path=relative/path)</p>
 <hr />
-<h2 id="tui-apppy">TUI (app.py)<a class="headerlink" href="#tui-apppy" title="Permanent link">&para;</a></h2>
+<h2 id="pwa-web-client">PWA (web client)<a class="headerlink" href="#pwa-web-client" title="Permanent link">&para;</a></h2>
+<p>Served by nixx-server at <code>/app</code>. Static files in <code>src/nixx/web/</code> - live from source because nixx is installed with <code>pipx install --editable .</code>. No reinstall needed for static file changes; <code>sudo systemctl restart nixx-server</code> required for <code>.py</code> changes.</p>
+<p>Public HTTPS endpoint: <code>https://nixx.perdrizet.org</code> (nginx on gatekeeper VPS, proxies over Tailscale to 100.64.0.2:8000). Protected with HTTP basic auth (<code>/etc/nginx/nixx.htpasswd</code> on gatekeeper). Admin dashboard proxied at <code>/admin</code> → 100.64.0.2:8001. Nginx config: <code>/etc/nginx/conf.d/nixx.conf</code> on gatekeeper.</p>
+<p>Installed as a PWA on Android (Chrome → Add to home screen → Install). Manifest at <code>/app/manifest.json</code> with 192×512 PNG icons (<code>icon-192.png</code>, <code>icon-512.png</code>) generated at <code>src/nixx/web/</code>. True standalone mode requires HTTPS + PNG icons ≥ 192×192 - SVG-only manifests are not installable by Chrome.</p>
+<p>Status bar is a single centered line: <code>recall · intent · context N% · summary N%</code>. <code>recall</code> and <code>intent</code> are clickable toggle pills (green=on, muted=off). Context and summary show fill % in green/yellow/red. Tab bar is at the bottom (mobile nav pattern). Admin tab uses a relative iframe src <code>/admin</code>.</p>
+<p>Service worker (<code>sw.js</code>) caches only the app shell (<code>/app/</code>, manifest, icon). API calls are never cached. If the PWA shows stale content after an update: hard-reload in browser, or bump <code>CACHE</code> version in <code>sw.js</code> to force SW replacement.</p>
 <p>Key classes:
 - <code>NixxApp</code> — main Textual app
 - <code>ChatInput(TextArea)</code> — multi-line input; <code>Enter</code>=send, <code>Shift+Enter</code>=newline
@@ -1212,6 +1271,14 @@ project directory. The project directory is set via <code>/project &lt;dir&gt;</
 <td><code>read_webpage</code></td>
 <td>Fetch URL, strip HTML, return up to 8000 chars of text</td>
 </tr>
+<tr>
+<td><code>generate_image</code></td>
+<td>Generate image via FLUX.1 Schnell (~4 min, 4 steps default). Auto-starts nixx-image service. Output to <code>~/nixx_scratch/images/</code>.</td>
+</tr>
+<tr>
+<td><code>edit_image</code></td>
+<td>Edit image via FLUX.1 Kontext [dev] (~25 min, 28 steps default). Auto-starts nixx-image service.</td>
+</tr>
 </tbody>
 </table>
 <p>Shadow backups are stored at <code>~/.nixx/shadows/</code> with timestamps, preserving directory structure.</p>
@@ -1228,21 +1295,23 @@ before execution. The TUI renders a dim inline <code>calling tool: &lt;name&gt;<
   port (8502) is set in <code>.env</code>.</li>
 <li>DB table for episodic summaries is <code>summaries</code> (not <code>episodic_summaries</code>).</li>
 <li><code>pre-commit</code> hook requires venv activated. Bypass with <code>git -c core.hooksPath=/dev/null commit</code>.</li>
-<li><code>llm_context_length</code> in <code>.env</code> is overridden at startup by the <code>/props</code> fetch. The running
-  value can be verified at <code>GET /health</code> (<code>context_length</code> field) or from server logs at startup.
-  The <code>/props</code> fetch hits <code>model.perdrizet.org</code> - if WireGuard is down at startup it will fail and
-  fall back to 8192. The <code>/health</code> route retries the fetch, so restarting nixx-server after
-  the tunnel is up is enough.</li>
+<li><code>llm_context_length</code> in <code>.env</code> is overridden at startup by the <code>/props</code> fetch from the local
+  llamacpp server (port 8502). The running value can be verified at <code>GET /health</code> (<code>context_length</code>
+  field) or from server logs at startup. If llamacpp isn't up yet when nixx-server starts, the fetch
+  fails silently and falls back to 8192. The <code>/health</code> route retries the fetch.</li>
 <li><code>/props</code> returns <code>n_ctx</code> under <code>default_generation_settings</code>, not at the top level.</li>
-<li>SearXNG requires <code>X-Forwarded-For: 127.0.0.1</code> header on requests and <code>format=json</code> must be
+<li>nixx-image has <code>Restart=no</code> by design - it stays dead after idle shutdown. <code>sudo systemctl start nixx-image</code> to bring it up. Tools do this automatically.</li>
+<li>Completed image jobs (both generate and edit) are appended to <code>~/nixx_scratch/image_jobs.jsonl</code> for persistence across service restarts. Admin metrics reads this file first, then merges live in-memory jobs.</li>
+<li><code>tool_usage</code> is persisted in the <code>state</code> table (key <code>tool_usage</code>, JSON). Loaded on startup, saved after every tool call. No longer lost on restart.</li>
+<li>Kontext runs fully on CPU (no CUDA calls). Schnell runs fully on GPU (<code>.to("cuda")</code>). Do not add <code>enable_sequential_cpu_offload()</code> to either - Schnell doesn't need it, Kontext can't use GPU at all.</li>
+<li><code>transformers</code> pinned to <code>&lt;4.52</code> in the nixx-image venv. 4.52+ requires <code>torch.float8_e8m0fnu</code> which needs torch 2.7; image venv has torch 2.6+cu124.</li>
+<li>HF Kontext model is gated - <code>HF_READ_TOKEN</code> must be in <code>.env</code> and <code>huggingface-cli login</code> must have been run once to persist the token to <code>~/.cache/huggingface/token</code>.</li>
+<li><code>NoNewPrivileges=true</code> and <code>PrivateTmp=true</code> removed from nixx-server and nixx-admin service units - they blocked <code>sudo systemctl start nixx-image</code> from within the process.</li>
+<li>Sudoers rule for image service: <code>/etc/sudoers.d/nixx-admin</code> allows <code>NOPASSWD</code> for <code>systemctl start/stop nixx-image</code>.</li>
+<li>SearXNG requires <code>X-Forwarded-For: 127.0.0.1</code> header on requests, and <code>format=json</code> must be
   explicitly listed in <code>settings.yml</code> under <code>search.formats</code>. If the container is restarted after
-  changing settings.yml, use <code>docker compose down &amp;&amp; docker compose up -d</code> (not just <code>restart</code>) to
-  ensure the bind-mount file is re-read correctly.</li>
-<li><code>wg-quick@wg0</code> uses a hostname endpoint (<code>perdrizet.org:51820</code>). If it starts before DNS is
-  available it fails silently and stays down. Fixed by
-  <code>/etc/systemd/system/wg-quick@wg0.service.d/wait-for-network.conf</code> with
-  <code>After=network-online.target</code>. If the tunnel is down, <code>model.perdrizet.org</code> will be unreachable
-  and all LLM calls will 504. Check with <code>sudo systemctl status wg-quick@wg0</code>.</li>
+  changing <code>settings.yml</code>, use <code>docker compose down &amp;&amp; docker compose up -d</code> (not just <code>restart</code>)
+  to ensure the bind-mount file is re-read.</li>
 </ul>
 
 
