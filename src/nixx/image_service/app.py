@@ -1,7 +1,11 @@
 """nixx-image: on-demand image generation and editing service.
 
-Generation uses FLUX.1 Schnell (fast, ~1 min, Apache 2.0).
-Editing uses FLUX.1 Kontext [dev] (slower, ~25 min, supports input images).
+Generation uses FLUX.1 Schnell (fast, ~30s, Apache 2.0).
+Editing uses either:
+  - InstructPix2Pix (fast, ~1-2 min on GTX 1070, GPU) [default]
+  - FLUX.1 Kontext [dev] (slow, ~2-3 hours, CPU-only due to VRAM constraints)
+
+Active edit model is controlled at runtime via GET/POST /edit_model.
 
 Runs on localhost:8090 only. Started on demand by the ImageTool in nixx.
 Shuts itself down after IDLE_TIMEOUT seconds with no requests.
@@ -29,6 +33,7 @@ logger = logging.getLogger("nixx-image")
 
 SCHNELL_MODEL_ID = "black-forest-labs/FLUX.1-schnell"
 KONTEXT_MODEL_ID = "black-forest-labs/FLUX.1-Kontext-dev"
+IP2P_MODEL_ID = "timbrooks/instruct-pix2pix"
 IDLE_TIMEOUT = int(os.environ.get("NIXX_IMAGE_IDLE_TIMEOUT", "600"))  # 10 min default
 OUTPUT_DIR = Path(os.environ.get("NIXX_IMAGE_OUTPUT_DIR", Path.home() / "nixx_scratch" / "images"))
 JOB_LOG = OUTPUT_DIR.parent / "image_jobs.jsonl"  # persistent record of completed jobs
@@ -62,19 +67,20 @@ class GenerateRequest(BaseModel):
 class EditRequest(BaseModel):
     prompt: str
     input_path: str
-    # 768×768 max on GTX 1070 (8 GB). At 1024×1024, Kontext's concatenated
-    # reference+target tokens produce a ~6.77 GiB attention allocation that
-    # doesn't fit. 768×768 brings this down to ~2.2 GiB.
-    width: int = 768
-    height: int = 768
-    steps: int = 28  # Kontext needs more steps for quality edits
+    width: int = 512   # SD 3.5 Medium default; Kontext also accepts this
+    height: int = 512
+    steps: int = 28
 
 # ── Global state ───────────────────────────────────────────────────────────────
 
 _schnell_pipe: Any = None  # FluxPipeline, loaded lazily
 _schnell_lock = threading.Lock()
-_kontext_pipe: Any = None  # FluxKontextPipeline, loaded lazily
+_kontext_pipe: Any = None  # FluxKontextPipeline, loaded lazily (CPU-only)
 _kontext_lock = threading.Lock()
+_ip2p_pipe: Any = None  # StableDiffusionInstructPix2PixPipeline, loaded lazily (GPU)
+_ip2p_lock = threading.Lock()
+_active_edit_model: str = "ip2p"  # "ip2p" or "kontext"
+_edit_model_lock = threading.Lock()
 _jobs: dict[str, dict[str, Any]] = {}  # job_id -> {status, result, error}
 _last_request: float = time.monotonic()
 
@@ -85,6 +91,8 @@ def _unload_schnell() -> None:
         return
     with _schnell_lock:
         _schnell_pipe = None
+    import gc
+    gc.collect()
     torch.cuda.empty_cache()
     logger.info("FLUX.1 Schnell unloaded.")
 
@@ -95,15 +103,30 @@ def _unload_kontext() -> None:
         return
     with _kontext_lock:
         _kontext_pipe = None
+    import gc
+    gc.collect()
     torch.cuda.empty_cache()
     logger.info("FLUX.1 Kontext [dev] unloaded.")
+
+
+def _unload_ip2p() -> None:
+    global _ip2p_pipe
+    if _ip2p_pipe is None:
+        return
+    with _ip2p_lock:
+        _ip2p_pipe = None
+    import gc
+    gc.collect()
+    torch.cuda.empty_cache()
+    logger.info("InstructPix2Pix unloaded.")
 
 
 def _load_schnell() -> Any:
     global _schnell_pipe
     if _schnell_pipe is not None:
         return _schnell_pipe
-    _unload_kontext()  # Free VRAM before loading
+    _unload_kontext()  # Free RAM
+    _unload_ip2p()    # Free VRAM (both use GPU)
     with _schnell_lock:
         if _schnell_pipe is not None:
             return _schnell_pipe
@@ -119,11 +142,35 @@ def _load_schnell() -> Any:
         return _schnell_pipe
 
 
+def _load_ip2p() -> Any:
+    global _ip2p_pipe
+    if _ip2p_pipe is not None:
+        return _ip2p_pipe
+    _unload_schnell()  # Free VRAM (both use GPU)
+    _unload_kontext()  # Free RAM
+    with _ip2p_lock:
+        if _ip2p_pipe is not None:
+            return _ip2p_pipe
+        logger.info("Loading InstructPix2Pix...")
+        from diffusers import StableDiffusionInstructPix2PixPipeline
+
+        p = StableDiffusionInstructPix2PixPipeline.from_pretrained(
+            IP2P_MODEL_ID,
+            torch_dtype=torch.float16,
+            safety_checker=None,
+        )
+        p.to("cuda")
+        _ip2p_pipe = p
+        logger.info("InstructPix2Pix loaded.")
+        return _ip2p_pipe
+
+
 def _load_kontext() -> Any:
     global _kontext_pipe
     if _kontext_pipe is not None:
         return _kontext_pipe
-    _unload_schnell()  # Free VRAM before loading
+    _unload_schnell()  # Free VRAM
+    _unload_ip2p()     # Free VRAM
     with _kontext_lock:
         if _kontext_pipe is not None:
             return _kontext_pipe
@@ -189,7 +236,52 @@ def _run_generate(job_id: str, prompt: str, width: int, height: int, steps: int)
         _last_request = time.monotonic()
 
 
-def _run_edit(
+def _run_edit_ip2p(
+    job_id: str,
+    prompt: str,
+    input_path: str,
+    width: int,
+    height: int,
+) -> None:
+    global _last_request
+    try:
+        from PIL import Image, ImageOps
+
+        pipe = _load_ip2p()
+        _last_request = time.monotonic()
+        logger.info("Editing image (InstructPix2Pix) for job %s", job_id)
+        # IP2P works best with images resized to multiples of 8
+        w = (width // 8) * 8
+        h = (height // 8) * 8
+        input_image = ImageOps.exif_transpose(Image.open(input_path).convert("RGB")).resize((w, h))
+        result = pipe(
+            prompt=prompt,
+            image=input_image,
+            num_inference_steps=50,
+            image_guidance_scale=1.5,  # how much to preserve original
+            guidance_scale=7.5,        # how strongly to follow text prompt
+        )
+        img = result.images[0]
+        out_path = OUTPUT_DIR / f"{job_id}.png"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(out_path)
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["result"] = str(out_path)
+        _jobs[job_id]["completed_at"] = time.time()
+        _jobs[job_id]["latency_ms"] = int((_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000)
+        logger.info("Job %s done: %s", job_id, out_path)
+        _append_job_log(job_id, _jobs[job_id])
+    except Exception as exc:
+        logger.exception("Job %s failed", job_id)
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["error"] = str(exc)
+        _jobs[job_id]["completed_at"] = time.time()
+        _append_job_log(job_id, _jobs[job_id])
+    finally:
+        _last_request = time.monotonic()
+
+
+def _run_edit_kontext(
     job_id: str,
     prompt: str,
     input_path: str,
@@ -199,12 +291,16 @@ def _run_edit(
 ) -> None:
     global _last_request
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
 
+        # Hide all GPUs during Kontext inference. Even with no explicit .to("cuda"),
+        # diffusers moves tensors to the available CUDA device internally at call time.
+        # Setting CUDA_VISIBLE_DEVICES="" forces everything onto CPU.
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
         pipe = _load_kontext()
         _last_request = time.monotonic()
-        logger.info("Editing image for job %s", job_id)
-        input_image = Image.open(input_path).convert("RGB")
+        logger.info("Editing image (Kontext) for job %s", job_id)
+        input_image = ImageOps.exif_transpose(Image.open(input_path).convert("RGB"))
         result = pipe(
             prompt=prompt,
             image=input_image,
@@ -230,7 +326,24 @@ def _run_edit(
         _jobs[job_id]["completed_at"] = time.time()
         _append_job_log(job_id, _jobs[job_id])
     finally:
+        # Restore GPU visibility so Schnell/SD35 can use CUDA if needed later
+        os.environ["CUDA_VISIBLE_DEVICES"] = "1"
         _last_request = time.monotonic()
+
+
+def _run_edit(
+    job_id: str,
+    prompt: str,
+    input_path: str,
+    width: int,
+    height: int,
+    steps: int,
+) -> None:
+    """Dispatch to the active edit model."""
+    if _active_edit_model == "kontext":
+        _run_edit_kontext(job_id, prompt, input_path, width, height, steps)
+    else:
+        _run_edit_ip2p(job_id, prompt, input_path, width, height)
 
 
 # ── FastAPI app ────────────────────────────────────────────────────────────────
@@ -250,10 +363,28 @@ def create_app() -> FastAPI:
         return {
             "status": "ok",
             "generate_model": SCHNELL_MODEL_ID,
-            "edit_model": KONTEXT_MODEL_ID,
+            "active_edit_model": _active_edit_model,
+            "edit_model_id": IP2P_MODEL_ID if _active_edit_model == "ip2p" else KONTEXT_MODEL_ID,
             "schnell_loaded": _schnell_pipe is not None,
+            "ip2p_loaded": _ip2p_pipe is not None,
             "kontext_loaded": _kontext_pipe is not None,
         }
+
+    @app.get("/edit_model")
+    async def get_edit_model() -> dict[str, str]:
+        return {"model": _active_edit_model}
+
+    @app.post("/edit_model")
+    async def set_edit_model(body: dict[str, str]) -> dict[str, str]:
+        global _active_edit_model
+        model = body.get("model", "").lower()
+        if model not in ("ip2p", "kontext"):
+            raise HTTPException(status_code=400, detail="model must be 'ip2p' or 'kontext'")
+        with _edit_model_lock:
+            _active_edit_model = model
+        logger.info("Active edit model set to: %s", model)
+        labels = {"ip2p": "InstructPix2Pix (fast, GPU)", "kontext": "FLUX.1 Kontext [dev] (slow, CPU)"}
+        return {"model": model, "label": labels[model]}
 
     @app.post("/generate")
     async def generate(req: GenerateRequest) -> dict[str, str]:

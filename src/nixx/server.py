@@ -318,6 +318,91 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         """Return per-tool call counts since server start."""
         return {"tool_usage": getattr(app.state, "tool_usage", {})}
 
+    @app.get("/v1/image/preview")
+    async def image_preview(path: str) -> Any:
+        """Serve an image file from scratch_dir for the crop UI."""
+        from fastapi.responses import FileResponse
+
+        resolved = Path(path).resolve()
+        scratch = Path(config.scratch_dir).resolve()
+        if not str(resolved).startswith(str(scratch)):
+            raise HTTPException(status_code=403, detail="Path outside scratch_dir")
+        if not resolved.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+        return FileResponse(resolved)
+
+    @app.post("/v1/image/crop")
+    async def image_crop(body: dict[str, Any]) -> dict[str, str]:
+        """Crop an image and save to a temp file. Returns {cropped_path}."""
+        import tempfile
+        from PIL import Image as _Image, ImageOps as _ImageOps  # type: ignore[import]
+
+        path = body.get("path", "")
+        x = int(body.get("x", 0))
+        y = int(body.get("y", 0))
+        size = int(body.get("size", 0))
+        if not path or size <= 0:
+            raise HTTPException(status_code=400, detail="path and size required")
+
+        resolved = Path(path).resolve()
+        scratch = Path(config.scratch_dir).resolve()
+        if not str(resolved).startswith(str(scratch)):
+            raise HTTPException(status_code=403, detail="Path outside scratch_dir")
+        if not resolved.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        img = _ImageOps.exif_transpose(_Image.open(resolved).convert("RGB"))
+        cropped = img.crop((x, y, x + size, y + size))
+        suffix = resolved.suffix or ".jpg"
+        tmp = tempfile.NamedTemporaryFile(
+            delete=False, suffix=suffix, dir=scratch / "images"
+        )
+        tmp.close()
+        cropped.save(tmp.name)
+        return {"cropped_path": tmp.name}
+
+    @app.get("/v1/image/edit-model")
+    async def get_edit_model() -> dict[str, str]:
+        """Return the active image edit model from nixx-image."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                r = await client.get("http://127.0.0.1:8090/edit_model")
+                r.raise_for_status()
+                return r.json()
+        except Exception:
+            return {"model": "sd35"}  # default if service not running
+
+    @app.post("/v1/image/edit-model")
+    async def set_edit_model(body: dict[str, Any]) -> dict[str, Any]:
+        """Set the active image edit model on nixx-image."""
+        model = body.get("model", "")
+        if model not in ("ip2p", "kontext"):
+            raise HTTPException(status_code=400, detail="model must be 'ip2p' or 'kontext'")
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Start the service if it isn't running yet
+                try:
+                    await client.get("http://127.0.0.1:8090/health")
+                except Exception:
+                    import asyncio as _asyncio
+                    proc = await _asyncio.create_subprocess_exec(
+                        "sudo", "systemctl", "start", "nixx-image",
+                        stdout=_asyncio.subprocess.DEVNULL,
+                        stderr=_asyncio.subprocess.DEVNULL,
+                    )
+                    await proc.communicate()
+                r = await client.post(
+                    "http://127.0.0.1:8090/edit_model",
+                    json={"model": model},
+                    timeout=10.0,
+                )
+                r.raise_for_status()
+                return r.json()
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     async def _ensure_n_ctx() -> None:
         """Retry fetching n_ctx from the LLM server if the startup attempt failed."""
         if getattr(app.state, "n_ctx_fetched", True):
@@ -964,6 +1049,22 @@ async def _chat_event_stream(
                             yield f"data: {json.dumps({'approval_needed': {'tools': tool_names, 'reasoning': reasoning_acc, 'tool_calls': [{'id': tc['id'], 'type': 'function', 'function': {'name': tc['name'], 'arguments': tc['arguments']}} for tc in pending_tool_calls]}})}\n\n"
                             yield "data: [PAUSE]\n\n"
                             return
+                        # Pause for square crop if edit_image tool has a non-square image
+                        for tc in pending_tool_calls:
+                            if tc["name"] == "edit_image":
+                                try:
+                                    from PIL import Image as _PILImage
+                                    tc_args = json.loads(tc["arguments"]) if isinstance(tc["arguments"], str) else tc["arguments"]
+                                    img_path = tc_args.get("input_path", "")
+                                    if img_path and Path(img_path).exists():
+                                        with _PILImage.open(img_path) as _img:
+                                            _w, _h = _img.size
+                                        if _w != _h:
+                                            yield f"data: {json.dumps({'crop_needed': {'path': img_path, 'width': _w, 'height': _h, 'tool_calls': [{'id': tc['id'], 'type': 'function', 'function': {'name': tc['name'], 'arguments': tc['arguments']}} for tc in pending_tool_calls]}})}\n\n"
+                                            yield "data: [PAUSE]\n\n"
+                                            return
+                                except Exception:
+                                    pass  # if we can't check, just let it proceed
                         break
 
                     if done and not chunk.tool_calls:

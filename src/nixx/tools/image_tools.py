@@ -1,0 +1,333 @@
+"""ImageTool: wake nixx-image service and submit generation/editing jobs."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import subprocess
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from nixx.tools.base import Tool, ToolResult
+
+logger = logging.getLogger(__name__)
+
+IMAGE_SERVICE_URL = "http://127.0.0.1:8090"
+_STARTUP_TIMEOUT = 60  # seconds to wait for service to come up
+
+
+async def _ensure_running() -> bool:
+    """Start nixx-image if not running; wait up to _STARTUP_TIMEOUT seconds."""
+    # Check if already up
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            r = await client.get(f"{IMAGE_SERVICE_URL}/health")
+            if r.status_code == 200:
+                return True
+    except Exception:
+        pass
+
+    # Not running - start it
+    logger.info("nixx-image not running, starting via systemctl...")
+    proc = await asyncio.create_subprocess_exec(
+        "sudo", "systemctl", "start", "nixx-image",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        logger.error(
+            "systemctl start nixx-image failed (rc=%d): %s",
+            proc.returncode,
+            stderr.decode().strip(),
+        )
+        return False
+
+    # Poll until up or timeout
+    deadline = asyncio.get_event_loop().time() + _STARTUP_TIMEOUT
+    while asyncio.get_event_loop().time() < deadline:
+        await asyncio.sleep(3)
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                r = await client.get(f"{IMAGE_SERVICE_URL}/health")
+                if r.status_code == 200:
+                    logger.info("nixx-image is up.")
+                    return True
+        except Exception:
+            pass
+    logger.error("nixx-image did not respond within %ds", _STARTUP_TIMEOUT)
+    return False
+
+
+class GenerateImageTool(Tool):
+    """Generate an image from a text prompt using FLUX.1 Kontext."""
+
+    def __init__(self, scratch_dir: Path) -> None:
+        self._scratch_dir = scratch_dir
+
+    @property
+    def name(self) -> str:
+        return "generate_image"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Generate an image from a text prompt using FLUX.1 Schnell (fast, ~1 min on this hardware). "
+            "Non-blocking: starts the job and returns immediately. "
+            "The image is saved to ~/nixx_scratch/images/<job_id>.png when done. "
+            "Default is 4 steps (good quality for Schnell). Increase steps only if quality is poor."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Detailed text prompt describing the image to generate.",
+                },
+                "width": {"type": "integer", "default": 1024, "description": "Image width in px."},
+                "height": {
+                    "type": "integer",
+                    "default": 1024,
+                    "description": "Image height in px.",
+                },
+                "steps": {
+                    "type": "integer",
+                    "default": 4,
+                    "description": "Number of inference steps (more = higher quality, slower).",
+                },
+            },
+            "required": ["prompt"],
+        }
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        prompt = kwargs.get("prompt", "")
+        if not prompt:
+            return ToolResult(success=False, error="prompt is required")
+
+        if not await _ensure_running():
+            return ToolResult(
+                success=False,
+                error="nixx-image service failed to start within timeout.",
+            )
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.post(
+                    f"{IMAGE_SERVICE_URL}/generate",
+                    json={
+                        "prompt": prompt,
+                        "width": int(kwargs.get("width") or 1024),
+                        "height": int(kwargs.get("height") or 1024),
+                        "steps": int(kwargs.get("steps") or 28),
+                    },
+                )
+                if not r.is_success:
+                    return ToolResult(success=False, error=f"HTTP {r.status_code}: {r.text[:200]}")
+                data = r.json()
+                job_id = data["job_id"]
+                out = str(self._scratch_dir / "images" / f"{job_id}.png")
+                return ToolResult(
+                    success=True,
+                    result=(
+                        f"Image generation started (job: {job_id}). "
+                        f"Saves to {out} in roughly 1-2 minutes (FLUX.1 Schnell, 4 steps). "
+                        "Check the file browser when done."
+                    ),
+                    metadata={"job_id": job_id, "path": out},
+                )
+        except Exception as exc:
+            return ToolResult(success=False, error=str(exc))
+
+
+class EditImageTool(Tool):
+    """Edit an existing image using a text prompt with FLUX.1 Kontext."""
+
+    def __init__(self, scratch_dir: Path) -> None:
+        self._scratch_dir = scratch_dir
+
+    @property
+    def name(self) -> str:
+        return "edit_image"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Edit an existing image using a text prompt. "
+            "Two edit models are available (switch with /image-model in chat): "
+            "'fast' uses InstructPix2Pix (GPU, ~1-2 min) and 'full' uses FLUX.1 Kontext [dev] (CPU, ~2-3 hours). "
+            "Use this when you need to modify an existing image - for new images use generate_image instead. "
+            "The input image must be an absolute path to a PNG/JPG in the scratch directory. "
+            "Non-blocking: starts the job and returns immediately. "
+            "The edited image is saved to ~/nixx_scratch/images/<job_id>.png when done. "
+            "IMPORTANT: Do not set width or height unless the user explicitly asks to resize. "
+            "The defaults (768x768) work for both models."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Text prompt describing the desired edit.",
+                },
+                "input_path": {
+                    "type": "string",
+                    "description": "Absolute path to the input image (must be in scratch directory).",
+                },
+                "width": {
+                    "type": "integer",
+                    "default": 768,
+                    "description": "Output width in px. Default 768 - do not set unless user asks to resize. Max 768.",
+                },
+                "height": {
+                    "type": "integer",
+                    "default": 768,
+                    "description": "Output height in px. Default 768 - do not set unless user asks to resize. Max 768.",
+                },
+                "steps": {"type": "integer", "default": 28},
+            },
+            "required": ["prompt", "input_path"],
+        }
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        prompt = kwargs.get("prompt", "")
+        input_path = kwargs.get("input_path", "")
+        if not prompt or not input_path:
+            return ToolResult(success=False, error="prompt and input_path are required")
+
+        if not await _ensure_running():
+            return ToolResult(
+                success=False,
+                error="nixx-image service failed to start within timeout.",
+            )
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.post(
+                    f"{IMAGE_SERVICE_URL}/edit",
+                    json={
+                        "prompt": prompt,
+                        "input_path": input_path,
+                        "width": int(kwargs.get("width") or 768),
+                        "height": int(kwargs.get("height") or 768),
+                        "steps": int(kwargs.get("steps") or 28),
+                    },
+                )
+                if not r.is_success:
+                    return ToolResult(success=False, error=f"HTTP {r.status_code}: {r.text[:200]}")
+                data = r.json()
+                job_id = data["job_id"]
+                out = str(self._scratch_dir / "images" / f"{job_id}.png")
+                return ToolResult(
+                    success=True,
+                    result=(
+                        f"Image edit started (job: {job_id}). "
+                        f"Saves to {out} when done. "
+                        "InstructPix2Pix (fast mode) takes ~1-2 min; FLUX.1 Kontext takes ~2-3 hours. "
+                        "Check /image-model to see which is active."
+                    ),
+                    metadata={"job_id": job_id, "path": out},
+                )
+        except Exception as exc:
+            return ToolResult(success=False, error=str(exc))
+
+
+class ImageStatusTool(Tool):
+    """Check the status of image generation or editing jobs."""
+
+    @property
+    def name(self) -> str:
+        return "image_status"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Check the status of image generation or editing jobs on nixx-image. "
+            "If job_id is given, returns detail for that specific job (status, elapsed time, error). "
+            "If omitted, lists all recent jobs with their current status."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "description": "Optional job ID to check. Omit to list all jobs.",
+                },
+            },
+            "required": [],
+        }
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        import time
+
+        job_id = kwargs.get("job_id", "").strip()
+
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                if job_id:
+                    r = await client.get(f"{IMAGE_SERVICE_URL}/status/{job_id}")
+                    if r.status_code == 404:
+                        return ToolResult(success=False, error=f"Job {job_id!r} not found.")
+                    r.raise_for_status()
+                    j = r.json()
+                    status = j.get("status", "unknown")
+                    submitted = j.get("submitted_at")
+                    latency_ms = j.get("latency_ms")
+                    error = j.get("error")
+
+                    if latency_ms is not None:
+                        elapsed = f"{latency_ms / 60000:.1f}m"
+                    elif submitted:
+                        elapsed = f"{(time.time() - submitted) / 60:.1f}m (still running)"
+                    else:
+                        elapsed = "unknown"
+
+                    lines = [f"Job {job_id}: {status}, elapsed {elapsed}"]
+                    if error:
+                        lines.append(f"Error: {error}")
+                    return ToolResult(success=True, result="\n".join(lines))
+
+                else:
+                    # Service may be down (idle shutdown) - return gracefully
+                    try:
+                        r = await client.get(f"{IMAGE_SERVICE_URL}/jobs")
+                        r.raise_for_status()
+                        data = r.json()
+                        jobs = data.get("jobs", [])
+                    except Exception:
+                        return ToolResult(
+                            success=True,
+                            result="nixx-image is not running (idle shutdown). No active jobs.",
+                        )
+
+                    if not jobs:
+                        return ToolResult(success=True, result="No image jobs found.")
+
+                    lines = []
+                    for j in jobs:
+                        jid = j["job_id"]
+                        status = j["status"]
+                        jtype = j.get("type", "?")
+                        latency_ms = j.get("latency_ms")
+                        submitted = j.get("submitted_at")
+                        if latency_ms is not None:
+                            elapsed = f"{latency_ms / 60000:.1f}m"
+                        elif submitted:
+                            elapsed = f"{(time.time() - submitted) / 60:.1f}m (running)"
+                        else:
+                            elapsed = "?"
+                        lines.append(f"{jid[:8]}  {jtype:<8}  {status:<8}  {elapsed}")
+                    return ToolResult(success=True, result="\n".join(lines))
+
+        except Exception as exc:
+            return ToolResult(success=False, error=str(exc))

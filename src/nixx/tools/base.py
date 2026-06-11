@@ -12,6 +12,9 @@ class ToolResult:
     success: bool
     result: str | None = None
     error: str | None = None
+    # Optional structured metadata passed to the server (not sent to LLM).
+    # Image tools use this to communicate job_id for async completion tracking.
+    metadata: dict | None = None
 
     def to_content(self) -> str:
         """Format result as content string for the LLM."""

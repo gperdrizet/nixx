@@ -137,6 +137,7 @@ class OpenAIClient:
 
         # Accumulate tool calls across chunks
         tool_calls_acc: dict[int, dict[str, str]] = {}  # index -> {id, name, arguments}
+        usage_acc: dict[str, int] = {}
 
         async with httpx.AsyncClient(timeout=self._timeout) as http:
             async with http.stream(
@@ -169,10 +170,18 @@ class OpenAIClient:
                             )
                             for tc in tool_calls_acc.values()
                         ]
-                        yield ChatResponse(content="", tool_calls=final_calls, done=True)
+                        yield ChatResponse(
+                            content="",
+                            tool_calls=final_calls,
+                            done=True,
+                            prompt_tokens=usage_acc.get("prompt_tokens", 0),
+                            completion_tokens=usage_acc.get("completion_tokens", 0),
+                        )
                         return
 
                     chunk = json.loads(payload_str)
+                    if chunk.get("usage"):
+                        usage_acc = chunk["usage"]
                     choices = chunk.get("choices") or []
                     if not choices:
                         continue
@@ -209,7 +218,12 @@ class OpenAIClient:
 
                     # Signal done only for non-tool finishes (tool_calls wait for [DONE])
                     if finish and finish != "tool_calls":
-                        yield ChatResponse(content="", done=True)
+                        yield ChatResponse(
+                            content="",
+                            done=True,
+                            prompt_tokens=usage_acc.get("prompt_tokens", 0),
+                            completion_tokens=usage_acc.get("completion_tokens", 0),
+                        )
 
     # ── Embeddings ────────────────────────────────────────────────────────────
 

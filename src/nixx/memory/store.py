@@ -298,13 +298,15 @@ class MemoryStore:
         if not summaries:
             return ""
         lines = [
-            "The following are summaries of past conversations with the user, "
-            "retrieved by relevance to the current message. Use them to inform "
-            "your response. You may reference them directly if it makes sense "
-            "in context, or use them as background without calling them out.",
+            "## Recalled memories",
+            "",
+            "Summaries of past conversations retrieved by relevance to the current message. "
+            "These are your memories - reference them naturally if relevant, or use them as "
+            "background. If asked whether you remember past conversations, the answer is yes.",
         ]
         for s in summaries:
+            score = s.get("similarity", 0)
             tags = ", ".join(s.get("tags", []))
             tag_note = f" [tags: {tags}]" if tags else ""
-            lines.append(f"- {s['content']}{tag_note}")
+            lines.append(f"\n[relevance: {score:.2f}] {s['content']}{tag_note}")
         return "\n".join(lines)

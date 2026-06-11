@@ -56,6 +56,7 @@ where = ["src"]
 [project.scripts]
 nixx = "nixx.cli:main"
 nixx-admin = "nixx.admin:main"
+nixx-image = "nixx.image_service.app:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

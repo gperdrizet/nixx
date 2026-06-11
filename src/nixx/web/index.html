@@ -223,6 +223,31 @@
     }
     #cancel-btn:active { opacity: 0.75; }
 
+    /* ── Crop modal ── */
+    #crop-card {
+      display: none;
+      margin: 0.5rem 1rem;
+      padding: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: 0.5rem;
+      flex-shrink: 0;
+    }
+    #crop-card.visible { display: block; }
+    #crop-card h4 { color: var(--accent); margin-bottom: 0.5rem; font-size: 0.9rem; font-weight: 600; }
+    #crop-hint { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.75rem; }
+    #crop-canvas-wrap { position: relative; width: 100%; touch-action: none; margin-bottom: 0.75rem; }
+    #crop-canvas { display: block; width: 100%; height: auto; border-radius: 0.25rem; cursor: grab; }
+    #crop-buttons { display: flex; gap: 0.5rem; }
+    #crop-confirm-btn {
+      flex: 1; padding: 0.6rem; background: var(--accent); color: white;
+      border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.9rem; font-weight: 500;
+    }
+    #crop-cancel-btn {
+      flex: 1; padding: 0.6rem; background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 0.375rem; cursor: pointer; font-size: 0.9rem;
+    }
+
     /* ── Status area ── */
     #status-area {
       display: flex;
@@ -422,6 +447,18 @@
       </div>
     </div>
 
+    <div id="crop-card">
+      <h4>Crop image</h4>
+      <div id="crop-hint">Drag to position the crop box, then confirm.</div>
+      <div id="crop-canvas-wrap">
+        <canvas id="crop-canvas"></canvas>
+      </div>
+      <div id="crop-buttons">
+        <button id="crop-confirm-btn">Use this crop</button>
+        <button id="crop-cancel-btn">Skip (auto-crop)</button>
+      </div>
+    </div>
+
     <div id="status-area">
       <button class="toggle-pill" id="recall-pill" title="Toggle recall">recall</button>
       <button class="toggle-pill" id="intent-pill" title="Toggle intent injection">intent</button>
@@ -616,6 +653,7 @@
 
       let accumulated = '';
       let approvalData = null;
+      let cropNeededData = null;
 
       // Show blinking cursor
       const cursor = document.createElement('span');
@@ -669,7 +707,12 @@
 
             if (raw === '[PAUSE]') {
               cursor.remove();
-              showApproval(approvalData, assistantEl);
+              if (cropNeededData) {
+                showCrop(cropNeededData, assistantEl);
+                cropNeededData = null;
+              } else {
+                showApproval(approvalData, assistantEl);
+              }
               streaming = false;
               sendBtn.disabled = false;
               return;
@@ -680,6 +723,11 @@
 
             if (data.approval_needed) {
               approvalData = data.approval_needed;
+              continue;
+            }
+
+            if (data.crop_needed) {
+              cropNeededData = data.crop_needed;
               continue;
             }
 
@@ -871,6 +919,140 @@
       inputEl.focus();
     }
 
+    // ── Crop UI ───────────────────────────────────────────────────────────────
+    const cropCard    = document.getElementById('crop-card');
+    const cropCanvas  = document.getElementById('crop-canvas');
+    let cropData      = null;   // {path, width, height, tool_calls}
+    let cropImg       = null;   // HTMLImageElement
+    let cropBoxY      = 0;      // top-left of square in image pixels (dimension constrained axis)
+    let cropBoxX      = 0;
+    let cropSize      = 0;      // side length in image pixels
+    let cropDragStart = null;   // {clientX, clientY, boxX, boxY}
+
+    function showCrop(data, assistantEl) {
+      cropData = data;
+      currentAssistantEl = assistantEl;
+      const { path, width, height } = data;
+      cropSize = Math.min(width, height);
+      cropBoxX = width  > height ? Math.round((width  - cropSize) / 2) : 0;
+      cropBoxY = height > width  ? Math.round((height - cropSize) / 2) : 0;
+
+      cropImg = new Image();
+      cropImg.onload = () => drawCrop();
+      cropImg.src = `${API}/v1/image/preview?path=${encodeURIComponent(path)}`;
+
+      cropCard.classList.add('visible');
+      cropCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function hideCrop() {
+      cropCard.classList.remove('visible');
+      cropData = null;
+      cropImg  = null;
+    }
+
+    function drawCrop() {
+      if (!cropImg) return;
+      const { width, height } = cropData;
+      // Scale canvas to display width
+      const displayW = cropCanvas.parentElement.clientWidth || 320;
+      const scale    = displayW / width;
+      cropCanvas.width  = displayW;
+      cropCanvas.height = Math.round(height * scale);
+      const ctx = cropCanvas.getContext('2d');
+      ctx.drawImage(cropImg, 0, 0, displayW, cropCanvas.height);
+      // Dim outside crop box
+      const bx = cropBoxX * scale, by = cropBoxY * scale, bs = cropSize * scale;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(0, 0, displayW, by);                           // top
+      ctx.fillRect(0, by + bs, displayW, cropCanvas.height - by - bs); // bottom
+      ctx.fillRect(0, by, bx, bs);                               // left
+      ctx.fillRect(bx + bs, by, displayW - bx - bs, bs);          // right
+      // Crop box border
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx, by, bs, bs);
+      // Rule-of-thirds grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 3; i++) {
+        ctx.beginPath(); ctx.moveTo(bx + bs*i/3, by); ctx.lineTo(bx + bs*i/3, by+bs); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx, by + bs*i/3); ctx.lineTo(bx+bs, by + bs*i/3); ctx.stroke();
+      }
+    }
+
+    function cropPointerStart(e) {
+      const pt = e.touches ? e.touches[0] : e;
+      cropDragStart = { clientX: pt.clientX, clientY: pt.clientY, boxX: cropBoxX, boxY: cropBoxY };
+      cropCanvas.style.cursor = 'grabbing';
+      e.preventDefault();
+    }
+    function cropPointerMove(e) {
+      if (!cropDragStart) return;
+      const pt = e.touches ? e.touches[0] : e;
+      const { width, height } = cropData;
+      const scale = (cropCanvas.parentElement.clientWidth || 320) / width;
+      const dx = (pt.clientX - cropDragStart.clientX) / scale;
+      const dy = (pt.clientY - cropDragStart.clientY) / scale;
+      cropBoxX = Math.max(0, Math.min(width  - cropSize, Math.round(cropDragStart.boxX + dx)));
+      cropBoxY = Math.max(0, Math.min(height - cropSize, Math.round(cropDragStart.boxY + dy)));
+      drawCrop();
+      e.preventDefault();
+    }
+    function cropPointerEnd() {
+      cropDragStart = null;
+      cropCanvas.style.cursor = 'grab';
+    }
+
+    cropCanvas.addEventListener('mousedown',  cropPointerStart, { passive: false });
+    cropCanvas.addEventListener('mousemove',  cropPointerMove,  { passive: false });
+    cropCanvas.addEventListener('mouseup',    cropPointerEnd);
+    cropCanvas.addEventListener('touchstart', cropPointerStart, { passive: false });
+    cropCanvas.addEventListener('touchmove',  cropPointerMove,  { passive: false });
+    cropCanvas.addEventListener('touchend',   cropPointerEnd);
+
+    document.getElementById('crop-confirm-btn').addEventListener('click', async () => {
+      if (!cropData) return;
+      const toolCalls = cropData.tool_calls;
+      const assistantEl = currentAssistantEl;
+      // Pre-crop the image server-side
+      let croppedPath = cropData.path;
+      try {
+        const r = await fetch(`${API}/v1/image/crop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: cropData.path, x: cropBoxX, y: cropBoxY, size: cropSize }),
+        });
+        if (r.ok) croppedPath = (await r.json()).cropped_path;
+      } catch { /* use original path if crop fails */ }
+      hideCrop();
+      // Patch input_path in the edit_image tool call
+      const patchedCalls = toolCalls.map(tc => {
+        if (tc.function.name === 'edit_image') {
+          const args = typeof tc.function.arguments === 'string'
+            ? JSON.parse(tc.function.arguments) : { ...tc.function.arguments };
+          args.input_path = croppedPath;
+          return { ...tc, function: { ...tc.function, arguments: JSON.stringify(args) } };
+        }
+        return tc;
+      });
+      history.push({ role: 'assistant', content: '', tool_calls: patchedCalls });
+      if (assistantEl) assistantEl.textContent = '';
+      await streamResponse(assistantEl || addMessage('assistant'));
+    });
+
+    document.getElementById('crop-cancel-btn').addEventListener('click', async () => {
+      if (!cropData) return;
+      const toolCalls = cropData.tool_calls;
+      const assistantEl = currentAssistantEl;
+      hideCrop();
+      // Resume with original tool calls (diffusers will auto-crop)
+      history.push({ role: 'assistant', content: '', tool_calls: toolCalls });
+      if (assistantEl) assistantEl.textContent = '';
+      await streamResponse(assistantEl || addMessage('assistant'));
+    });
+
+
     // ── Slash commands ─────────────────────────────────────────────────────────
     async function handleCommand(text) {
       const parts = text.slice(1).split(' ');
@@ -879,7 +1061,7 @@
 
       if (cmd === 'help') {
         addSystem(
-          'Commands: /clear /summary /search "query" /context /recall /intent-toggle /intent [text|clear] /project [dir|clear] /threshold [0.0-1.0] /interval [n]'
+          'Commands: /clear /summary /search "query" /context /recall /intent-toggle /intent [text|clear] /project [dir|clear] /threshold [0.0-1.0] /interval [n] /image-model [fast|full]'
         );
       } else if (cmd === 'clear') {
         history = [];
@@ -985,6 +1167,31 @@
             body: JSON.stringify({ interval_words: parseInt(arg) }),
           });
           addSystem(`Interval set to ${arg} words.`);
+        }
+      } else if (cmd === 'image-model') {
+        const aliases = { fast: 'ip2p', ip2p: 'ip2p', full: 'kontext', kontext: 'kontext' };
+        const labels  = { ip2p: 'InstructPix2Pix (fast, ~1-2 min, GPU)', kontext: 'FLUX.1 Kontext [dev] (slow, ~2-3 hours, CPU)' };
+        if (!arg) {
+          try {
+            const r = await fetch(`${API}/v1/image/edit-model`);
+            const d = await r.json();
+            addSystem(`Image edit model: ${labels[d.model] || d.model}\nSwitch with /image-model fast or /image-model full`);
+          } catch { addSystem('nixx-image not running.'); }
+        } else {
+          const model = aliases[arg.toLowerCase()];
+          if (!model) {
+            addSystem('Usage: /image-model [fast|full]  (fast=SD 3.5 Medium, full=FLUX.1 Kontext)');
+          } else {
+            try {
+              const r = await fetch(`${API}/v1/image/edit-model`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model }),
+              });
+              const d = await r.json();
+              addSystem(`Image edit model set to: ${labels[d.model] || d.model}`);
+            } catch { addSystem('Failed to set image edit model.'); }
+          }
         }
       } else {
         addSystem(`Unknown command: /${cmd}. Try /help.`);

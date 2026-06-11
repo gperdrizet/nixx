@@ -43,16 +43,22 @@ LLM and embed models live in `/opt/models/`, owned by `llama:llama`:
 FLUX image models are HuggingFace repos cached in `/mnt/fast_scratch/huggingface_transformers_cache` (fast NVMe):
 
 - **FLUX.1 Schnell**: `black-forest-labs/FLUX.1-schnell` — Apache 2.0, no token needed, 4-step default
-- **FLUX.1 Kontext [dev]**: `black-forest-labs/FLUX.1-Kontext-dev` — gated (requires `HF_READ_TOKEN` in `.env`), 28-step default
+- **InstructPix2Pix**: `timbrooks/instruct-pix2pix` — default fast edit model, ~1-2 min on GTX 1070 GPU, ~1.7 GB
+- **FLUX.1 Kontext [dev]**: `black-forest-labs/FLUX.1-Kontext-dev` — gated (requires `HF_READ_TOKEN` in `.env`), 28-step default, CPU-only (~2-3 hours)
 
 GPU assignment: llamacpp uses device 0 (P100, 16 GB, ~13 GB used). nixx-image uses device 1 (GTX 1070, 8 GB) via `CUDA_VISIBLE_DEVICES=1`.
 
-- **Schnell**: loaded with `.to("cuda")`, no offloading. VAE slicing+tiling enabled. ~4 min total.
+- **Schnell**: loaded with `.to("cuda")`, no offloading. VAE slicing+tiling enabled. ~30s inference.
+- **InstructPix2Pix**: `.to("cuda")`, float16. 50 steps, image_guidance_scale=1.5, guidance_scale=7.5. ~1-2 min. Resizes input to nearest multiple of 8. Active edit model by default.
 - **Kontext [dev]**: full CPU mode - no `.to("cuda")` calls at all. Flux transformer double-stream attention allocates ~6.77 GiB in one tensor, larger than 8 GB VRAM at any resolution. CPU inference takes ~2-3 hours. `enable_attention_slicing()` has no effect (doesn't hook into `dispatch_attention_fn → _native_attention` in Flux). VAE slicing+tiling enabled.
+
+Active edit model switches between `ip2p` and `kontext` via `POST /edit_model` on nixx-image, proxied through nixx-server at `POST /v1/image/edit-model`. Default is `ip2p`.
 
 Performance benchmarks (GTX 1070, NVMe model cache):
 - Schnell cold load: ~6 seconds from NVMe
-- Schnell 4-step inference: ~30 seconds (GPU, `.to("cuda")`)
+- Schnell 4-step inference: ~30 seconds (GPU)
+- InstructPix2Pix first load: downloads ~1.7 GB then loads; subsequent loads from HF cache
+- InstructPix2Pix inference: ~1-2 min (GPU, 50 steps)
 - Kontext inference: ~2-3 hours (CPU, 28 steps)
 
 ---
@@ -139,11 +145,11 @@ src/nixx/
     shadow.py     — shadow_backup() — auto-snapshot before file modifications
     web_search.py — WebSearchTool (SearXNG JSON API, requires X-Forwarded-For header)
     read_webpage.py — ReadWebpageTool (httpx + BeautifulSoup, 8000 char limit)
-    image_tools.py — GenerateImageTool (Schnell, ~4 min), EditImageTool (Kontext, ~25 min). Both auto-start nixx-image via `sudo systemctl start nixx-image` if not running.
+    image_tools.py — GenerateImageTool (Schnell, ~30s), EditImageTool (IP2P fast ~1-2min or Kontext slow ~2-3h). Both auto-start nixx-image via `sudo systemctl start nixx-image` if not running.
     registry.py   — ToolRegistry: registers tools, builds OpenAI tool defs, executes calls
   image_service/
     __init__.py
-    app.py        — FastAPI image service: /generate (Schnell), /edit (Kontext), /jobs, /health. Lazy-loads models on first request, shuts down after 10 min idle.
+    app.py        — FastAPI image service: /generate (Schnell), /edit (IP2P or Kontext), /edit_model (GET/POST), /jobs, /health. Lazy-loads models on first request, shuts down after 10 min idle.
   tui/
     __init__.py
     app.py        — NixxApp (Textual): full chat UI
@@ -207,6 +213,10 @@ GET  /v1/project                 — get scratch_dir + current project directory
 POST /v1/project                 — set project directory (body: {directory})
 DELETE /v1/project               — clear project directory
 GET  /v1/image/jobs              — proxy to nixx-image /jobs (returns empty list if service is down)
+GET  /v1/image/preview           — serve image file from scratch_dir (?path=absolute_path)
+POST /v1/image/crop              — crop image to square (body: {path, x, y, size}) → {cropped_path}
+GET  /v1/image/edit-model        — proxy to nixx-image /edit_model → {model}
+POST /v1/image/edit-model        — set active edit model (body: {model: 'ip2p'|'kontext'})
 GET  /v1/files                   — list scratch directory (optional ?subdir=)
 GET  /v1/files/download          — download a file (?path=relative/path)
 DELETE /v1/files                 — delete a file (?path=relative/path)
@@ -242,10 +252,9 @@ When an episodic summary is due (auto-triggered by word count, or via `/summary`
 immediately in the background - no user input needed. A `Summary created` system message appears
 inline with the LLM-derived tags and entities.
 
-TUI slash commands: `/help`, `/context`, `/summary`, `/search "q"`, `/transcript <id> [end]`,
-`/clear`, `/recall`, `/interval [n]`, `/intent [text]`, `/intent-toggle` (toggle intent injection),
-`/intent-bar` (toggle IntentBar), `/threshold [0.0-1.0]` (view or set recall similarity threshold),
-`/project [dir|clear]` (show, set, or clear project directory).
+PWA slash commands: `/help`, `/clear`, `/summary`, `/search "q"`, `/context`, `/recall`, `/intent-toggle`, `/intent [text|clear]`, `/project [dir|clear]`, `/threshold [0.0-1.0]`, `/interval [n]`, `/image-model [fast|full]` (fast=InstructPix2Pix, full=Kontext).
+
+Crop modal: when `edit_image` is called with a non-square image, the server emits a `crop_needed` SSE event before `[PAUSE]`. The PWA shows a canvas with the image and a draggable square crop box. Confirm crops server-side via `POST /v1/image/crop` and resumes with the patched path. Cancel resumes with the original path (diffusers auto-center-crops).
 
 Tool call events: when nixx calls a tool mid-stream, a dim `▸ tool_name` line is appended
 inline inside the streaming assistant message (not a separate system message).

@@ -360,6 +360,7 @@ class NixxApp(App[None]):
                         exclusive=False,
                         thread=False,
                     )
+                self.query_one("#input", ChatInput).focus()
                 event.stop()
                 return
             elif event.key == "escape":
@@ -373,6 +374,7 @@ class NixxApp(App[None]):
                 # Remove user message from history.
                 if self._history and self._history[-1]["role"] == "user":
                     self._history.pop()
+                self.query_one("#input", ChatInput).focus()
                 event.stop()
                 return
 
@@ -600,23 +602,13 @@ class NixxApp(App[None]):
         except Exception as exc:
             self._add_message("system", f"[red]Error: {exc}[/red]")
             return
-        base = data.get("base", "")
+        system_prompt = data.get("system_prompt", "")
         memory_ctx = data.get("memory")
-        hits = data.get("hits", [])
-        text = f"[b]Base prompt:[/b]\n{base}"
-        if hits:
-            text += "\n\n[b]Recall hits:[/b]"
-            for h in hits:
-                score = h.get("similarity", 0)
-                src = h.get("source_id")
-                snippet = h.get("content", "")[:120].replace("\n", " ")
-                src_tag = f" [dim](source {src})[/dim]" if src else ""
-                bar = "█" * int(score * 10)
-                text += f"\n  [{score:.3f}] {bar}{src_tag}\n  [dim]{snippet}[/dim]"
-        else:
-            text += "\n\n[dim](no recall hits)[/dim]"
+        text = f"[b]System prompt:[/b]\n{system_prompt}"
         if memory_ctx:
             text += f"\n\n[b]Injected context:[/b]\n[dim]{memory_ctx}[/dim]"
+        else:
+            text += "\n\n[dim](no recall hits)[/dim]"
         self._add_message("system", text)
 
     async def _create_summary(self) -> None:
@@ -1066,6 +1058,9 @@ class NixxApp(App[None]):
                             )
                             self._pending_tool_calls = raw_tool_calls
                             self._pending_assistant_msg = msg
+                            # Blur the chat input so Enter reaches app.on_key
+                            # instead of being swallowed as a submit.
+                            self.query_one("#input", ChatInput).blur()
                             self.query_one("#messages", ScrollableContainer).scroll_end(
                                 animate=False
                             )
@@ -1086,6 +1081,14 @@ class NixxApp(App[None]):
                             msg.append(f"\n[dim]▸ {escape_markup(tool_name)}[/dim]\n")
                             self.query_one("#messages", ScrollableContainer).scroll_end(
                                 animate=False
+                            )
+                            continue
+                        if "image_job_started" in chunk:
+                            job = chunk["image_job_started"]
+                            self.run_worker(
+                                self._poll_image_job(job["job_id"], job.get("path", "")),
+                                exclusive=False,
+                                thread=False,
                             )
                             continue
                         delta = chunk.get("choices", [{}])[0].get("delta", {})
@@ -1121,6 +1124,53 @@ class NixxApp(App[None]):
             self.run_worker(self._update_context_bar(), exclusive=False, thread=False)
             self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
             self.run_worker(self._fetch_and_show_intent_bar(), exclusive=False, thread=False)
+
+    async def _poll_image_job(self, job_id: str, path: str) -> None:
+        """Poll nixx-image until job completes, then show a notification."""
+        import asyncio
+
+        poll_interval = 15  # seconds
+        max_polls = 200  # ~50 min ceiling
+        for _ in range(max_polls):
+            await asyncio.sleep(poll_interval)
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    r = await client.get("http://127.0.0.1:8090/jobs")
+                    data = r.json()
+            except Exception:
+                continue
+            job = next((j for j in data.get("jobs", []) if j["job_id"] == job_id), None)
+            if job is None:
+                continue
+            if job["status"] == "done":
+                latency = job.get("latency_ms")
+                time_str = f" ({latency / 60000:.1f}m)" if latency else ""
+                self._add_message(
+                    "system",
+                    f"[green bold]✓ Image ready{time_str}[/green bold]\n{path}",
+                )
+                self.query_one("#messages", ScrollableContainer).scroll_end(animate=False)
+                # Open with xdg-open in background (best-effort)
+                try:
+                    import subprocess
+                    subprocess.Popen(
+                        ["xdg-open", path],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                except Exception:
+                    pass
+                return
+            elif job["status"] == "failed":
+                self._add_message(
+                    "system",
+                    f"[red]✗ Image job failed[/red] [dim]({job_id[:8]})[/dim]",
+                )
+                return
+        self._add_message(
+            "system",
+            f"[yellow]Image job timed out waiting for result[/yellow] [dim]({job_id[:8]})[/dim]",
+        )
 
     def action_clear(self) -> None:
         self._history.clear()
