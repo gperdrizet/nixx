@@ -1061,7 +1061,7 @@
 
       if (cmd === 'help') {
         addSystem(
-          'Commands: /clear /summary /search "query" /context /recall /intent-toggle /intent [text|clear] /project [dir|clear] /threshold [0.0-1.0] /interval [n] /image-model [fast|full]'
+          'Commands: /clear /summary /search "query" /context /recall /intent-toggle /intent [text|clear] /project [dir|clear] /threshold [0.0-1.0] /interval [n] /image-model [ip2p|mb|xe|kontext] /gen-model [sd14|sd21|sdxl|turbo]'
         );
       } else if (cmd === 'clear') {
         history = [];
@@ -1169,18 +1169,18 @@
           addSystem(`Interval set to ${arg} words.`);
         }
       } else if (cmd === 'image-model') {
-        const aliases = { fast: 'ip2p', ip2p: 'ip2p', full: 'kontext', kontext: 'kontext' };
-        const labels  = { ip2p: 'InstructPix2Pix (fast, ~1-2 min, GPU)', kontext: 'FLUX.1 Kontext [dev] (slow, ~2-3 hours, CPU)' };
+        const aliases = { ip2p: 'ip2p', fast: 'ip2p', mb: 'magic_brush', 'magic-brush': 'magic_brush', magic_brush: 'magic_brush', xe: 'sdxl_edit', 'sdxl-edit': 'sdxl_edit', sdxl_edit: 'sdxl_edit', kontext: 'kontext', full: 'kontext' };
+        const labels  = { ip2p: 'InstructPix2Pix (GPU, ~1.7 GiB)', magic_brush: 'MagicBrush (GPU, ~1.7 GiB)', sdxl_edit: 'SDXL img2img (seq offload, ~6.9 GiB)', kontext: 'FLUX.1 Kontext [dev] (CPU, ~24 GiB)' };
         if (!arg) {
           try {
             const r = await fetch(`${API}/v1/image/edit-model`);
             const d = await r.json();
-            addSystem(`Image edit model: ${labels[d.model] || d.model}\nSwitch with /image-model fast or /image-model full`);
+            addSystem(`Image edit model: ${labels[d.model] || d.model}\nSwitch with /image-model [ip2p|mb|xe|kontext]`);
           } catch { addSystem('nixx-image not running.'); }
         } else {
           const model = aliases[arg.toLowerCase()];
           if (!model) {
-            addSystem('Usage: /image-model [fast|full]  (fast=SD 3.5 Medium, full=FLUX.1 Kontext)');
+            addSystem('Usage: /image-model [ip2p|mb|xe|kontext]  — ip2p=InstructPix2Pix  mb=MagicBrush  xe=SDXL img2img  kontext=Kontext (CPU)');
           } else {
             try {
               const r = await fetch(`${API}/v1/image/edit-model`, {
@@ -1191,6 +1191,31 @@
               const d = await r.json();
               addSystem(`Image edit model set to: ${labels[d.model] || d.model}`);
             } catch { addSystem('Failed to set image edit model.'); }
+          }
+        }
+      } else if (cmd === 'gen-model') {
+        const aliases = { sd14: 'sd14', sd21: 'sd21', sdxl: 'sdxl', turbo: 'sdxl_turbo', 'sdxl-turbo': 'sdxl_turbo', sdxl_turbo: 'sdxl_turbo' };
+        const labels  = { sd14: 'SD 1.4 (GPU, ~2 GiB)', sd21: 'SD 2.1 Base (GPU, ~3.5 GiB)', sdxl: 'SDXL (model offload, ~6.9 GiB)', sdxl_turbo: 'SDXL Turbo (model offload, ~6.9 GiB, 4-step)' };
+        if (!arg) {
+          try {
+            const r = await fetch(`${API}/v1/image/generate-model`);
+            const d = await r.json();
+            addSystem(`Image generate model: ${labels[d.model] || d.model}\nSwitch with /gen-model [sd14|sd21|sdxl|turbo]`);
+          } catch { addSystem('nixx-image not running.'); }
+        } else {
+          const model = aliases[arg.toLowerCase()];
+          if (!model) {
+            addSystem('Usage: /gen-model [sd14|sd21|sdxl|turbo]');
+          } else {
+            try {
+              const r = await fetch(`${API}/v1/image/generate-model`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model }),
+              });
+              const d = await r.json();
+              addSystem(`Image generate model set to: ${labels[d.model] || d.model}`);
+            } catch { addSystem('Failed to set image generate model.'); }
           }
         }
       } else {

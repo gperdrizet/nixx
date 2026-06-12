@@ -459,6 +459,12 @@ class NixxApp(App[None]):
                     self.run_worker(self._set_project(arg), exclusive=False, thread=False)
                 else:
                     self.run_worker(self._show_project(), exclusive=False, thread=False)
+            elif text.startswith("/image-model"):
+                arg = text[12:].strip()
+                self.run_worker(self._image_model(arg), exclusive=False, thread=False)
+            elif text.startswith("/gen-model"):
+                arg = text[10:].strip()
+                self.run_worker(self._gen_model(arg), exclusive=False, thread=False)
             else:
                 self._add_message("system", f"Unknown command: {text}")
             chat_input.focus()
@@ -782,6 +788,53 @@ class NixxApp(App[None]):
         else:
             text += "\n[dim]No project directory set[/dim]"
         self._add_message("system", text)
+
+    async def _image_model(self, arg: str) -> None:
+        _ALIASES = {"ip2p": "ip2p", "fast": "ip2p", "mb": "magic_brush", "magic-brush": "magic_brush",
+                    "magic_brush": "magic_brush", "xe": "sdxl_edit", "sdxl-edit": "sdxl_edit",
+                    "sdxl_edit": "sdxl_edit", "kontext": "kontext", "full": "kontext"}
+        _LABELS = {"ip2p": "InstructPix2Pix (GPU, ~1.7 GiB)", "magic_brush": "MagicBrush (GPU, ~1.7 GiB)",
+                   "sdxl_edit": "SDXL img2img (seq offload, ~6.9 GiB)", "kontext": "FLUX.1 Kontext [dev] (CPU, ~24 GiB)"}
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                if not arg:
+                    r = await client.get(f"{self._base_url}/v1/image/edit-model")
+                    r.raise_for_status()
+                    model = r.json().get("model", "?")
+                    self._add_message("system", f"Image edit model: {_LABELS.get(model, model)}\nSwitch with /image-model [ip2p|mb|xe|kontext]")
+                else:
+                    model = _ALIASES.get(arg.lower())
+                    if not model:
+                        self._add_message("system", "Usage: /image-model [ip2p|mb|xe|kontext]  —  ip2p=InstructPix2Pix  mb=MagicBrush  xe=SDXL img2img  kontext=Kontext (CPU)")
+                        return
+                    r = await client.post(f"{self._base_url}/v1/image/edit-model", json={"model": model})
+                    r.raise_for_status()
+                    self._add_message("system", f"Image edit model set to: {_LABELS.get(model, model)}")
+        except Exception as exc:
+            self._add_message("system", f"Failed: {exc}")
+
+    async def _gen_model(self, arg: str) -> None:
+        _ALIASES = {"sd14": "sd14", "sd21": "sd21", "sdxl": "sdxl",
+                    "turbo": "sdxl_turbo", "sdxl-turbo": "sdxl_turbo", "sdxl_turbo": "sdxl_turbo"}
+        _LABELS = {"sd14": "SD 1.4 (GPU, ~2 GiB)", "sd21": "SD 2.1 Base (GPU, ~3.5 GiB)",
+                   "sdxl": "SDXL (model offload, ~6.9 GiB)", "sdxl_turbo": "SDXL Turbo (model offload, ~6.9 GiB, 4-step)"}
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                if not arg:
+                    r = await client.get(f"{self._base_url}/v1/image/generate-model")
+                    r.raise_for_status()
+                    model = r.json().get("model", "?")
+                    self._add_message("system", f"Image generate model: {_LABELS.get(model, model)}\nSwitch with /gen-model [sd14|sd21|sdxl|turbo]")
+                else:
+                    model = _ALIASES.get(arg.lower())
+                    if not model:
+                        self._add_message("system", "Usage: /gen-model [sd14|sd21|sdxl|turbo]")
+                        return
+                    r = await client.post(f"{self._base_url}/v1/image/generate-model", json={"model": model})
+                    r.raise_for_status()
+                    self._add_message("system", f"Image generate model set to: {_LABELS.get(model, model)}")
+        except Exception as exc:
+            self._add_message("system", f"Failed: {exc}")
 
     async def _update_context_bar(self) -> None:
         """Fetch token usage from the server and update the context gauge."""

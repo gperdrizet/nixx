@@ -143,6 +143,8 @@
         <tr><td>/project [dir|clear]</td><td>show, set, or clear project directory</td></tr>
         <tr><td>/transcript [id] [end]</td><td>view transcript messages</td></tr>
         <tr><td>/context</td><td>show current context debug info</td></tr>
+        <tr><td>/image-model [ip2p|mb|xe|kontext]</td><td>switch edit model (mb=MagicBrush, xe=SDXL img2img)</td></tr>
+        <tr><td>/gen-model [sd14|sd21|sdxl|turbo]</td><td>switch generation model</td></tr>
         <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
         <tr><td>Ctrl+L</td><td>clear conversation</td></tr>
         <tr><td>Ctrl+R</td><td>toggle episodic recall</td></tr>
@@ -363,10 +365,16 @@
           ${row('context', (c.context_length || 0).toLocaleString() + ' tokens')}
           ${row('summary frequency', (c.summary_interval || 0).toLocaleString() + ' words')}
           ${row('intent frequency', (c.intent_interval || 0) + ' messages')}
+          ${row('generate model', (c.image_models?.active_generate || 'sd21') + ' (' + (c.image_models?.generate?.find(m => m.id === c.image_models?.active_generate)?.hardware || '') + ')')}
+          ${row('edit model', (c.image_models?.active_edit || 'ip2p') + ' (' + (c.image_models?.edit?.find(m => m.id === c.image_models?.active_edit)?.hardware || '') + ')')}
         </div>
         <div class="cfg-col">
           <div class="cfg-row"><span class="cfg-key">tools</span><div class="cfg-tags">${(c.tools || []).map(t => `<span class="cfg-tag">${t}</span>`).join('')}</div></div>
           ${row('intent', c.intent ?? 'none', !c.intent)}
+          <div class="cfg-row" style="margin-top:0.5rem"><span class="cfg-key" style="font-size:0.7rem;color:var(--muted)">generation models</span></div>
+          ${(c.image_models?.generate || []).map(m => `<div class="cfg-row"><span class="cfg-key" style="padding-left:0.5rem;font-size:0.72rem">${m.id}</span><span class="cfg-val" style="font-size:0.72rem">${m.label} &mdash; ${m.hardware}, ${m.size}</span></div>`).join('')}
+          <div class="cfg-row" style="margin-top:0.3rem"><span class="cfg-key" style="font-size:0.7rem;color:var(--muted)">editing models</span></div>
+          ${(c.image_models?.edit || []).map(m => `<div class="cfg-row"><span class="cfg-key" style="padding-left:0.5rem;font-size:0.72rem">${m.id}</span><span class="cfg-val" style="font-size:0.72rem">${m.label} &mdash; ${m.hardware}, ${m.size}</span></div>`).join('')}
         </div>`;
     }
 

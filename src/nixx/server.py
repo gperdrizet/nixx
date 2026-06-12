@@ -372,6 +372,47 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         cropped.save(tmp.name)
         return {"cropped_path": tmp.name}
 
+    @app.get("/v1/image/generate-model")
+    async def get_generate_model() -> dict[str, str]:
+        """Return the active image generation model from nixx-image."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                r = await client.get("http://127.0.0.1:8090/generate-model")
+                r.raise_for_status()
+                return r.json()
+        except Exception:
+            return {"model": "sd21"}
+
+    @app.post("/v1/image/generate-model")
+    async def set_generate_model(body: dict[str, Any]) -> dict[str, Any]:
+        """Set the active image generation model on nixx-image."""
+        model = body.get("model", "")
+        if model not in ("sd14", "sd21", "sdxl", "sdxl_turbo"):
+            raise HTTPException(status_code=400, detail="model must be one of: sd14, sd21, sdxl, sdxl_turbo")
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                try:
+                    await client.get("http://127.0.0.1:8090/health")
+                except Exception:
+                    import asyncio as _asyncio
+                    proc = await _asyncio.create_subprocess_exec(
+                        "sudo", "systemctl", "start", "nixx-image",
+                        stdout=_asyncio.subprocess.DEVNULL,
+                        stderr=_asyncio.subprocess.DEVNULL,
+                    )
+                    await proc.communicate()
+                r = await client.post(
+                    "http://127.0.0.1:8090/generate-model",
+                    json={"model": model},
+                    timeout=10.0,
+                )
+                r.raise_for_status()
+                return r.json()
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     @app.get("/v1/image/edit-model")
     async def get_edit_model() -> dict[str, str]:
         """Return the active image edit model from nixx-image."""
@@ -387,8 +428,8 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
     async def set_edit_model(body: dict[str, Any]) -> dict[str, Any]:
         """Set the active image edit model on nixx-image."""
         model = body.get("model", "")
-        if model not in ("ip2p", "kontext"):
-            raise HTTPException(status_code=400, detail="model must be 'ip2p' or 'kontext'")
+        if model not in ("ip2p", "magic_brush", "sdxl_edit", "kontext"):
+            raise HTTPException(status_code=400, detail="model must be one of: ip2p, magic_brush, sdxl_edit, kontext")
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # Start the service if it isn't running yet

@@ -89,7 +89,7 @@ def create_app() -> FastAPI:
             _service_status("postgresql", "docker"),
             {**_service_status("nixx-embed"), "model": cfg.embedding_model},
             {**_service_status("llamacpp", "llamacpp.service"), "model": cfg.llm_model},
-            {**_service_status("nixx-image"), "on_demand": True, "model": "Schnell + Kontext [dev]"},
+            {**_service_status("nixx-image"), "on_demand": True, "model": "SD 2.1 + IP2P [default]"},
         ]
         # SearXNG: HTTP probe (Docker container, no systemd unit)
         searxng_state = "unknown"
@@ -335,6 +335,14 @@ def create_app() -> FastAPI:
                     runtime_ctx = int(hr.json().get("context_length", runtime_ctx))
         except Exception:
             pass
+        image_health: dict[str, Any] = {}
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as _c:
+                _hr = await _c.get("http://127.0.0.1:8090/health")
+                if _hr.status_code == 200:
+                    image_health = _hr.json()
+        except Exception:
+            pass
         return {
             "model": cfg.llm_model,
             "context_length": runtime_ctx,
@@ -346,6 +354,22 @@ def create_app() -> FastAPI:
                 "source": str(cfg.source_dir),
                 "scratch": str(cfg.scratch_dir),
                 "project": project_dir,
+            },
+            "image_models": {
+                "generate": [
+                    {"id": "sd14",       "label": "SD 1.4",         "hardware": "GPU only",         "size": "~2 GiB"},
+                    {"id": "sd21",       "label": "SD 2.1 Base",    "hardware": "GPU only",         "size": "~3.5 GiB"},
+                    {"id": "sdxl",       "label": "SDXL",           "hardware": "model offload",    "size": "~6.9 GiB"},
+                    {"id": "sdxl_turbo", "label": "SDXL Turbo",     "hardware": "model offload",    "size": "~6.9 GiB"},
+                ],
+                "edit": [
+                    {"id": "ip2p",        "label": "InstructPix2Pix", "hardware": "GPU only",        "size": "~1.7 GiB"},
+                    {"id": "magic_brush", "label": "MagicBrush",      "hardware": "GPU only",        "size": "~1.7 GiB"},
+                    {"id": "sdxl_edit",   "label": "SDXL img2img",    "hardware": "seq offload",     "size": "~6.9 GiB"},
+                    {"id": "kontext",     "label": "Kontext [dev]",   "hardware": "CPU only",        "size": "~24 GiB"},
+                ],
+                "active_generate": image_health.get("active_generate_model", "sd21"),
+                "active_edit":     image_health.get("active_edit_model", "ip2p"),
             },
         }
 

@@ -89,10 +89,18 @@ class GenerateImageTool(Tool):
                     "type": "string",
                     "description": "Detailed text prompt describing the image to generate.",
                 },
-                "width": {"type": "integer", "default": 1024, "description": "Image width in px."},
+                "filename": {
+                    "type": "string",
+                    "description": (
+                        "Output filename (without extension). 1-3 words, lowercase, hyphen-separated, "
+                        "no special characters. Describe the main subject. "
+                        "For revisions of a similar image use dotted versions: dog, dog.1, dog.2"
+                    ),
+                },
+                "width": {"type": "integer", "default": 768, "description": "Image width in px."},
                 "height": {
                     "type": "integer",
-                    "default": 1024,
+                    "default": 768,
                     "description": "Image height in px.",
                 },
                 "steps": {
@@ -101,11 +109,12 @@ class GenerateImageTool(Tool):
                     "description": "Number of inference steps (more = higher quality, slower).",
                 },
             },
-            "required": ["prompt"],
+            "required": ["prompt", "filename"],
         }
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         prompt = kwargs.get("prompt", "")
+        filename = kwargs.get("filename", "image")
         if not prompt:
             return ToolResult(success=False, error="prompt is required")
 
@@ -121,22 +130,25 @@ class GenerateImageTool(Tool):
                     f"{IMAGE_SERVICE_URL}/generate",
                     json={
                         "prompt": prompt,
-                        "width": int(kwargs.get("width") or 1024),
-                        "height": int(kwargs.get("height") or 1024),
-                        "steps": int(kwargs.get("steps") or 28),
+                        "filename": filename,
+                        "width": int(kwargs.get("width") or 768),
+                        "height": int(kwargs.get("height") or 768),
+                        "steps": int(kwargs.get("steps") or 4),
                     },
                 )
                 if not r.is_success:
                     return ToolResult(success=False, error=f"HTTP {r.status_code}: {r.text[:200]}")
                 data = r.json()
                 job_id = data["job_id"]
-                out = str(self._scratch_dir / "images" / f"{job_id}.png")
+                out = data["path"]
                 return ToolResult(
                     success=True,
                     result=(
                         f"Image generation started (job: {job_id}). "
-                        f"Saves to {out} in roughly 1-2 minutes (FLUX.1 Schnell, 4 steps). "
-                        "Check the file browser when done."
+                        f"Output path: {out}. "
+                        "SD models take 1-3 minutes; SDXL models take 3-5 minutes. "
+                        "Use the image_status tool to check progress when the user asks, "
+                        "rather than asking them to run commands themselves."
                     ),
                     metadata={"job_id": job_id, "path": out},
                 )
@@ -181,6 +193,14 @@ class EditImageTool(Tool):
                     "type": "string",
                     "description": "Absolute path to the input image (must be in scratch directory).",
                 },
+                "filename": {
+                    "type": "string",
+                    "description": (
+                        "Output filename (without extension). 1-3 words, lowercase, hyphen-separated, "
+                        "no special characters. Describe the main subject. "
+                        "For revisions of a similar image use dotted versions: dog, dog.1, dog.2"
+                    ),
+                },
                 "width": {
                     "type": "integer",
                     "default": 768,
@@ -193,12 +213,13 @@ class EditImageTool(Tool):
                 },
                 "steps": {"type": "integer", "default": 28},
             },
-            "required": ["prompt", "input_path"],
+            "required": ["prompt", "input_path", "filename"],
         }
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         prompt = kwargs.get("prompt", "")
         input_path = kwargs.get("input_path", "")
+        filename = kwargs.get("filename", "edit")
         if not prompt or not input_path:
             return ToolResult(success=False, error="prompt and input_path are required")
 
@@ -215,6 +236,7 @@ class EditImageTool(Tool):
                     json={
                         "prompt": prompt,
                         "input_path": input_path,
+                        "filename": filename,
                         "width": int(kwargs.get("width") or 768),
                         "height": int(kwargs.get("height") or 768),
                         "steps": int(kwargs.get("steps") or 28),
@@ -224,14 +246,15 @@ class EditImageTool(Tool):
                     return ToolResult(success=False, error=f"HTTP {r.status_code}: {r.text[:200]}")
                 data = r.json()
                 job_id = data["job_id"]
-                out = str(self._scratch_dir / "images" / f"{job_id}.png")
+                out = data["path"]
                 return ToolResult(
                     success=True,
                     result=(
                         f"Image edit started (job: {job_id}). "
-                        f"Saves to {out} when done. "
-                        "InstructPix2Pix (fast mode) takes ~1-2 min; FLUX.1 Kontext takes ~2-3 hours. "
-                        "Check /image-model to see which is active."
+                        f"Output path: {out}. "
+                        "IP2P/MagicBrush take 1-2 minutes; SDXL edit takes 3-5 minutes; Kontext takes ~2 hours. "
+                        "Use the image_status tool to check progress when the user asks, "
+                        "rather than asking them to run commands themselves."
                     ),
                     metadata={"job_id": job_id, "path": out},
                 )
@@ -250,7 +273,9 @@ class ImageStatusTool(Tool):
     def description(self) -> str:
         return (
             "Check the status of image generation or editing jobs on nixx-image. "
-            "If job_id is given, returns detail for that specific job (status, elapsed time, error). "
+            "Call this proactively after starting a job to report progress to the user - "
+            "do not tell the user to check themselves. "
+            "If job_id is given, returns detail for that specific job (status, elapsed time, error, output path). "
             "If omitted, lists all recent jobs with their current status."
         )
 
