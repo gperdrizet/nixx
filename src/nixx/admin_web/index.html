@@ -372,9 +372,9 @@
           <div class="cfg-row"><span class="cfg-key">tools</span><div class="cfg-tags">${(c.tools || []).map(t => `<span class="cfg-tag">${t}</span>`).join('')}</div></div>
           ${row('intent', c.intent ?? 'none', !c.intent)}
           <div class="cfg-row" style="margin-top:0.5rem"><span class="cfg-key" style="font-size:0.7rem;color:var(--muted)">generation models</span></div>
-          ${(c.image_models?.generate || []).map(m => `<div class="cfg-row"><span class="cfg-key" style="padding-left:0.5rem;font-size:0.72rem">${m.id}</span><span class="cfg-val" style="font-size:0.72rem">${m.label} &mdash; ${m.hardware}, ${m.size}</span></div>`).join('')}
+          ${(c.image_models?.generate || []).map(m => { const active = m.id === c.image_models?.active_generate; return `<div class="cfg-row"><span class="cfg-key" style="padding-left:0.5rem;font-size:0.72rem;${active ? 'color:var(--green);font-weight:600' : ''}">${m.id}${active ? ' ▸' : ''}</span><span class="cfg-val" style="font-size:0.72rem">${m.label} &mdash; ${m.hardware}, ${m.size}</span></div>`; }).join('')}
           <div class="cfg-row" style="margin-top:0.3rem"><span class="cfg-key" style="font-size:0.7rem;color:var(--muted)">editing models</span></div>
-          ${(c.image_models?.edit || []).map(m => `<div class="cfg-row"><span class="cfg-key" style="padding-left:0.5rem;font-size:0.72rem">${m.id}</span><span class="cfg-val" style="font-size:0.72rem">${m.label} &mdash; ${m.hardware}, ${m.size}</span></div>`).join('')}
+          ${(c.image_models?.edit || []).map(m => { const active = m.id === c.image_models?.active_edit; return `<div class="cfg-row"><span class="cfg-key" style="padding-left:0.5rem;font-size:0.72rem;${active ? 'color:var(--green);font-weight:600' : ''}">${m.id}${active ? ' ▸' : ''}</span><span class="cfg-val" style="font-size:0.72rem">${m.label} &mdash; ${m.hardware}, ${m.size}</span></div>`; }).join('')}
         </div>`;
     }
 

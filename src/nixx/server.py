@@ -172,13 +172,28 @@ async def _assemble_messages(
             )
 
     # Runtime facts: inject actual config values so the model doesn't guess.
+    _image_gen_model = "unknown"
+    _image_edit_model = "unknown"
+    try:
+        async with httpx.AsyncClient(timeout=1.0) as _ic:
+            _ih = await _ic.get("http://127.0.0.1:8090/health")
+            if _ih.status_code == 200:
+                _id = _ih.json()
+                _image_gen_model = _id.get("active_generate_model", "unknown")
+                _image_edit_model = _id.get("active_edit_model", "unknown")
+    except Exception:
+        _image_gen_model = "not running"
+        _image_edit_model = "not running"
+
     runtime_block = (
         f"\n\n## Runtime configuration\n\n"
         f"Model: {config.llm_model}\n"
         f"Context window: {config.llm_context_length} tokens\n"
         f"Response reserve: {_RESPONSE_RESERVE} tokens (reserved for your reply)\n"
         f"Scratch directory: {config.scratch_dir}\n"
-        f"Source directory: {_NIXX_ROOT}"
+        f"Source directory: {_NIXX_ROOT}\n"
+        f"Image generation model: {_image_gen_model}\n"
+        f"Image edit model: {_image_edit_model}"
     )
 
     # system_base is the full assembled prompt minus recalled memory context.
@@ -422,7 +437,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                 r.raise_for_status()
                 return r.json()
         except Exception:
-            return {"model": "sd35"}  # default if service not running
+            return {"model": "ip2p"}  # default if service not running
 
     @app.post("/v1/image/edit-model")
     async def set_edit_model(body: dict[str, Any]) -> dict[str, Any]:

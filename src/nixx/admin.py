@@ -84,12 +84,27 @@ def create_app() -> FastAPI:
 
         cfg = NixxConfig()
 
+        # Fetch live model selection from nixx-image health endpoint
+        _image_svc = _service_status("nixx-image")
+        _image_model_label = "not running"
+        if _image_svc.get("active"):
+            try:
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    _hr = await client.get("http://127.0.0.1:8090/health")
+                    if _hr.status_code == 200:
+                        _hd = _hr.json()
+                        _image_model_label = (
+                            f"{_hd.get('active_generate_model', '?')} / {_hd.get('active_edit_model', '?')}"
+                        )
+            except Exception:
+                _image_model_label = "unknown"
+
         services = [
             _service_status("nixx-server"),
             _service_status("postgresql", "docker"),
             {**_service_status("nixx-embed"), "model": cfg.embedding_model},
             {**_service_status("llamacpp", "llamacpp.service"), "model": cfg.llm_model},
-            {**_service_status("nixx-image"), "on_demand": True, "model": "SD 2.1 + IP2P [default]"},
+            {**_image_svc, "on_demand": True, "model": _image_model_label},
         ]
         # SearXNG: HTTP probe (Docker container, no systemd unit)
         searxng_state = "unknown"
@@ -358,7 +373,7 @@ def create_app() -> FastAPI:
             "image_models": {
                 "generate": [
                     {"id": "sd14",       "label": "SD 1.4",         "hardware": "GPU only",         "size": "~2 GiB"},
-                    {"id": "sd21",       "label": "SD 2.1 Base",    "hardware": "GPU only",         "size": "~3.5 GiB"},
+                    {"id": "sd21",       "label": "SD 2.1",         "hardware": "GPU only",         "size": "~3.5 GiB"},
                     {"id": "sdxl",       "label": "SDXL",           "hardware": "model offload",    "size": "~6.9 GiB"},
                     {"id": "sdxl_turbo", "label": "SDXL Turbo",     "hardware": "model offload",    "size": "~6.9 GiB"},
                 ],

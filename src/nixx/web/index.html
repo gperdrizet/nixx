@@ -331,10 +331,11 @@
 
     /* ── Tab bar ── */
     #tab-bar {
-      display: flex;
+      display: flex !important;
       border-top: 1px solid var(--border);
       background: var(--surface);
       flex-shrink: 0;
+      min-height: 44px;
       padding-bottom: env(safe-area-inset-bottom);
     }
     .tab-btn {
@@ -805,19 +806,21 @@
             clearInterval(intervalId);
             activeImageJobs.delete(jobId);
             const latency = job.latency_ms ? ` (${(job.latency_ms / 60000).toFixed(1)}m)` : '';
-            const imgPath = `images/${jobId}.png`;
-            const imgUrl = `${API}/v1/files/download?path=${encodeURIComponent(imgPath)}`;
+            // path is the absolute server-side path; derive a relative scratch path for download
+            const relPath = path.replace(/.*nixx_scratch\//, '');
+            const imgUrl = `${API}/v1/files/download?path=${encodeURIComponent(relPath)}`;
+            const fname = path.split('/').pop();
             const div = document.createElement('div');
             div.className = 'msg image';
             div.innerHTML =
-              `<img src="${imgUrl}" alt="generated image" loading="lazy">` +
-              `<div class="img-caption">✓ Done${latency} · ${path}</div>`;
+              `<img src="${imgUrl}" alt="generated image" loading="lazy" style="max-width:100%;border-radius:6px;">` +
+              `<div class="img-caption">✓ Done${latency} · ${fname}</div>`;
             messagesEl.appendChild(div);
             scrollToBottom();
-          } else if (job.status === 'failed') {
+          } else if (job.status === 'error') {
             clearInterval(intervalId);
             activeImageJobs.delete(jobId);
-            addSystem(`✗ Image job failed (${jobId.slice(0, 8)})`);
+            addSystem(`✗ Image job failed: ${job.error || jobId.slice(0, 8)}`);
           }
         } catch { /* non-fatal, try again next interval */ }
       }, 15000);

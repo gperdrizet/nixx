@@ -1,14 +1,14 @@
 """nixx-image: on-demand image generation and editing service.
 
 Generation models (switch via GET/POST /generate-model):
-  - sd14        CompVis/stable-diffusion-v1-4              GPU only,         ~2 GiB
-  - sd21        stabilityai/stable-diffusion-2-1-base      GPU only,       ~3.5 GiB  [default]
+  - sd14        CompVis/stable-diffusion-v1-4              GPU only,         ~2 GiB  [default]
+  - sd21        sd2-community/stable-diffusion-2-1         GPU only,       ~3.5 GiB
   - sdxl        stabilityai/stable-diffusion-xl-base-1.0   model offload,  ~6.9 GiB
   - sdxl_turbo  stabilityai/sdxl-turbo                     model offload,  ~6.9 GiB  (4-step)
 
 Editing models (switch via GET/POST /edit_model):
   - ip2p        timbrooks/instruct-pix2pix                 GPU only,       ~1.7 GiB  [default]
-  - magic_brush osunlp/MagicBrush                          GPU only,       ~1.7 GiB  (IP2P fine-tune)
+  - magic_brush osunlp/InstructPix2Pix-MagicBrush          GPU only,       ~1.7 GiB  (IP2P fine-tune)
   - sdxl_edit   stabilityai/stable-diffusion-xl-base-1.0   seq offload,   ~6.9 GiB  (img2img)
   - kontext     black-forest-labs/FLUX.1-Kontext-dev        CPU only,       ~24 GiB
 
@@ -37,11 +37,11 @@ from pydantic import BaseModel
 logger = logging.getLogger("nixx-image")
 
 SD14_MODEL_ID = "CompVis/stable-diffusion-v1-4"
-SD21_MODEL_ID = "stabilityai/stable-diffusion-2-1-base"
+SD21_MODEL_ID = "sd2-community/stable-diffusion-2-1"
 SDXL_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 SDXL_TURBO_MODEL_ID = "stabilityai/sdxl-turbo"
 IP2P_MODEL_ID = "timbrooks/instruct-pix2pix"
-MAGIC_BRUSH_MODEL_ID = "osunlp/MagicBrush"
+MAGIC_BRUSH_MODEL_ID = "osunlp/InstructPix2Pix-MagicBrush"
 KONTEXT_MODEL_ID = "black-forest-labs/FLUX.1-Kontext-dev"
 IDLE_TIMEOUT = int(os.environ.get("NIXX_IMAGE_IDLE_TIMEOUT", "600"))  # 10 min default
 OUTPUT_DIR = Path(os.environ.get("NIXX_IMAGE_OUTPUT_DIR", Path.home() / "nixx_scratch" / "images"))
@@ -66,21 +66,19 @@ def _append_job_log(job_id: str, job: dict[str, Any]) -> None:
         logger.warning("Failed to write job log", exc_info=True)
 
 
-def _safe_filename(filename: str, job_id: str) -> str:
-    """Sanitize model-provided filename and append short job suffix."""
+def _safe_filename(filename: str) -> str:
+    """Sanitize model-provided filename."""
     import re
     slug = re.sub(r"[^a-z0-9.\ -]", "", filename.lower())
-    slug = re.sub(r"\s+", "-", slug).strip("-.")[:60] or "image"
-    # Insert job suffix before the last extension-like segment if present
-    # e.g. 'dog.1' → 'dog.1-a3f9b2', 'sunset' → 'sunset-a3f9b2'
-    return f"{slug}-{job_id[:6]}"
+    slug = re.sub(r"\s+", "-", slug).strip("-.")[:80] or "image"
+    return slug
 
 class GenerateRequest(BaseModel):
     prompt: str
     filename: str  # provided by the model - e.g. 'red-cat' → saved as 'red-cat-<job6>.png'
     width: int = 768
     height: int = 768
-    steps: int = 30  # SD-family default; SDXL Turbo always uses 4 regardless
+    steps: int = 30  # SD-family default; SDXL Turbo ignores this and always uses 4
 
 
 class EditRequest(BaseModel):
@@ -140,7 +138,7 @@ def _unload_sd21() -> None:
     with _sd21_lock:
         _sd21_pipe = None
     import gc; gc.collect(); torch.cuda.empty_cache()
-    logger.info("SD 2.1 Base unloaded.")
+    logger.info("SD 2.1 unloaded.")
 
 
 def _unload_sdxl() -> None:
@@ -214,7 +212,9 @@ def _load_sd14() -> Any:
             return _sd14_pipe
         logger.info("Loading SD 1.4...")
         from diffusers import StableDiffusionPipeline
-        p = StableDiffusionPipeline.from_pretrained(SD14_MODEL_ID, torch_dtype=torch.float16, safety_checker=None)
+        p = StableDiffusionPipeline.from_pretrained(
+            SD14_MODEL_ID, torch_dtype=torch.float16, safety_checker=None,
+        )
         p.to("cuda")
         _sd14_pipe = p
         logger.info("SD 1.4 loaded.")
@@ -230,12 +230,14 @@ def _load_sd21() -> Any:
     with _sd21_lock:
         if _sd21_pipe is not None:
             return _sd21_pipe
-        logger.info("Loading SD 2.1 Base...")
+        logger.info("Loading SD 2.1...")
         from diffusers import StableDiffusionPipeline
-        p = StableDiffusionPipeline.from_pretrained(SD21_MODEL_ID, torch_dtype=torch.float16, safety_checker=None)
+        p = StableDiffusionPipeline.from_pretrained(
+            SD21_MODEL_ID, torch_dtype=torch.float16, safety_checker=None,
+        )
         p.to("cuda")
         _sd21_pipe = p
-        logger.info("SD 2.1 Base loaded.")
+        logger.info("SD 2.1 loaded.")
         return _sd21_pipe
 
 
@@ -250,7 +252,9 @@ def _load_sdxl() -> Any:
             return _sdxl_pipe
         logger.info("Loading SDXL...")
         from diffusers import AutoPipelineForText2Image
-        p = AutoPipelineForText2Image.from_pretrained(SDXL_MODEL_ID, torch_dtype=torch.float16, use_safetensors=True)
+        p = AutoPipelineForText2Image.from_pretrained(
+            SDXL_MODEL_ID, torch_dtype=torch.float16, use_safetensors=True,
+        )
         p.enable_model_cpu_offload()
         p.vae.enable_slicing()
         p.vae.enable_tiling()
@@ -270,7 +274,9 @@ def _load_sdxl_turbo() -> Any:
             return _sdxl_turbo_pipe
         logger.info("Loading SDXL Turbo...")
         from diffusers import AutoPipelineForText2Image
-        p = AutoPipelineForText2Image.from_pretrained(SDXL_TURBO_MODEL_ID, torch_dtype=torch.float16, use_safetensors=True)
+        p = AutoPipelineForText2Image.from_pretrained(
+            SDXL_TURBO_MODEL_ID, torch_dtype=torch.float16, use_safetensors=True,
+        )
         p.enable_model_cpu_offload()
         _sdxl_turbo_pipe = p
         logger.info("SDXL Turbo loaded.")
@@ -395,45 +401,7 @@ def _run_generate_sd(job_id: str, prompt: str, filename: str, width: int, height
         h = (height // 8) * 8 or 512
         result = pipe(prompt=prompt, width=w, height=h, num_inference_steps=steps or 30)
         img = result.images[0]
-        out_path = OUTPUT_DIR / f"{_safe_filename(filename, job_id)}.png"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        img.save(out_path)
-        _jobs[job_id]["status"] = "done"
-        _jobs[job_id]["result"] = str(out_path)
-        _jobs[job_id]["completed_at"] = time.time()
-        _jobs[job_id]["latency_ms"] = int((_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000)
-        logger.info("Job %s done: %s", job_id, out_path)
-        _append_job_log(job_id, _jobs[job_id])
-    except Exception as exc:
-        logger.exception("Job %s failed", job_id)
-        _jobs[job_id]["status"] = "error"
-        _jobs[job_id]["error"] = str(exc)
-        _jobs[job_id]["completed_at"] = time.time()
-        _append_job_log(job_id, _jobs[job_id])
-    finally:
-        import torch
-        torch.cuda.empty_cache()
-        _last_request = time.monotonic()
-
-
-def _run_generate_sdxl(job_id: str, prompt: str, filename: str, width: int, height: int, steps: int) -> None:
-    global _last_request
-    try:
-        if _active_generate_model == "sdxl_turbo":
-            pipe = _load_sdxl_turbo()
-            _steps = 4
-            _guidance = 0.0
-        else:
-            pipe = _load_sdxl()
-            _steps = steps or 25
-            _guidance = 5.0
-        _last_request = time.monotonic()
-        logger.info("Generating image (%s) for job %s", _active_generate_model, job_id)
-        w = (width // 64) * 64 or 768   # SDXL requires multiple of 64
-        h = (height // 64) * 64 or 768
-        result = pipe(prompt=prompt, width=w, height=h, num_inference_steps=_steps, guidance_scale=_guidance)
-        img = result.images[0]
-        out_path = OUTPUT_DIR / f"{_safe_filename(filename, job_id)}.png"
+        out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(out_path)
         _jobs[job_id]["status"] = "done"
@@ -481,7 +449,7 @@ def _run_edit_ip2p(
             guidance_scale=7.5,        # how strongly to follow text prompt
         )
         img = result.images[0]
-        out_path = OUTPUT_DIR / f"{_safe_filename(filename, job_id)}.png"
+        out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(out_path)
         _jobs[job_id]["status"] = "done"
@@ -532,7 +500,7 @@ def _run_edit_kontext(
             guidance_scale=3.5,
         )
         img = result.images[0]
-        out_path = OUTPUT_DIR / f"{_safe_filename(filename, job_id)}.png"
+        out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(out_path)
         _jobs[job_id]["status"] = "done"
@@ -580,7 +548,7 @@ def _run_edit_magic_brush(
             guidance_scale=7.5,
         )
         img = result.images[0]
-        out_path = OUTPUT_DIR / f"{_safe_filename(filename, job_id)}.png"
+        out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(out_path)
         _jobs[job_id]["status"] = "done"
@@ -627,7 +595,45 @@ def _run_edit_sdxl(
             strength=0.65,
         )
         img = result.images[0]
-        out_path = OUTPUT_DIR / f"{_safe_filename(filename, job_id)}.png"
+        out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(out_path)
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["result"] = str(out_path)
+        _jobs[job_id]["completed_at"] = time.time()
+        _jobs[job_id]["latency_ms"] = int((_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000)
+        logger.info("Job %s done: %s", job_id, out_path)
+        _append_job_log(job_id, _jobs[job_id])
+    except Exception as exc:
+        logger.exception("Job %s failed", job_id)
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["error"] = str(exc)
+        _jobs[job_id]["completed_at"] = time.time()
+        _append_job_log(job_id, _jobs[job_id])
+    finally:
+        import torch
+        torch.cuda.empty_cache()
+        _last_request = time.monotonic()
+
+
+def _run_generate_sdxl(job_id: str, prompt: str, filename: str, width: int, height: int, steps: int) -> None:
+    global _last_request
+    try:
+        if _active_generate_model == "sdxl_turbo":
+            pipe = _load_sdxl_turbo()
+            _steps = 4
+            _guidance = 0.0
+        else:
+            pipe = _load_sdxl()
+            _steps = steps or 25
+            _guidance = 5.0
+        _last_request = time.monotonic()
+        logger.info("Generating image (%s) for job %s", _active_generate_model, job_id)
+        w = (width // 64) * 64 or 768
+        h = (height // 64) * 64 or 768
+        result = pipe(prompt=prompt, width=w, height=h, num_inference_steps=_steps, guidance_scale=_guidance)
+        img = result.images[0]
+        out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         img.save(out_path)
         _jobs[job_id]["status"] = "done"
@@ -722,7 +728,7 @@ def create_app() -> FastAPI:
         logger.info("Active generate model set to: %s", model)
         _LABELS = {
             "sd14": "SD 1.4 (GPU only, ~2 GiB)",
-            "sd21": "SD 2.1 Base (GPU only, ~3.5 GiB)",
+            "sd21": "SD 2.1 (GPU only, ~3.5 GiB)",
             "sdxl": "SDXL (model offload, ~6.9 GiB)",
             "sdxl_turbo": "SDXL Turbo (model offload, ~6.9 GiB, 4-step)",
         }
@@ -755,7 +761,7 @@ def create_app() -> FastAPI:
         global _last_request
         _last_request = time.monotonic()
         job_id = uuid.uuid4().hex
-        out_path = OUTPUT_DIR / f"{_safe_filename(req.filename, job_id)}.png"
+        out_path = OUTPUT_DIR / f"{_safe_filename(req.filename)}.png"
         _jobs[job_id] = {"status": "running", "type": "generate", "result": None, "error": None, "submitted_at": time.time(), "completed_at": None, "latency_ms": None}
         t = threading.Thread(
             target=_run_generate,
@@ -772,7 +778,7 @@ def create_app() -> FastAPI:
         if not Path(req.input_path).exists():
             raise HTTPException(status_code=400, detail=f"Input file not found: {req.input_path}")
         job_id = uuid.uuid4().hex
-        out_path = OUTPUT_DIR / f"{_safe_filename(req.filename, job_id)}.png"
+        out_path = OUTPUT_DIR / f"{_safe_filename(req.filename)}.png"
         _jobs[job_id] = {"status": "running", "type": "edit", "result": None, "error": None, "submitted_at": time.time(), "completed_at": None, "latency_ms": None}
         t = threading.Thread(
             target=_run_edit,

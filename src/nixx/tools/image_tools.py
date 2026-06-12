@@ -146,9 +146,7 @@ class GenerateImageTool(Tool):
                     result=(
                         f"Image generation started (job: {job_id}). "
                         f"Output path: {out}. "
-                        "SD models take 1-3 minutes; SDXL models take 3-5 minutes. "
-                        "Use the image_status tool to check progress when the user asks, "
-                        "rather than asking them to run commands themselves."
+                        "SD models take 1-3 minutes; SDXL models 3-5 minutes."
                     ),
                     metadata={"job_id": job_id, "path": out},
                 )
@@ -252,9 +250,7 @@ class EditImageTool(Tool):
                     result=(
                         f"Image edit started (job: {job_id}). "
                         f"Output path: {out}. "
-                        "IP2P/MagicBrush take 1-2 minutes; SDXL edit takes 3-5 minutes; Kontext takes ~2 hours. "
-                        "Use the image_status tool to check progress when the user asks, "
-                        "rather than asking them to run commands themselves."
+                        "IP2P/MagicBrush take 1-2 minutes; SDXL edit 3-5 minutes; Kontext ~2 hours."
                     ),
                     metadata={"job_id": job_id, "path": out},
                 )
