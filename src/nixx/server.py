@@ -8,11 +8,11 @@ import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from httpx import HTTPError as HttpError
 from pydantic import BaseModel, ConfigDict
@@ -199,12 +199,7 @@ async def _assemble_messages(
     # system_base is the full assembled prompt minus recalled memory context.
     # Stored on app.state so debug_context can return it without re-assembling.
     system_base = (
-        SYSTEM_PROMPT
-        + runtime_block
-        + intent_block
-        + plan_block
-        + file_access_block
-        + tools_block
+        SYSTEM_PROMPT + runtime_block + intent_block + plan_block + file_access_block + tools_block
     )
     app.state.assembled_system_prompt = system_base
 
@@ -282,7 +277,10 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         app.state.intent = await get_state(pool, "intent") or DEFAULT_INTENT
         app.state.messages_since_intent = 0  # Counter for automatic derivation
         _tool_usage_raw = await get_state(pool, "tool_usage")
-        app.state.tool_usage: dict[str, int] = json.loads(_tool_usage_raw) if _tool_usage_raw else {}
+        app.state.tool_usage = cast(
+            dict[str, int],
+            json.loads(_tool_usage_raw) if _tool_usage_raw else {},
+        )
 
         # Auto-fetch context length from the LLM server's /props endpoint.
         app.state.n_ctx_fetched = False
@@ -380,9 +378,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         img = _ImageOps.exif_transpose(_Image.open(resolved).convert("RGB"))
         cropped = img.crop((x, y, x + size, y + size))
         suffix = resolved.suffix or ".jpg"
-        tmp = tempfile.NamedTemporaryFile(
-            delete=False, suffix=suffix, dir=scratch / "images"
-        )
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=scratch / "images")
         tmp.close()
         cropped.save(tmp.name)
         return {"cropped_path": tmp.name}
@@ -394,7 +390,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 r = await client.get("http://127.0.0.1:8090/generate-model")
                 r.raise_for_status()
-                return r.json()
+                return cast(dict[str, str], r.json())
         except Exception:
             return {"model": "sd21"}
 
@@ -403,15 +399,21 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         """Set the active image generation model on nixx-image."""
         model = body.get("model", "")
         if model not in ("sd14", "sd21", "sdxl", "sdxl_turbo"):
-            raise HTTPException(status_code=400, detail="model must be one of: sd14, sd21, sdxl, sdxl_turbo")
+            raise HTTPException(
+                status_code=400, detail="model must be one of: sd14, sd21, sdxl, sdxl_turbo"
+            )
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 try:
                     await client.get("http://127.0.0.1:8090/health")
                 except Exception:
                     import asyncio as _asyncio
+
                     proc = await _asyncio.create_subprocess_exec(
-                        "sudo", "systemctl", "start", "nixx-image",
+                        "sudo",
+                        "systemctl",
+                        "start",
+                        "nixx-image",
                         stdout=_asyncio.subprocess.DEVNULL,
                         stderr=_asyncio.subprocess.DEVNULL,
                     )
@@ -422,7 +424,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                     timeout=10.0,
                 )
                 r.raise_for_status()
-                return r.json()
+                return cast(dict[str, Any], r.json())
         except HTTPException:
             raise
         except Exception as exc:
@@ -435,7 +437,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 r = await client.get("http://127.0.0.1:8090/edit_model")
                 r.raise_for_status()
-                return r.json()
+                return cast(dict[str, str], r.json())
         except Exception:
             return {"model": "ip2p"}  # default if service not running
 
@@ -444,7 +446,10 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         """Set the active image edit model on nixx-image."""
         model = body.get("model", "")
         if model not in ("ip2p", "magic_brush", "sdxl_edit", "kontext"):
-            raise HTTPException(status_code=400, detail="model must be one of: ip2p, magic_brush, sdxl_edit, kontext")
+            raise HTTPException(
+                status_code=400,
+                detail="model must be one of: ip2p, magic_brush, sdxl_edit, kontext",
+            )
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # Start the service if it isn't running yet
@@ -452,8 +457,12 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                     await client.get("http://127.0.0.1:8090/health")
                 except Exception:
                     import asyncio as _asyncio
+
                     proc = await _asyncio.create_subprocess_exec(
-                        "sudo", "systemctl", "start", "nixx-image",
+                        "sudo",
+                        "systemctl",
+                        "start",
+                        "nixx-image",
                         stdout=_asyncio.subprocess.DEVNULL,
                         stderr=_asyncio.subprocess.DEVNULL,
                     )
@@ -464,7 +473,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                     timeout=10.0,
                 )
                 r.raise_for_status()
-                return r.json()
+                return cast(dict[str, Any], r.json())
         except HTTPException:
             raise
         except Exception as exc:
@@ -892,7 +901,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         try:
             async with httpx.AsyncClient(timeout=2.0) as client:
                 r = await client.get("http://127.0.0.1:8090/jobs")
-                return r.json()
+                return cast(dict[str, Any], r.json())
         except Exception:
             return {"jobs": []}
 
@@ -1099,19 +1108,30 @@ async def _chat_event_stream(
                         # Pause for approval only if any tool is a self-edit:
                         # validate_and_commit, or a write/edit/delete targeting
                         # the nixx source tree. Everything else runs unattended.
-                        _SELF_EDIT_TOOLS = {"validate_and_commit", "write_file", "edit_file", "delete_file"}
+                        _SELF_EDIT_TOOLS = {
+                            "validate_and_commit",
+                            "write_file",
+                            "edit_file",
+                            "delete_file",
+                        }
                         _nixx_src = str(_NIXX_ROOT)
+
                         def _is_self_edit(tc: dict[str, Any]) -> bool:
                             if tc["name"] == "validate_and_commit":
                                 return True
                             if tc["name"] in ("write_file", "edit_file", "delete_file"):
                                 try:
-                                    args = json.loads(tc["arguments"]) if isinstance(tc["arguments"], str) else tc["arguments"]
+                                    args = (
+                                        json.loads(tc["arguments"])
+                                        if isinstance(tc["arguments"], str)
+                                        else tc["arguments"]
+                                    )
                                     path = args.get("path", "") or args.get("file_path", "")
                                     return str(path).startswith(_nixx_src)
                                 except Exception:
                                     return True  # can't parse - be safe
                             return False
+
                         if any(_is_self_edit(tc) for tc in pending_tool_calls):
                             tool_names = [tc["name"] for tc in pending_tool_calls]
                             yield f"data: {json.dumps({'approval_needed': {'tools': tool_names, 'reasoning': reasoning_acc, 'tool_calls': [{'id': tc['id'], 'type': 'function', 'function': {'name': tc['name'], 'arguments': tc['arguments']}} for tc in pending_tool_calls]}})}\n\n"
@@ -1122,7 +1142,12 @@ async def _chat_event_stream(
                             if tc["name"] == "edit_image":
                                 try:
                                     from PIL import Image as _PILImage
-                                    tc_args = json.loads(tc["arguments"]) if isinstance(tc["arguments"], str) else tc["arguments"]
+
+                                    tc_args = (
+                                        json.loads(tc["arguments"])
+                                        if isinstance(tc["arguments"], str)
+                                        else tc["arguments"]
+                                    )
                                     img_path = tc_args.get("input_path", "")
                                     if img_path and Path(img_path).exists():
                                         with _PILImage.open(img_path) as _img:
@@ -1229,7 +1254,9 @@ async def _chat_event_stream(
 
     # If the loop hit the round limit, note that too.
     if tool_call_count > 0 and tool_calls_made and loop_exit_reason == "natural":
-        if tool_call_count >= max_tool_rounds * len(pending_tool_calls if pending_tool_calls else [1]):
+        if tool_call_count >= max_tool_rounds * len(
+            pending_tool_calls if pending_tool_calls else [{}]
+        ):
             loop_exit_reason = "max_rounds"
 
     # --- Judge/verification phase: synthesize final answer after tool use ---

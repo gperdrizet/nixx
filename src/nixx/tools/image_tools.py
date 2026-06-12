@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +31,10 @@ async def _ensure_running() -> bool:
     # Not running - start it
     logger.info("nixx-image not running, starting via systemctl...")
     proc = await asyncio.create_subprocess_exec(
-        "sudo", "systemctl", "start", "nixx-image",
+        "sudo",
+        "systemctl",
+        "start",
+        "nixx-image",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )

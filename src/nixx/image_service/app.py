@@ -69,9 +69,11 @@ def _append_job_log(job_id: str, job: dict[str, Any]) -> None:
 def _safe_filename(filename: str) -> str:
     """Sanitize model-provided filename."""
     import re
+
     slug = re.sub(r"[^a-z0-9.\ -]", "", filename.lower())
     slug = re.sub(r"\s+", "-", slug).strip("-.")[:80] or "image"
     return slug
+
 
 class GenerateRequest(BaseModel):
     prompt: str
@@ -88,6 +90,7 @@ class EditRequest(BaseModel):
     width: int = 768
     height: int = 768
     steps: int = 30  # IP2P/MagicBrush use 50 internally; SDXL edit and Kontext use this
+
 
 # ── Global state ───────────────────────────────────────────────────────────────
 
@@ -127,7 +130,10 @@ def _unload_sd14() -> None:
         return
     with _sd14_lock:
         _sd14_pipe = None
-    import gc; gc.collect(); torch.cuda.empty_cache()
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
     logger.info("SD 1.4 unloaded.")
 
 
@@ -137,7 +143,10 @@ def _unload_sd21() -> None:
         return
     with _sd21_lock:
         _sd21_pipe = None
-    import gc; gc.collect(); torch.cuda.empty_cache()
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
     logger.info("SD 2.1 unloaded.")
 
 
@@ -147,7 +156,10 @@ def _unload_sdxl() -> None:
         return
     with _sdxl_lock:
         _sdxl_pipe = None
-    import gc; gc.collect(); torch.cuda.empty_cache()
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
     logger.info("SDXL unloaded.")
 
 
@@ -157,7 +169,10 @@ def _unload_sdxl_turbo() -> None:
         return
     with _sdxl_turbo_lock:
         _sdxl_turbo_pipe = None
-    import gc; gc.collect(); torch.cuda.empty_cache()
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
     logger.info("SDXL Turbo unloaded.")
 
 
@@ -167,7 +182,10 @@ def _unload_ip2p() -> None:
         return
     with _ip2p_lock:
         _ip2p_pipe = None
-    import gc; gc.collect(); torch.cuda.empty_cache()
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
     logger.info("InstructPix2Pix unloaded.")
 
 
@@ -177,7 +195,10 @@ def _unload_magic_brush() -> None:
         return
     with _magic_brush_lock:
         _magic_brush_pipe = None
-    import gc; gc.collect(); torch.cuda.empty_cache()
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
     logger.info("MagicBrush unloaded.")
 
 
@@ -187,7 +208,10 @@ def _unload_sdxl_edit() -> None:
         return
     with _sdxl_edit_lock:
         _sdxl_edit_pipe = None
-    import gc; gc.collect(); torch.cuda.empty_cache()
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
     logger.info("SDXL img2img edit unloaded.")
 
 
@@ -197,7 +221,10 @@ def _unload_kontext() -> None:
         return
     with _kontext_lock:
         _kontext_pipe = None
-    import gc; gc.collect(); torch.cuda.empty_cache()
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
     logger.info("FLUX.1 Kontext [dev] unloaded.")
 
 
@@ -205,15 +232,23 @@ def _load_sd14() -> Any:
     global _sd14_pipe
     if _sd14_pipe is not None:
         return _sd14_pipe
-    _unload_sd21(); _unload_sdxl(); _unload_sdxl_turbo()
-    _unload_ip2p(); _unload_magic_brush(); _unload_sdxl_edit(); _unload_kontext()
+    _unload_sd21()
+    _unload_sdxl()
+    _unload_sdxl_turbo()
+    _unload_ip2p()
+    _unload_magic_brush()
+    _unload_sdxl_edit()
+    _unload_kontext()
     with _sd14_lock:
         if _sd14_pipe is not None:
             return _sd14_pipe
         logger.info("Loading SD 1.4...")
         from diffusers import StableDiffusionPipeline
+
         p = StableDiffusionPipeline.from_pretrained(
-            SD14_MODEL_ID, torch_dtype=torch.float16, safety_checker=None,
+            SD14_MODEL_ID,
+            torch_dtype=torch.float16,
+            safety_checker=None,
         )
         p.to("cuda")
         _sd14_pipe = p
@@ -225,15 +260,23 @@ def _load_sd21() -> Any:
     global _sd21_pipe
     if _sd21_pipe is not None:
         return _sd21_pipe
-    _unload_sd14(); _unload_sdxl(); _unload_sdxl_turbo()
-    _unload_ip2p(); _unload_magic_brush(); _unload_sdxl_edit(); _unload_kontext()
+    _unload_sd14()
+    _unload_sdxl()
+    _unload_sdxl_turbo()
+    _unload_ip2p()
+    _unload_magic_brush()
+    _unload_sdxl_edit()
+    _unload_kontext()
     with _sd21_lock:
         if _sd21_pipe is not None:
             return _sd21_pipe
         logger.info("Loading SD 2.1...")
         from diffusers import StableDiffusionPipeline
+
         p = StableDiffusionPipeline.from_pretrained(
-            SD21_MODEL_ID, torch_dtype=torch.float16, safety_checker=None,
+            SD21_MODEL_ID,
+            torch_dtype=torch.float16,
+            safety_checker=None,
         )
         p.to("cuda")
         _sd21_pipe = p
@@ -245,15 +288,23 @@ def _load_sdxl() -> Any:
     global _sdxl_pipe
     if _sdxl_pipe is not None:
         return _sdxl_pipe
-    _unload_sd14(); _unload_sd21(); _unload_sdxl_turbo()
-    _unload_ip2p(); _unload_magic_brush(); _unload_sdxl_edit(); _unload_kontext()
+    _unload_sd14()
+    _unload_sd21()
+    _unload_sdxl_turbo()
+    _unload_ip2p()
+    _unload_magic_brush()
+    _unload_sdxl_edit()
+    _unload_kontext()
     with _sdxl_lock:
         if _sdxl_pipe is not None:
             return _sdxl_pipe
         logger.info("Loading SDXL...")
         from diffusers import AutoPipelineForText2Image
+
         p = AutoPipelineForText2Image.from_pretrained(
-            SDXL_MODEL_ID, torch_dtype=torch.float16, use_safetensors=True,
+            SDXL_MODEL_ID,
+            torch_dtype=torch.float16,
+            use_safetensors=True,
         )
         p.enable_model_cpu_offload()
         p.vae.enable_slicing()
@@ -267,15 +318,23 @@ def _load_sdxl_turbo() -> Any:
     global _sdxl_turbo_pipe
     if _sdxl_turbo_pipe is not None:
         return _sdxl_turbo_pipe
-    _unload_sd14(); _unload_sd21(); _unload_sdxl()
-    _unload_ip2p(); _unload_magic_brush(); _unload_sdxl_edit(); _unload_kontext()
+    _unload_sd14()
+    _unload_sd21()
+    _unload_sdxl()
+    _unload_ip2p()
+    _unload_magic_brush()
+    _unload_sdxl_edit()
+    _unload_kontext()
     with _sdxl_turbo_lock:
         if _sdxl_turbo_pipe is not None:
             return _sdxl_turbo_pipe
         logger.info("Loading SDXL Turbo...")
         from diffusers import AutoPipelineForText2Image
+
         p = AutoPipelineForText2Image.from_pretrained(
-            SDXL_TURBO_MODEL_ID, torch_dtype=torch.float16, use_safetensors=True,
+            SDXL_TURBO_MODEL_ID,
+            torch_dtype=torch.float16,
+            use_safetensors=True,
         )
         p.enable_model_cpu_offload()
         _sdxl_turbo_pipe = p
@@ -287,15 +346,23 @@ def _load_ip2p() -> Any:
     global _ip2p_pipe
     if _ip2p_pipe is not None:
         return _ip2p_pipe
-    _unload_sd14(); _unload_sd21(); _unload_sdxl(); _unload_sdxl_turbo()
-    _unload_magic_brush(); _unload_sdxl_edit(); _unload_kontext()
+    _unload_sd14()
+    _unload_sd21()
+    _unload_sdxl()
+    _unload_sdxl_turbo()
+    _unload_magic_brush()
+    _unload_sdxl_edit()
+    _unload_kontext()
     with _ip2p_lock:
         if _ip2p_pipe is not None:
             return _ip2p_pipe
         logger.info("Loading InstructPix2Pix...")
         from diffusers import StableDiffusionInstructPix2PixPipeline
+
         p = StableDiffusionInstructPix2PixPipeline.from_pretrained(
-            IP2P_MODEL_ID, torch_dtype=torch.float16, safety_checker=None,
+            IP2P_MODEL_ID,
+            torch_dtype=torch.float16,
+            safety_checker=None,
         )
         p.to("cuda")
         _ip2p_pipe = p
@@ -307,15 +374,23 @@ def _load_magic_brush() -> Any:
     global _magic_brush_pipe
     if _magic_brush_pipe is not None:
         return _magic_brush_pipe
-    _unload_sd14(); _unload_sd21(); _unload_sdxl(); _unload_sdxl_turbo()
-    _unload_ip2p(); _unload_sdxl_edit(); _unload_kontext()
+    _unload_sd14()
+    _unload_sd21()
+    _unload_sdxl()
+    _unload_sdxl_turbo()
+    _unload_ip2p()
+    _unload_sdxl_edit()
+    _unload_kontext()
     with _magic_brush_lock:
         if _magic_brush_pipe is not None:
             return _magic_brush_pipe
         logger.info("Loading MagicBrush...")
         from diffusers import StableDiffusionInstructPix2PixPipeline
+
         p = StableDiffusionInstructPix2PixPipeline.from_pretrained(
-            MAGIC_BRUSH_MODEL_ID, torch_dtype=torch.float16, safety_checker=None,
+            MAGIC_BRUSH_MODEL_ID,
+            torch_dtype=torch.float16,
+            safety_checker=None,
         )
         p.to("cuda")
         _magic_brush_pipe = p
@@ -327,15 +402,23 @@ def _load_sdxl_edit() -> Any:
     global _sdxl_edit_pipe
     if _sdxl_edit_pipe is not None:
         return _sdxl_edit_pipe
-    _unload_sd14(); _unload_sd21(); _unload_sdxl(); _unload_sdxl_turbo()
-    _unload_ip2p(); _unload_magic_brush(); _unload_kontext()
+    _unload_sd14()
+    _unload_sd21()
+    _unload_sdxl()
+    _unload_sdxl_turbo()
+    _unload_ip2p()
+    _unload_magic_brush()
+    _unload_kontext()
     with _sdxl_edit_lock:
         if _sdxl_edit_pipe is not None:
             return _sdxl_edit_pipe
         logger.info("Loading SDXL img2img edit...")
         from diffusers import AutoPipelineForImage2Image
+
         p = AutoPipelineForImage2Image.from_pretrained(
-            SDXL_MODEL_ID, torch_dtype=torch.float16, use_safetensors=True,
+            SDXL_MODEL_ID,
+            torch_dtype=torch.float16,
+            use_safetensors=True,
         )
         p.enable_sequential_cpu_offload()  # peak VRAM ~3-4 GiB on GTX 1070
         p.vae.enable_slicing()
@@ -349,8 +432,13 @@ def _load_kontext() -> Any:
     global _kontext_pipe
     if _kontext_pipe is not None:
         return _kontext_pipe
-    _unload_sd14(); _unload_sd21(); _unload_sdxl(); _unload_sdxl_turbo()
-    _unload_ip2p(); _unload_magic_brush(); _unload_sdxl_edit()
+    _unload_sd14()
+    _unload_sd21()
+    _unload_sdxl()
+    _unload_sdxl_turbo()
+    _unload_ip2p()
+    _unload_magic_brush()
+    _unload_sdxl_edit()
     with _kontext_lock:
         if _kontext_pipe is not None:
             return _kontext_pipe
@@ -383,7 +471,9 @@ def _load_kontext() -> Any:
         return _kontext_pipe
 
 
-def _run_generate(job_id: str, prompt: str, filename: str, width: int, height: int, steps: int) -> None:
+def _run_generate(
+    job_id: str, prompt: str, filename: str, width: int, height: int, steps: int
+) -> None:
     """Dispatch to the active generation model."""
     if _active_generate_model in ("sdxl", "sdxl_turbo"):
         _run_generate_sdxl(job_id, prompt, filename, width, height, steps)
@@ -391,7 +481,9 @@ def _run_generate(job_id: str, prompt: str, filename: str, width: int, height: i
         _run_generate_sd(job_id, prompt, filename, width, height, steps)
 
 
-def _run_generate_sd(job_id: str, prompt: str, filename: str, width: int, height: int, steps: int) -> None:
+def _run_generate_sd(
+    job_id: str, prompt: str, filename: str, width: int, height: int, steps: int
+) -> None:
     global _last_request
     try:
         pipe = _load_sd14() if _active_generate_model == "sd14" else _load_sd21()
@@ -407,7 +499,9 @@ def _run_generate_sd(job_id: str, prompt: str, filename: str, width: int, height
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["result"] = str(out_path)
         _jobs[job_id]["completed_at"] = time.time()
-        _jobs[job_id]["latency_ms"] = int((_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000)
+        _jobs[job_id]["latency_ms"] = int(
+            (_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000
+        )
         logger.info("Job %s done: %s", job_id, out_path)
         _append_job_log(job_id, _jobs[job_id])
     except Exception as exc:
@@ -418,6 +512,7 @@ def _run_generate_sd(job_id: str, prompt: str, filename: str, width: int, height
         _append_job_log(job_id, _jobs[job_id])
     finally:
         import torch
+
         torch.cuda.empty_cache()
         _last_request = time.monotonic()
 
@@ -446,7 +541,7 @@ def _run_edit_ip2p(
             image=input_image,
             num_inference_steps=50,
             image_guidance_scale=1.5,  # how much to preserve original
-            guidance_scale=7.5,        # how strongly to follow text prompt
+            guidance_scale=7.5,  # how strongly to follow text prompt
         )
         img = result.images[0]
         out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
@@ -455,7 +550,9 @@ def _run_edit_ip2p(
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["result"] = str(out_path)
         _jobs[job_id]["completed_at"] = time.time()
-        _jobs[job_id]["latency_ms"] = int((_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000)
+        _jobs[job_id]["latency_ms"] = int(
+            (_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000
+        )
         logger.info("Job %s done: %s", job_id, out_path)
         _append_job_log(job_id, _jobs[job_id])
     except Exception as exc:
@@ -466,6 +563,7 @@ def _run_edit_ip2p(
         _append_job_log(job_id, _jobs[job_id])
     finally:
         import torch
+
         torch.cuda.empty_cache()
         _last_request = time.monotonic()
 
@@ -506,7 +604,9 @@ def _run_edit_kontext(
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["result"] = str(out_path)
         _jobs[job_id]["completed_at"] = time.time()
-        _jobs[job_id]["latency_ms"] = int((_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000)
+        _jobs[job_id]["latency_ms"] = int(
+            (_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000
+        )
         logger.info("Job %s done: %s", job_id, out_path)
         _append_job_log(job_id, _jobs[job_id])
     except Exception as exc:
@@ -517,6 +617,7 @@ def _run_edit_kontext(
         _append_job_log(job_id, _jobs[job_id])
     finally:
         import torch
+
         torch.cuda.empty_cache()
         # Restore GPU visibility so GPU generate/edit models can use CUDA later
         os.environ["CUDA_VISIBLE_DEVICES"] = "1"
@@ -534,6 +635,7 @@ def _run_edit_magic_brush(
     global _last_request
     try:
         from PIL import Image, ImageOps
+
         pipe = _load_magic_brush()
         _last_request = time.monotonic()
         logger.info("Editing image (MagicBrush) for job %s", job_id)
@@ -554,7 +656,9 @@ def _run_edit_magic_brush(
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["result"] = str(out_path)
         _jobs[job_id]["completed_at"] = time.time()
-        _jobs[job_id]["latency_ms"] = int((_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000)
+        _jobs[job_id]["latency_ms"] = int(
+            (_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000
+        )
         logger.info("Job %s done: %s", job_id, out_path)
         _append_job_log(job_id, _jobs[job_id])
     except Exception as exc:
@@ -565,6 +669,7 @@ def _run_edit_magic_brush(
         _append_job_log(job_id, _jobs[job_id])
     finally:
         import torch
+
         torch.cuda.empty_cache()
         _last_request = time.monotonic()
 
@@ -582,6 +687,7 @@ def _run_edit_sdxl(
     global _last_request
     try:
         from PIL import Image, ImageOps
+
         pipe = _load_sdxl_edit()
         _last_request = time.monotonic()
         logger.info("Editing image (SDXL img2img) for job %s", job_id)
@@ -601,7 +707,9 @@ def _run_edit_sdxl(
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["result"] = str(out_path)
         _jobs[job_id]["completed_at"] = time.time()
-        _jobs[job_id]["latency_ms"] = int((_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000)
+        _jobs[job_id]["latency_ms"] = int(
+            (_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000
+        )
         logger.info("Job %s done: %s", job_id, out_path)
         _append_job_log(job_id, _jobs[job_id])
     except Exception as exc:
@@ -612,11 +720,14 @@ def _run_edit_sdxl(
         _append_job_log(job_id, _jobs[job_id])
     finally:
         import torch
+
         torch.cuda.empty_cache()
         _last_request = time.monotonic()
 
 
-def _run_generate_sdxl(job_id: str, prompt: str, filename: str, width: int, height: int, steps: int) -> None:
+def _run_generate_sdxl(
+    job_id: str, prompt: str, filename: str, width: int, height: int, steps: int
+) -> None:
     global _last_request
     try:
         if _active_generate_model == "sdxl_turbo":
@@ -631,7 +742,9 @@ def _run_generate_sdxl(job_id: str, prompt: str, filename: str, width: int, heig
         logger.info("Generating image (%s) for job %s", _active_generate_model, job_id)
         w = (width // 64) * 64 or 768
         h = (height // 64) * 64 or 768
-        result = pipe(prompt=prompt, width=w, height=h, num_inference_steps=_steps, guidance_scale=_guidance)
+        result = pipe(
+            prompt=prompt, width=w, height=h, num_inference_steps=_steps, guidance_scale=_guidance
+        )
         img = result.images[0]
         out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -639,7 +752,9 @@ def _run_generate_sdxl(job_id: str, prompt: str, filename: str, width: int, heig
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["result"] = str(out_path)
         _jobs[job_id]["completed_at"] = time.time()
-        _jobs[job_id]["latency_ms"] = int((_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000)
+        _jobs[job_id]["latency_ms"] = int(
+            (_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000
+        )
         logger.info("Job %s done: %s", job_id, out_path)
         _append_job_log(job_id, _jobs[job_id])
     except Exception as exc:
@@ -650,6 +765,7 @@ def _run_generate_sdxl(job_id: str, prompt: str, filename: str, width: int, heig
         _append_job_log(job_id, _jobs[job_id])
     finally:
         import torch
+
         torch.cuda.empty_cache()
         _last_request = time.monotonic()
 
@@ -689,12 +805,16 @@ def create_app() -> FastAPI:
         global _last_request
         _last_request = time.monotonic()
         _EDIT_IDS = {
-            "ip2p": IP2P_MODEL_ID, "magic_brush": MAGIC_BRUSH_MODEL_ID,
-            "sdxl_edit": SDXL_MODEL_ID, "kontext": KONTEXT_MODEL_ID,
+            "ip2p": IP2P_MODEL_ID,
+            "magic_brush": MAGIC_BRUSH_MODEL_ID,
+            "sdxl_edit": SDXL_MODEL_ID,
+            "kontext": KONTEXT_MODEL_ID,
         }
         _GEN_IDS = {
-            "sd14": SD14_MODEL_ID, "sd21": SD21_MODEL_ID,
-            "sdxl": SDXL_MODEL_ID, "sdxl_turbo": SDXL_TURBO_MODEL_ID,
+            "sd14": SD14_MODEL_ID,
+            "sd21": SD21_MODEL_ID,
+            "sdxl": SDXL_MODEL_ID,
+            "sdxl_turbo": SDXL_TURBO_MODEL_ID,
         }
         return {
             "status": "ok",
@@ -762,7 +882,15 @@ def create_app() -> FastAPI:
         _last_request = time.monotonic()
         job_id = uuid.uuid4().hex
         out_path = OUTPUT_DIR / f"{_safe_filename(req.filename)}.png"
-        _jobs[job_id] = {"status": "running", "type": "generate", "result": None, "error": None, "submitted_at": time.time(), "completed_at": None, "latency_ms": None}
+        _jobs[job_id] = {
+            "status": "running",
+            "type": "generate",
+            "result": None,
+            "error": None,
+            "submitted_at": time.time(),
+            "completed_at": None,
+            "latency_ms": None,
+        }
         t = threading.Thread(
             target=_run_generate,
             args=(job_id, req.prompt, req.filename, req.width, req.height, req.steps),
@@ -779,10 +907,26 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail=f"Input file not found: {req.input_path}")
         job_id = uuid.uuid4().hex
         out_path = OUTPUT_DIR / f"{_safe_filename(req.filename)}.png"
-        _jobs[job_id] = {"status": "running", "type": "edit", "result": None, "error": None, "submitted_at": time.time(), "completed_at": None, "latency_ms": None}
+        _jobs[job_id] = {
+            "status": "running",
+            "type": "edit",
+            "result": None,
+            "error": None,
+            "submitted_at": time.time(),
+            "completed_at": None,
+            "latency_ms": None,
+        }
         t = threading.Thread(
             target=_run_edit,
-            args=(job_id, req.prompt, req.input_path, req.filename, req.width, req.height, req.steps),
+            args=(
+                job_id,
+                req.prompt,
+                req.input_path,
+                req.filename,
+                req.width,
+                req.height,
+                req.steps,
+            ),
             daemon=True,
         )
         t.start()
@@ -807,7 +951,11 @@ def create_app() -> FastAPI:
             }
             for jid, j in _jobs.items()
         ]
-        return {"jobs": jobs, "total": len(jobs), "done": sum(1 for j in _jobs.values() if j["status"] == "done")}
+        return {
+            "jobs": jobs,
+            "total": len(jobs),
+            "done": sum(1 for j in _jobs.values() if j["status"] == "done"),
+        }
 
     @app.get("/download/{job_id}")
     async def download(job_id: str) -> FileResponse:
