@@ -171,10 +171,21 @@ async def _assemble_messages(
                 + "\n".join(tool_lines)
             )
 
+    # Runtime facts: inject actual config values so the model doesn't guess.
+    runtime_block = (
+        f"\n\n## Runtime configuration\n\n"
+        f"Model: {config.llm_model}\n"
+        f"Context window: {config.llm_context_length} tokens\n"
+        f"Response reserve: {_RESPONSE_RESERVE} tokens (reserved for your reply)\n"
+        f"Scratch directory: {config.scratch_dir}\n"
+        f"Source directory: {_NIXX_ROOT}"
+    )
+
     # system_base is the full assembled prompt minus recalled memory context.
     # Stored on app.state so debug_context can return it without re-assembling.
     system_base = (
         SYSTEM_PROMPT
+        + runtime_block
         + intent_block
         + plan_block
         + file_access_block
@@ -952,6 +963,7 @@ async def _chat_event_stream(
     recent_tool_names: list[str] = []  # for stuck-loop detection
     tool_calls_made = False
     tool_call_count = 0
+    loop_exit_reason = "natural"  # "natural" | "stuck" | "max_rounds"
     stream_start = time.monotonic()
     stream_prompt_tokens = 0
     stream_completion_tokens = 0
@@ -1126,9 +1138,10 @@ async def _chat_event_stream(
                     usage = getattr(app.state, "tool_usage", {})
                     usage[tc["name"]] = usage.get(tc["name"], 0) + 1
                     app.state.tool_usage = usage
-                    pool = getattr(app.state, "pool", None)
-                    if pool is not None:
-                        await set_state(pool, "tool_usage", json.dumps(usage))
+                    _usage_pool = getattr(app.state, "memory", None)
+                    _usage_pool = getattr(_usage_pool, "_pool", None)
+                    if _usage_pool is not None:
+                        await set_state(_usage_pool, "tool_usage", json.dumps(usage))
                 tool_result = await tools.execute(tc["name"], tc["arguments"])
                 # If the tool returned metadata with a job_id (e.g. image generation),
                 # emit a tracking event so frontends can poll for completion.
@@ -1152,50 +1165,75 @@ async def _chat_event_stream(
                 )
                 accumulated = ""
                 tool_calls_made = True
+                loop_exit_reason = "stuck"
                 break
             tool_calls_made = True
             tool_call_count += len(pending_tool_calls)
             accumulated = ""
+
+    # If the loop hit the round limit, note that too.
+    if tool_call_count > 0 and tool_calls_made and loop_exit_reason == "natural":
+        if tool_call_count >= max_tool_rounds * len(pending_tool_calls if pending_tool_calls else [1]):
+            loop_exit_reason = "max_rounds"
 
     # --- Judge/verification phase: synthesize final answer after tool use ---
     # If we already streamed a substantive answer after tools, don't synthesize
     # a second one (prevents duplicate/repetitive responses).
     if tool_calls_made and not accumulated.strip():
         yield f"data: {json.dumps({'verifying': True})}\n\n"
-        messages.append(
-            {
-                "role": "user",
-                "content": (
-                    f"Original request: {user_text}\n\n"
-                    "Review the tool results above and provide the final answer. "
-                    "If the request was to show, display, or produce content, reproduce "
-                    "that content in full. Be direct."
-                ),
-            }
+
+        if loop_exit_reason == "stuck":
+            stuck_tool = recent_tool_names[-1] if recent_tool_names else "a tool"
+            loop_context = (
+                f"Note: the tool loop was interrupted because '{stuck_tool}' was called "
+                f"three or more times consecutively without making progress. "
+                f"The search did not find information that directly answers the question."
+            )
+        elif loop_exit_reason == "max_rounds":
+            loop_context = (
+                "Note: the tool loop reached its maximum number of rounds without completing. "
+                "The available tool results may be partial or incomplete."
+            )
+        else:
+            loop_context = ""
+
+        judge_prompt = (
+            f"Original request: {user_text}\n\n"
+            f"{('Loop context: ' + loop_context + chr(10) + chr(10)) if loop_context else ''}"
+            "Review the tool results above and synthesize a final answer. "
+            "If the results contain what the user asked for, provide it directly. "
+            "If the results are incomplete or the question cannot be answered from what was found, "
+            "say so plainly - do not guess or fabricate. "
+            "A honest 'I couldn't find that' is the right answer when the tools came up empty."
         )
+        messages.append({"role": "user", "content": judge_prompt})
         try:
             # Use non-streaming chat() so thinking tokens don't consume max_tokens
             # budget before the actual answer is produced.
             judge_response = await llm.chat(model, messages, temperature, max_tokens, tools=None)
             judge_text = judge_response.content.strip() if judge_response.content else ""
-            if judge_text:
-                accumulated += judge_text
-                data = {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {"content": judge_text},
-                            "finish_reason": None,
-                        }
-                    ],
-                }
-                yield f"data: {json.dumps(data)}\n\n"
+            if not judge_text:
+                judge_text = "I searched but the results didn't contain an answer to that. Try asking me to check a specific file or endpoint."
+            accumulated += judge_text
+            data = {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": judge_text},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+            yield f"data: {json.dumps(data)}\n\n"
         except Exception as exc:
             logger.warning("Judge call failed: %s", exc)
+            fallback = "Something went wrong synthesizing a final answer after tool use."
+            accumulated = fallback
+            yield f"data: {json.dumps({'choices': [{'index': 0, 'delta': {'content': fallback}, 'finish_reason': None}]})}\n\n"
 
     # Write to buffer BEFORE yielding [DONE]
     if memory is not None:
