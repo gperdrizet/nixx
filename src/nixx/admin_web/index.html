@@ -51,7 +51,7 @@
     .chart-wrap { position: relative; height: 180px; }
 
     /* ── Config panel ── */
-    .config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: grid; gap: 0.75rem 2rem; grid-template-columns: 1fr 1fr; }
+    .config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem 1.25rem; margin-bottom: 1rem; display: grid; gap: 0.75rem 2rem; grid-template-columns: 1fr 1fr; }
     @media (max-width: 600px) { .config-panel { grid-template-columns: 1fr; } }
     .cfg-col { display: flex; flex-direction: column; gap: 0.4rem; }
     .cfg-row { display: flex; flex-direction: column; gap: 0.1rem; }
@@ -60,6 +60,19 @@
     .cfg-val.none { color: var(--muted); font-style: italic; }
     .cfg-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.1rem; }
     .cfg-tag { font-family: monospace; font-size: 0.75rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 0.25rem; padding: 0.1rem 0.4rem; color: var(--text); }
+
+    /* ── Image models table ── */
+    .models-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem; }
+    .models-panel-title { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.6rem; }
+    .models-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 2rem; }
+    @media (max-width: 600px) { .models-grid { grid-template-columns: 1fr; } }
+    .models-section-label { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 0.3rem; }
+    .models-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .models-table td { padding: 0.2rem 0.4rem; vertical-align: middle; }
+    .models-table td:first-child { font-family: monospace; white-space: nowrap; }
+    .models-table td:last-child { color: var(--muted); font-size: 0.72rem; }
+    .models-table tr.active-model td:first-child { color: var(--green); font-weight: 600; }
+    .models-table tr.active-model td:first-child::after { content: ' ▸'; }
 
     /* ── Cheat sheet cards ── */
     .cheat-grid { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; margin-bottom: 1.5rem; }
@@ -127,6 +140,20 @@
   </div>
 
   <div class="config-panel" id="config-panel"></div>
+
+  <div class="models-panel" id="image-models-panel" style="display:none">
+    <div class="models-panel-title">image models</div>
+    <div class="models-grid">
+      <div>
+        <div class="models-section-label">generation</div>
+        <table class="models-table" id="gen-models-table"></table>
+      </div>
+      <div>
+        <div class="models-section-label">editing</div>
+        <table class="models-table" id="edit-models-table"></table>
+      </div>
+    </div>
+  </div>
 
   <div class="cheat-grid">
     <div class="cheat-card">
@@ -365,17 +392,30 @@
           ${row('context', (c.context_length || 0).toLocaleString() + ' tokens')}
           ${row('summary frequency', (c.summary_interval || 0).toLocaleString() + ' words')}
           ${row('intent frequency', (c.intent_interval || 0) + ' messages')}
-          ${row('generate model', (c.image_models?.active_generate || 'sd21') + ' (' + (c.image_models?.generate?.find(m => m.id === c.image_models?.active_generate)?.hardware || '') + ')')}
-          ${row('edit model', (c.image_models?.active_edit || 'ip2p') + ' (' + (c.image_models?.edit?.find(m => m.id === c.image_models?.active_edit)?.hardware || '') + ')')}
         </div>
         <div class="cfg-col">
           <div class="cfg-row"><span class="cfg-key">tools</span><div class="cfg-tags">${(c.tools || []).map(t => `<span class="cfg-tag">${t}</span>`).join('')}</div></div>
           ${row('intent', c.intent ?? 'none', !c.intent)}
-          <div class="cfg-row" style="margin-top:0.5rem"><span class="cfg-key" style="font-size:0.7rem;color:var(--muted)">generation models</span></div>
-          ${(c.image_models?.generate || []).map(m => { const active = m.id === c.image_models?.active_generate; return `<div class="cfg-row"><span class="cfg-key" style="padding-left:0.5rem;font-size:0.72rem;${active ? 'color:var(--green);font-weight:600' : ''}">${m.id}${active ? ' ▸' : ''}</span><span class="cfg-val" style="font-size:0.72rem">${m.label} &mdash; ${m.hardware}, ${m.size}</span></div>`; }).join('')}
-          <div class="cfg-row" style="margin-top:0.3rem"><span class="cfg-key" style="font-size:0.7rem;color:var(--muted)">editing models</span></div>
-          ${(c.image_models?.edit || []).map(m => { const active = m.id === c.image_models?.active_edit; return `<div class="cfg-row"><span class="cfg-key" style="padding-left:0.5rem;font-size:0.72rem;${active ? 'color:var(--green);font-weight:600' : ''}">${m.id}${active ? ' ▸' : ''}</span><span class="cfg-val" style="font-size:0.72rem">${m.label} &mdash; ${m.hardware}, ${m.size}</span></div>`; }).join('')}
         </div>`;
+
+      // Image models — separate compact table
+      const genModels = c.image_models?.generate || [];
+      const editModels = c.image_models?.edit || [];
+      const activeGen = c.image_models?.active_generate;
+      const activeEdit = c.image_models?.active_edit;
+      if (genModels.length || editModels.length) {
+        document.getElementById('image-models-panel').style.display = '';
+        const modelRow = (m, active) =>
+          `<tr class="${active ? 'active-model' : ''}">
+            <td>${m.id}</td>
+            <td>${m.label}</td>
+            <td>${m.hardware}, ${m.size}</td>
+          </tr>`;
+        document.getElementById('gen-models-table').innerHTML =
+          genModels.map(m => modelRow(m, m.id === activeGen)).join('');
+        document.getElementById('edit-models-table').innerHTML =
+          editModels.map(m => modelRow(m, m.id === activeEdit)).join('');
+      }
     }
 
     // Charts
