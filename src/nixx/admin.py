@@ -93,9 +93,7 @@ def create_app() -> FastAPI:
                     _hr = await client.get("http://127.0.0.1:8090/health")
                     if _hr.status_code == 200:
                         _hd = _hr.json()
-                        _image_model_label = (
-                            f"{_hd.get('active_generate_model', '?')} / {_hd.get('active_edit_model', '?')}"
-                        )
+                        _image_model_label = f"{_hd.get('active_generate_model', '?')} / {_hd.get('active_edit_model', '?')}"
             except Exception:
                 _image_model_label = "unknown"
 
@@ -292,7 +290,7 @@ def create_app() -> FastAPI:
 
     @app.post("/admin/api/restart/{service}")
     async def restart_service(service: str) -> dict[str, str]:
-        allowed = {"nixx-server", "nixx-embed"}
+        allowed = {"nixx-server", "nixx-embed", "nixx-image"}
         if service not in allowed:
             raise HTTPException(status_code=400, detail=f"Unknown service: {service}")
         try:
@@ -372,19 +370,49 @@ def create_app() -> FastAPI:
             },
             "image_models": {
                 "generate": [
-                    {"id": "sd14",       "label": "SD 1.4",         "hardware": "GPU only",         "size": "~2 GiB"},
-                    {"id": "sd21",       "label": "SD 2.1",         "hardware": "GPU only",         "size": "~3.5 GiB"},
-                    {"id": "sdxl",       "label": "SDXL",           "hardware": "model offload",    "size": "~6.9 GiB"},
-                    {"id": "sdxl_turbo", "label": "SDXL Turbo",     "hardware": "model offload",    "size": "~6.9 GiB"},
+                    {"id": "sd14", "label": "SD 1.4", "hardware": "GPU only", "size": "~2 GiB"},
+                    {"id": "sd21", "label": "SD 2.1", "hardware": "GPU only", "size": "~3.5 GiB"},
+                    {
+                        "id": "sdxl",
+                        "label": "SDXL",
+                        "hardware": "model offload",
+                        "size": "~6.9 GiB",
+                    },
+                    {
+                        "id": "sdxl_turbo",
+                        "label": "SDXL Turbo",
+                        "hardware": "model offload",
+                        "size": "~6.9 GiB",
+                    },
                 ],
                 "edit": [
-                    {"id": "ip2p",        "label": "InstructPix2Pix", "hardware": "GPU only",        "size": "~1.7 GiB"},
-                    {"id": "magic_brush", "label": "MagicBrush",      "hardware": "GPU only",        "size": "~1.7 GiB"},
-                    {"id": "sdxl_edit",   "label": "SDXL img2img",    "hardware": "seq offload",     "size": "~6.9 GiB"},
-                    {"id": "kontext",     "label": "Kontext [dev]",   "hardware": "CPU only",        "size": "~24 GiB"},
+                    {
+                        "id": "ip2p",
+                        "label": "InstructPix2Pix",
+                        "hardware": "GPU only",
+                        "size": "~1.7 GiB",
+                    },
+                    {
+                        "id": "magic_brush",
+                        "label": "MagicBrush",
+                        "hardware": "GPU only",
+                        "size": "~1.7 GiB",
+                    },
+                    {
+                        "id": "sdxl_edit",
+                        "label": "SDXL img2img",
+                        "hardware": "seq offload",
+                        "size": "~6.9 GiB",
+                    },
+                    {
+                        "id": "kontext",
+                        "label": "Kontext [dev]",
+                        "hardware": "CPU only",
+                        "size": "~24 GiB",
+                    },
                 ],
                 "active_generate": image_health.get("active_generate_model", "sd21"),
-                "active_edit":     image_health.get("active_edit_model", "ip2p"),
+                "active_edit": image_health.get("active_edit_model", "ip2p"),
             },
         }
 

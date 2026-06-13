@@ -172,18 +172,14 @@ async def _assemble_messages(
             )
 
     # Runtime facts: inject actual config values so the model doesn't guess.
-    _image_gen_model = "unknown"
-    _image_edit_model = "unknown"
+    _image_svc_running = False
     try:
         async with httpx.AsyncClient(timeout=1.0) as _ic:
             _ih = await _ic.get("http://127.0.0.1:8090/health")
             if _ih.status_code == 200:
-                _id = _ih.json()
-                _image_gen_model = _id.get("active_generate_model", "unknown")
-                _image_edit_model = _id.get("active_edit_model", "unknown")
+                _image_svc_running = True
     except Exception:
-        _image_gen_model = "not running"
-        _image_edit_model = "not running"
+        pass
 
     runtime_block = (
         f"\n\n## Runtime configuration\n\n"
@@ -192,8 +188,7 @@ async def _assemble_messages(
         f"Response reserve: {_RESPONSE_RESERVE} tokens (reserved for your reply)\n"
         f"Scratch directory: {config.scratch_dir}\n"
         f"Source directory: {_NIXX_ROOT}\n"
-        f"Image generation model: {_image_gen_model}\n"
-        f"Image edit model: {_image_edit_model}"
+        f"Image service: {'running' if _image_svc_running else 'not running'}"
     )
 
     # system_base is the full assembled prompt minus recalled memory context.

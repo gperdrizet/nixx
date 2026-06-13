@@ -1382,6 +1382,8 @@
 
     // ── Init ───────────────────────────────────────────────────────────────────
     (async () => {
+      // Ensure tab bar is visible regardless of any paint-order quirk
+      document.getElementById('tab-bar').style.display = 'flex';
       await restoreSession();
       await refreshStatus();
       refreshContextBar();

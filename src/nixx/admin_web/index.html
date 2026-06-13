@@ -97,7 +97,7 @@
       <div class="chart-wrap"><canvas id="response-time-chart"></canvas></div>
     </div>
     <div class="chart-card">
-      <div class="chart-title">response latency (24hr)</div>
+      <div class="chart-title">response latency (last 60 requests)</div>
       <div class="chart-wrap"><canvas id="latency-chart"></canvas></div>
     </div>
     <div class="chart-card">
@@ -384,9 +384,8 @@
       const fmtTime = iso => iso ? iso.slice(11, 16) : '';
       const labels = h.map(r => fmtTime(r.created_at));
 
-      // 1. Latency line chart — simple vs tool-use LLM responses (last 6 h)
-      const sixHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
-      const h6 = h.filter(r => r.created_at && new Date(r.created_at).getTime() >= sixHoursAgo);
+      // 1. Latency line chart — simple vs tool-use LLM responses (last N)
+      const h6 = h;  // use all fetched history (limit=60 from API)
       const latencyLabels = h6.map(r => fmtTime(r.created_at));
       const simpleLatencies = h6.map(r => (!r.tool_calls_made) ? (r.latency_ms ?? null) : null);
       const toolLatencies   = h6.map(r =>   r.tool_calls_made  ? (r.latency_ms ?? null) : null);
