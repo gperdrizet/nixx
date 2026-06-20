@@ -299,7 +299,9 @@ def _load_sdxl() -> Any:
         if _sdxl_pipe is not None:
             return _sdxl_pipe
         logger.info("Loading SDXL...")
-        from diffusers import StableDiffusionXLPipeline
+        from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import (
+            StableDiffusionXLPipeline,
+        )
 
         p = StableDiffusionXLPipeline.from_pretrained(
             SDXL_MODEL_ID,
@@ -329,7 +331,9 @@ def _load_sdxl_turbo() -> Any:
         if _sdxl_turbo_pipe is not None:
             return _sdxl_turbo_pipe
         logger.info("Loading SDXL Turbo...")
-        from diffusers import StableDiffusionXLPipeline
+        from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import (
+            StableDiffusionXLPipeline,
+        )
 
         p = StableDiffusionXLPipeline.from_pretrained(
             SDXL_TURBO_MODEL_ID,
@@ -413,7 +417,9 @@ def _load_sdxl_edit() -> Any:
         if _sdxl_edit_pipe is not None:
             return _sdxl_edit_pipe
         logger.info("Loading SDXL img2img edit...")
-        from diffusers import StableDiffusionXLImg2ImgPipeline
+        from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl_img2img import (
+            StableDiffusionXLImg2ImgPipeline,
+        )
 
         p = StableDiffusionXLImg2ImgPipeline.from_pretrained(
             SDXL_MODEL_ID,
