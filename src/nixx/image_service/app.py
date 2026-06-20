@@ -299,9 +299,9 @@ def _load_sdxl() -> Any:
         if _sdxl_pipe is not None:
             return _sdxl_pipe
         logger.info("Loading SDXL...")
-        from diffusers import AutoPipelineForText2Image
+        from diffusers import StableDiffusionXLPipeline
 
-        p = AutoPipelineForText2Image.from_pretrained(
+        p = StableDiffusionXLPipeline.from_pretrained(
             SDXL_MODEL_ID,
             torch_dtype=torch.float16,
             use_safetensors=True,
@@ -329,9 +329,9 @@ def _load_sdxl_turbo() -> Any:
         if _sdxl_turbo_pipe is not None:
             return _sdxl_turbo_pipe
         logger.info("Loading SDXL Turbo...")
-        from diffusers import AutoPipelineForText2Image
+        from diffusers import StableDiffusionXLPipeline
 
-        p = AutoPipelineForText2Image.from_pretrained(
+        p = StableDiffusionXLPipeline.from_pretrained(
             SDXL_TURBO_MODEL_ID,
             torch_dtype=torch.float16,
             use_safetensors=True,
@@ -413,9 +413,9 @@ def _load_sdxl_edit() -> Any:
         if _sdxl_edit_pipe is not None:
             return _sdxl_edit_pipe
         logger.info("Loading SDXL img2img edit...")
-        from diffusers import AutoPipelineForImage2Image
+        from diffusers import StableDiffusionXLImg2ImgPipeline
 
-        p = AutoPipelineForImage2Image.from_pretrained(
+        p = StableDiffusionXLImg2ImgPipeline.from_pretrained(
             SDXL_MODEL_ID,
             torch_dtype=torch.float16,
             use_safetensors=True,
@@ -684,7 +684,7 @@ def _run_edit_sdxl(
     steps: int,
 ) -> None:
     """SDXL img2img editing. Describe the desired output image (not the change to make)."""
-    global _last_request
+    global _last_request, _active_edit_model
     try:
         from PIL import Image, ImageOps
 
@@ -714,6 +714,12 @@ def _run_edit_sdxl(
         _append_job_log(job_id, _jobs[job_id])
     except Exception as exc:
         logger.exception("Job %s failed", job_id)
+        # SDXL edit needs more VRAM than the GTX 1070 has. Revert to ip2p
+        # so subsequent edit jobs don't keep failing with the stuck model.
+        with _edit_model_lock:
+            if _active_edit_model == "sdxl_edit":
+                _active_edit_model = "ip2p"
+                logger.warning("SDXL edit job failed; reverted active edit model to ip2p")
         _jobs[job_id]["status"] = "error"
         _jobs[job_id]["error"] = str(exc)
         _jobs[job_id]["completed_at"] = time.time()
@@ -728,7 +734,7 @@ def _run_edit_sdxl(
 def _run_generate_sdxl(
     job_id: str, prompt: str, filename: str, width: int, height: int, steps: int
 ) -> None:
-    global _last_request
+    global _last_request, _active_generate_model
     try:
         if _active_generate_model == "sdxl_turbo":
             pipe = _load_sdxl_turbo()
@@ -759,6 +765,12 @@ def _run_generate_sdxl(
         _append_job_log(job_id, _jobs[job_id])
     except Exception as exc:
         logger.exception("Job %s failed", job_id)
+        # SDXL/SDXL-Turbo need more VRAM than the GTX 1070 has. Revert to sd21
+        # so subsequent jobs don't keep failing with the stuck model selection.
+        with _generate_model_lock:
+            if _active_generate_model in ("sdxl", "sdxl_turbo"):
+                _active_generate_model = "sd21"
+                logger.warning("SDXL job failed; reverted active generate model to sd21")
         _jobs[job_id]["status"] = "error"
         _jobs[job_id]["error"] = str(exc)
         _jobs[job_id]["completed_at"] = time.time()

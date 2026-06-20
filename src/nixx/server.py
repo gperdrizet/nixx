@@ -248,6 +248,42 @@ class ProjectDirRequest(BaseModel):
 
 # ── App factory ───────────────────────────────────────────────────────────────
 
+_IMAGE_SERVICE_URL = "http://127.0.0.1:8090"
+
+
+async def _start_and_wait_image_service(timeout: float = 45.0) -> None:
+    """Start nixx-image if needed, then poll until it responds on /health."""
+    # First check if it's already up
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as c:
+            r = await c.get(f"{_IMAGE_SERVICE_URL}/health")
+            if r.status_code == 200:
+                return
+    except Exception:
+        pass
+
+    proc = await asyncio.create_subprocess_exec(
+        "sudo",
+        "systemctl",
+        "start",
+        "nixx-image",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    await proc.communicate()
+
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        await asyncio.sleep(1.5)
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as c:
+                r = await c.get(f"{_IMAGE_SERVICE_URL}/health")
+                if r.status_code == 200:
+                    return
+        except Exception:
+            pass
+    raise RuntimeError("nixx-image failed to start within timeout")
+
 
 def create_app(config: NixxConfig | None = None) -> FastAPI:
     if config is None:
@@ -398,25 +434,11 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                 status_code=400, detail="model must be one of: sd14, sd21, sdxl, sdxl_turbo"
             )
         try:
+            await _start_and_wait_image_service()
             async with httpx.AsyncClient(timeout=10.0) as client:
-                try:
-                    await client.get("http://127.0.0.1:8090/health")
-                except Exception:
-                    import asyncio as _asyncio
-
-                    proc = await _asyncio.create_subprocess_exec(
-                        "sudo",
-                        "systemctl",
-                        "start",
-                        "nixx-image",
-                        stdout=_asyncio.subprocess.DEVNULL,
-                        stderr=_asyncio.subprocess.DEVNULL,
-                    )
-                    await proc.communicate()
                 r = await client.post(
-                    "http://127.0.0.1:8090/generate-model",
+                    f"{_IMAGE_SERVICE_URL}/generate-model",
                     json={"model": model},
-                    timeout=10.0,
                 )
                 r.raise_for_status()
                 return cast(dict[str, Any], r.json())
@@ -446,26 +468,11 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                 detail="model must be one of: ip2p, magic_brush, sdxl_edit, kontext",
             )
         try:
+            await _start_and_wait_image_service()
             async with httpx.AsyncClient(timeout=10.0) as client:
-                # Start the service if it isn't running yet
-                try:
-                    await client.get("http://127.0.0.1:8090/health")
-                except Exception:
-                    import asyncio as _asyncio
-
-                    proc = await _asyncio.create_subprocess_exec(
-                        "sudo",
-                        "systemctl",
-                        "start",
-                        "nixx-image",
-                        stdout=_asyncio.subprocess.DEVNULL,
-                        stderr=_asyncio.subprocess.DEVNULL,
-                    )
-                    await proc.communicate()
                 r = await client.post(
-                    "http://127.0.0.1:8090/edit_model",
+                    f"{_IMAGE_SERVICE_URL}/edit_model",
                     json={"model": model},
-                    timeout=10.0,
                 )
                 r.raise_for_status()
                 return cast(dict[str, Any], r.json())

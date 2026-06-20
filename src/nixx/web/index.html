@@ -1192,7 +1192,8 @@
                 body: JSON.stringify({ model }),
               });
               const d = await r.json();
-              addSystem(`Image edit model set to: ${labels[d.model] || d.model}`);
+              if (!r.ok) { addSystem(`Failed to set image edit model: ${d.detail || r.status}`); }
+              else { addSystem(`Image edit model set to: ${labels[d.model] || d.model}`); }
             } catch { addSystem('Failed to set image edit model.'); }
           }
         }
@@ -1217,7 +1218,8 @@
                 body: JSON.stringify({ model }),
               });
               const d = await r.json();
-              addSystem(`Image generate model set to: ${labels[d.model] || d.model}`);
+              if (!r.ok) { addSystem(`Failed to set generate model: ${d.detail || r.status}`); }
+              else { addSystem(`Image generate model set to: ${labels[d.model] || d.model}`); }
             } catch { addSystem('Failed to set image generate model.'); }
           }
         }
