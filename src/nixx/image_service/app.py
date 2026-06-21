@@ -90,6 +90,8 @@ class EditRequest(BaseModel):
     width: int = 768
     height: int = 768
     steps: int = 30  # IP2P/MagicBrush use 50 internally; SDXL edit and Kontext use this
+    image_guidance: float = 1.0  # IP2P/MagicBrush: how much to preserve the source image
+    text_guidance: float = 9.5  # IP2P/MagicBrush: how strongly to follow the instruction
 
 
 # ── Global state ───────────────────────────────────────────────────────────────
@@ -530,6 +532,8 @@ def _run_edit_ip2p(
     filename: str,
     width: int,
     height: int,
+    image_guidance: float = 1.0,
+    text_guidance: float = 9.5,
 ) -> None:
     global _last_request
     try:
@@ -546,8 +550,8 @@ def _run_edit_ip2p(
             prompt=prompt,
             image=input_image,
             num_inference_steps=50,
-            image_guidance_scale=1.5,  # how much to preserve original
-            guidance_scale=7.5,  # how strongly to follow text prompt
+            image_guidance_scale=image_guidance,
+            guidance_scale=text_guidance,
         )
         img = result.images[0]
         out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
@@ -637,6 +641,8 @@ def _run_edit_magic_brush(
     filename: str,
     width: int,
     height: int,
+    image_guidance: float = 1.0,
+    text_guidance: float = 9.5,
 ) -> None:
     global _last_request
     try:
@@ -652,8 +658,8 @@ def _run_edit_magic_brush(
             prompt=prompt,
             image=input_image,
             num_inference_steps=50,
-            image_guidance_scale=1.5,
-            guidance_scale=7.5,
+            image_guidance_scale=image_guidance,
+            guidance_scale=text_guidance,
         )
         img = result.images[0]
         out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
@@ -796,16 +802,22 @@ def _run_edit(
     width: int,
     height: int,
     steps: int,
+    image_guidance: float = 1.0,
+    text_guidance: float = 9.5,
 ) -> None:
     """Dispatch to the active edit model."""
     if _active_edit_model == "kontext":
         _run_edit_kontext(job_id, prompt, input_path, filename, width, height, steps)
     elif _active_edit_model == "magic_brush":
-        _run_edit_magic_brush(job_id, prompt, input_path, filename, width, height)
+        _run_edit_magic_brush(
+            job_id, prompt, input_path, filename, width, height, image_guidance, text_guidance
+        )
     elif _active_edit_model == "sdxl_edit":
         _run_edit_sdxl(job_id, prompt, input_path, filename, width, height, steps)
     else:
-        _run_edit_ip2p(job_id, prompt, input_path, filename, width, height)
+        _run_edit_ip2p(
+            job_id, prompt, input_path, filename, width, height, image_guidance, text_guidance
+        )
 
 
 # ── FastAPI app ────────────────────────────────────────────────────────────────
@@ -944,6 +956,8 @@ def create_app() -> FastAPI:
                 req.width,
                 req.height,
                 req.steps,
+                req.image_guidance,
+                req.text_guidance,
             ),
             daemon=True,
         )

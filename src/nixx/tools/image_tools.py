@@ -170,14 +170,18 @@ class EditImageTool(Tool):
     def description(self) -> str:
         return (
             "Edit an existing image using a text prompt. "
+            "PROMPT STYLE: Use imperative instructions that describe the change, not the result. "
+            "Good: 'make the sky orange', 'add a hat to the person', 'turn it to winter'. "
+            "Bad: 'an orange sky', 'a person wearing a hat'. "
             "Two edit models are available (switch with /image-model in chat): "
-            "'fast' uses InstructPix2Pix (GPU, ~1-2 min) and 'full' uses FLUX.1 Kontext [dev] (CPU, ~2-3 hours). "
+            "'ip2p' uses InstructPix2Pix (GPU, ~1-2 min, default) and 'kontext' uses FLUX.1 Kontext [dev] (CPU, ~2-3 hours). "
             "Use this when you need to modify an existing image - for new images use generate_image instead. "
             "The input image must be an absolute path to a PNG/JPG in the scratch directory. "
             "Non-blocking: starts the job and returns immediately. "
-            "The edited image is saved to ~/nixx_scratch/images/<job_id>.png when done. "
-            "IMPORTANT: Do not set width or height unless the user explicitly asks to resize. "
-            "The defaults (768x768) work for both models."
+            "The edited image is saved to ~/nixx_scratch/images/<filename>.png when done. "
+            "Guidance: image_guidance controls how much of the original is preserved (lower = stronger edit, default 1.0). "
+            "text_guidance controls how strongly the instruction is followed (higher = stronger edit, default 9.5). "
+            "For subtle tweaks use image_guidance=1.5, text_guidance=7.5. For dramatic changes use image_guidance=0.8, text_guidance=12.0."
         )
 
     @property
@@ -212,6 +216,16 @@ class EditImageTool(Tool):
                     "description": "Output height in px. Default 768 - do not set unless user asks to resize. Max 768.",
                 },
                 "steps": {"type": "integer", "default": 28},
+                "image_guidance": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "IP2P/MagicBrush: how much to preserve the source image. Range 0.5-2.5. Lower = stronger edit. Default 1.0.",
+                },
+                "text_guidance": {
+                    "type": "number",
+                    "default": 9.5,
+                    "description": "IP2P/MagicBrush: how strongly to follow the instruction. Range 5.0-15.0. Higher = stronger edit. Default 9.5.",
+                },
             },
             "required": ["prompt", "input_path", "filename"],
         }
@@ -240,6 +254,8 @@ class EditImageTool(Tool):
                         "width": int(kwargs.get("width") or 768),
                         "height": int(kwargs.get("height") or 768),
                         "steps": int(kwargs.get("steps") or 28),
+                        "image_guidance": float(kwargs.get("image_guidance") or 1.0),
+                        "text_guidance": float(kwargs.get("text_guidance") or 9.5),
                     },
                 )
                 if not r.is_success:
