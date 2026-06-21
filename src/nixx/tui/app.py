@@ -360,7 +360,6 @@ class NixxApp(App[None]):
                         exclusive=False,
                         thread=False,
                     )
-                self.query_one("#input", ChatInput).focus()
                 event.stop()
                 return
             elif event.key == "escape":
@@ -374,7 +373,6 @@ class NixxApp(App[None]):
                 # Remove user message from history.
                 if self._history and self._history[-1]["role"] == "user":
                     self._history.pop()
-                self.query_one("#input", ChatInput).focus()
                 event.stop()
                 return
 
@@ -459,12 +457,6 @@ class NixxApp(App[None]):
                     self.run_worker(self._set_project(arg), exclusive=False, thread=False)
                 else:
                     self.run_worker(self._show_project(), exclusive=False, thread=False)
-            elif text.startswith("/image-model"):
-                arg = text[12:].strip()
-                self.run_worker(self._image_model(arg), exclusive=False, thread=False)
-            elif text.startswith("/gen-model"):
-                arg = text[10:].strip()
-                self.run_worker(self._gen_model(arg), exclusive=False, thread=False)
             else:
                 self._add_message("system", f"Unknown command: {text}")
             chat_input.focus()
@@ -608,13 +600,23 @@ class NixxApp(App[None]):
         except Exception as exc:
             self._add_message("system", f"[red]Error: {exc}[/red]")
             return
-        system_prompt = data.get("system_prompt", "")
+        base = data.get("base", "")
         memory_ctx = data.get("memory")
-        text = f"[b]System prompt:[/b]\n{system_prompt}"
-        if memory_ctx:
-            text += f"\n\n[b]Injected context:[/b]\n[dim]{memory_ctx}[/dim]"
+        hits = data.get("hits", [])
+        text = f"[b]Base prompt:[/b]\n{base}"
+        if hits:
+            text += "\n\n[b]Recall hits:[/b]"
+            for h in hits:
+                score = h.get("similarity", 0)
+                src = h.get("source_id")
+                snippet = h.get("content", "")[:120].replace("\n", " ")
+                src_tag = f" [dim](source {src})[/dim]" if src else ""
+                bar = "█" * int(score * 10)
+                text += f"\n  [{score:.3f}] {bar}{src_tag}\n  [dim]{snippet}[/dim]"
         else:
             text += "\n\n[dim](no recall hits)[/dim]"
+        if memory_ctx:
+            text += f"\n\n[b]Injected context:[/b]\n[dim]{memory_ctx}[/dim]"
         self._add_message("system", text)
 
     async def _create_summary(self) -> None:
@@ -789,53 +791,6 @@ class NixxApp(App[None]):
             text += "\n[dim]No project directory set[/dim]"
         self._add_message("system", text)
 
-    async def _image_model(self, arg: str) -> None:
-        _ALIASES = {"ip2p": "ip2p", "fast": "ip2p", "mb": "magic_brush", "magic-brush": "magic_brush",
-                    "magic_brush": "magic_brush", "xe": "sdxl_edit", "sdxl-edit": "sdxl_edit",
-                    "sdxl_edit": "sdxl_edit", "kontext": "kontext", "full": "kontext"}
-        _LABELS = {"ip2p": "InstructPix2Pix (GPU, ~1.7 GiB)", "magic_brush": "MagicBrush (GPU, ~1.7 GiB)",
-                   "sdxl_edit": "SDXL img2img (seq offload, ~6.9 GiB)", "kontext": "FLUX.1 Kontext [dev] (CPU, ~24 GiB)"}
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                if not arg:
-                    r = await client.get(f"{self._base_url}/v1/image/edit-model")
-                    r.raise_for_status()
-                    model = r.json().get("model", "?")
-                    self._add_message("system", f"Image edit model: {_LABELS.get(model, model)}\nSwitch with /image-model [ip2p|mb|xe|kontext]")
-                else:
-                    model = _ALIASES.get(arg.lower())
-                    if not model:
-                        self._add_message("system", "Usage: /image-model [ip2p|mb|xe|kontext]  —  ip2p=InstructPix2Pix  mb=MagicBrush  xe=SDXL img2img  kontext=Kontext (CPU)")
-                        return
-                    r = await client.post(f"{self._base_url}/v1/image/edit-model", json={"model": model})
-                    r.raise_for_status()
-                    self._add_message("system", f"Image edit model set to: {_LABELS.get(model, model)}")
-        except Exception as exc:
-            self._add_message("system", f"Failed: {exc}")
-
-    async def _gen_model(self, arg: str) -> None:
-        _ALIASES = {"sd14": "sd14", "sd21": "sd21", "sdxl": "sdxl",
-                    "turbo": "sdxl_turbo", "sdxl-turbo": "sdxl_turbo", "sdxl_turbo": "sdxl_turbo"}
-        _LABELS = {"sd14": "SD 1.4 (GPU, ~2 GiB)", "sd21": "SD 2.1 Base (GPU, ~3.5 GiB)",
-                   "sdxl": "SDXL (model offload, ~6.9 GiB)", "sdxl_turbo": "SDXL Turbo (model offload, ~6.9 GiB, 4-step)"}
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                if not arg:
-                    r = await client.get(f"{self._base_url}/v1/image/generate-model")
-                    r.raise_for_status()
-                    model = r.json().get("model", "?")
-                    self._add_message("system", f"Image generate model: {_LABELS.get(model, model)}\nSwitch with /gen-model [sd14|sd21|sdxl|turbo]")
-                else:
-                    model = _ALIASES.get(arg.lower())
-                    if not model:
-                        self._add_message("system", "Usage: /gen-model [sd14|sd21|sdxl|turbo]")
-                        return
-                    r = await client.post(f"{self._base_url}/v1/image/generate-model", json={"model": model})
-                    r.raise_for_status()
-                    self._add_message("system", f"Image generate model set to: {_LABELS.get(model, model)}")
-        except Exception as exc:
-            self._add_message("system", f"Failed: {exc}")
-
     async def _update_context_bar(self) -> None:
         """Fetch token usage from the server and update the context gauge."""
         try:
@@ -981,9 +936,7 @@ class NixxApp(App[None]):
             role = r.get("role", "?")
             buf_id = r.get("buffer_id", "?")
             snippet = r["content"][:150].replace("\n", " ")
-            text += (
-                f"\n[cyan]#{buf_id}[/] [{role}] " f"[dim](rank {rank:.3f})[/dim]\n" f"  {snippet}\n"
-            )
+            text += f"\n[cyan]#{buf_id}[/] [{role}] [dim](rank {rank:.3f})[/dim]\n  {snippet}\n"
         text += "\n[dim]Use /transcript <id> to view context[/dim]"
         self._add_message("system", text.strip())
 
@@ -1111,9 +1064,6 @@ class NixxApp(App[None]):
                             )
                             self._pending_tool_calls = raw_tool_calls
                             self._pending_assistant_msg = msg
-                            # Blur the chat input so Enter reaches app.on_key
-                            # instead of being swallowed as a submit.
-                            self.query_one("#input", ChatInput).blur()
                             self.query_one("#messages", ScrollableContainer).scroll_end(
                                 animate=False
                             )
@@ -1134,14 +1084,6 @@ class NixxApp(App[None]):
                             msg.append(f"\n[dim]▸ {escape_markup(tool_name)}[/dim]\n")
                             self.query_one("#messages", ScrollableContainer).scroll_end(
                                 animate=False
-                            )
-                            continue
-                        if "image_job_started" in chunk:
-                            job = chunk["image_job_started"]
-                            self.run_worker(
-                                self._poll_image_job(job["job_id"], job.get("path", "")),
-                                exclusive=False,
-                                thread=False,
                             )
                             continue
                         delta = chunk.get("choices", [{}])[0].get("delta", {})
@@ -1177,53 +1119,6 @@ class NixxApp(App[None]):
             self.run_worker(self._update_context_bar(), exclusive=False, thread=False)
             self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
             self.run_worker(self._fetch_and_show_intent_bar(), exclusive=False, thread=False)
-
-    async def _poll_image_job(self, job_id: str, path: str) -> None:
-        """Poll nixx-image until job completes, then show a notification."""
-        import asyncio
-
-        poll_interval = 15  # seconds
-        max_polls = 200  # ~50 min ceiling
-        for _ in range(max_polls):
-            await asyncio.sleep(poll_interval)
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    r = await client.get("http://127.0.0.1:8090/jobs")
-                    data = r.json()
-            except Exception:
-                continue
-            job = next((j for j in data.get("jobs", []) if j["job_id"] == job_id), None)
-            if job is None:
-                continue
-            if job["status"] == "done":
-                latency = job.get("latency_ms")
-                time_str = f" ({latency / 60000:.1f}m)" if latency else ""
-                self._add_message(
-                    "system",
-                    f"[green bold]✓ Image ready{time_str}[/green bold]\n{path}",
-                )
-                self.query_one("#messages", ScrollableContainer).scroll_end(animate=False)
-                # Open with xdg-open in background (best-effort)
-                try:
-                    import subprocess
-                    subprocess.Popen(
-                        ["xdg-open", path],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                except Exception:
-                    pass
-                return
-            elif job["status"] == "failed":
-                self._add_message(
-                    "system",
-                    f"[red]✗ Image job failed[/red] [dim]({job_id[:8]})[/dim]",
-                )
-                return
-        self._add_message(
-            "system",
-            f"[yellow]Image job timed out waiting for result[/yellow] [dim]({job_id[:8]})[/dim]",
-        )
 
     def action_clear(self) -> None:
         self._history.clear()
