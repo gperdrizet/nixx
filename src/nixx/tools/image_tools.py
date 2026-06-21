@@ -78,7 +78,8 @@ class GenerateImageTool(Tool):
         return (
             "Generate an image from a text prompt using FLUX.1 Schnell (fast, ~1 min on this hardware). "
             "Non-blocking: starts the job and returns immediately. "
-            "The image is saved to ~/nixx_scratch/images/<job_id>.png when done. "
+            "The image is saved to ~/nixx_scratch/images/<filename>.png — the filename parameter YOU provide determines the saved file name. "
+            "Choose a short, descriptive filename from the prompt (e.g. 'space-kid', 'red-barn-sunset'). "
             "Default is 4 steps (good quality for Schnell). Increase steps only if quality is poor."
         )
 
