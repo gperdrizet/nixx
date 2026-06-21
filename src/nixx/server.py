@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from httpx import HTTPError as HttpError
@@ -934,6 +934,30 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         if not target.exists() or not target.is_file():
             raise HTTPException(status_code=404, detail="File not found")
         return FileResponse(target, filename=target.name)
+
+    @app.post("/v1/files/upload")
+    async def upload_file(file: UploadFile = File(...)) -> dict[str, Any]:
+        """Upload an image to scratch_dir/images/. Returns the absolute server path."""
+        import re
+        import shutil
+
+        _ALLOWED = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".avif"}
+        original = file.filename or "upload.jpg"
+        suffix = Path(original).suffix.lower()
+        if suffix not in _ALLOWED:
+            raise HTTPException(status_code=400, detail=f"File type not allowed: {suffix}")
+
+        images_dir = config.scratch_dir / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+
+        safe_stem = re.sub(r"[^a-z0-9._-]", "", Path(original).stem.lower())[:40] or "upload"
+        unique_name = f"upload-{uuid.uuid4().hex[:8]}-{safe_stem}{suffix}"
+        dest = images_dir / unique_name
+
+        with dest.open("wb") as out:
+            shutil.copyfileobj(file.file, out)
+
+        return {"path": str(dest), "filename": unique_name, "size": dest.stat().st_size}
 
     @app.delete("/v1/files")
     async def delete_file(path: str) -> dict:
