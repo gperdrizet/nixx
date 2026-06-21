@@ -61,18 +61,18 @@
     .cfg-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.1rem; }
     .cfg-tag { font-family: monospace; font-size: 0.75rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 0.25rem; padding: 0.1rem 0.4rem; color: var(--text); }
 
-    /* ── Image models table ── */
-    .models-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem; }
-    .models-panel-title { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.6rem; }
-    .models-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 2rem; }
-    @media (max-width: 600px) { .models-grid { grid-template-columns: 1fr; } }
-    .models-section-label { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 0.3rem; }
-    .models-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-    .models-table td { padding: 0.2rem 0.4rem; vertical-align: middle; }
-    .models-table td:first-child { font-family: monospace; white-space: nowrap; }
-    .models-table td:last-child { color: var(--muted); font-size: 0.72rem; }
-    .models-table tr.active-model td:first-child { color: var(--green); font-weight: 600; }
-    .models-table tr.active-model td:first-child::after { content: ' ▸'; }
+    /* ── Image models tables ── */
+    .models-row { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; margin-bottom: 1.5rem; }
+    @media (max-width: 600px) { .models-row { grid-template-columns: 1fr; } }
+    .model-card { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem 1.25rem; }
+    .model-card-title { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.6rem; }
+    .model-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .model-table th { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); text-align: left; padding: 0 0.4rem 0.35rem; border-bottom: 1px solid var(--border); }
+    .model-table td { padding: 0.3rem 0.4rem; vertical-align: middle; }
+    .model-table td:first-child { font-family: monospace; white-space: nowrap; }
+    .model-table td.model-meta { color: var(--muted); font-size: 0.72rem; }
+    .model-table tr.active-model td:first-child { color: var(--green); font-weight: 600; }
+    .model-table tr.active-model td:first-child::after { content: ' ▸'; }
 
     /* ── Cheat sheet cards ── */
     .cheat-grid { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; margin-bottom: 1.5rem; }
@@ -141,17 +141,20 @@
 
   <div class="config-panel" id="config-panel"></div>
 
-  <div class="models-panel" id="image-models-panel" style="display:none">
-    <div class="models-panel-title">image models</div>
-    <div class="models-grid">
-      <div>
-        <div class="models-section-label">generation</div>
-        <table class="models-table" id="gen-models-table"></table>
-      </div>
-      <div>
-        <div class="models-section-label">editing</div>
-        <table class="models-table" id="edit-models-table"></table>
-      </div>
+  <div class="models-row" id="image-models-section" style="display:none">
+    <div class="model-card">
+      <div class="model-card-title">generation models</div>
+      <table class="model-table" id="gen-models-table">
+        <thead><tr><th>model</th><th>name</th><th>hardware</th><th>size</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="model-card">
+      <div class="model-card-title">editing models</div>
+      <table class="model-table" id="edit-models-table">
+        <thead><tr><th>model</th><th>name</th><th>hardware</th><th>size</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
   </div>
 
@@ -404,16 +407,17 @@
       const activeGen = c.image_models?.active_generate;
       const activeEdit = c.image_models?.active_edit;
       if (genModels.length || editModels.length) {
-        document.getElementById('image-models-panel').style.display = '';
+        document.getElementById('image-models-section').style.display = '';
         const modelRow = (m, active) =>
           `<tr class="${active ? 'active-model' : ''}">
             <td>${m.id}</td>
             <td>${m.label}</td>
-            <td>${m.hardware}, ${m.size}</td>
+            <td class="model-meta">${m.hardware}</td>
+            <td class="model-meta">${m.size}</td>
           </tr>`;
-        document.getElementById('gen-models-table').innerHTML =
+        document.querySelector('#gen-models-table tbody').innerHTML =
           genModels.map(m => modelRow(m, m.id === activeGen)).join('');
-        document.getElementById('edit-models-table').innerHTML =
+        document.querySelector('#edit-models-table tbody').innerHTML =
           editModels.map(m => modelRow(m, m.id === activeEdit)).join('');
       }
     }
