@@ -831,7 +831,7 @@ workspaces and conversations - nixx remembers everything across sessions.</p>
 <td><code>nixx-image</code> via dedicated venv</td>
 <td>8090</td>
 <td>siderealyear</td>
-<td>On-demand FLUX image service. <code>Restart=no</code> - stays dead until explicitly started. Auto-shuts-down after 10 min idle (never while a job is running).</td>
+<td>On-demand SD/SDXL image service. <code>Restart=no</code> - stays dead until explicitly started. Auto-shuts-down after 10 min idle (never while a job is running).</td>
 </tr>
 <tr>
 <td>LLM server</td>
@@ -893,20 +893,94 @@ services</strong>. To pick up code changes: <code>sudo systemctl restart nixx-se
 <li><strong>LLM</strong>: <code>gpt-oss-20b-mxfp4.gguf</code> — served at port 8502, OpenAI-compatible API</li>
 <li><strong>Embeddings</strong>: <code>mxbai-embed-large-v1-f16.gguf</code> — served at port 8082, 1024-dimensional vectors</li>
 </ul>
-<p>FLUX image models are HuggingFace repos cached in <code>/mnt/fast_scratch/huggingface_transformers_cache</code> (fast NVMe):</p>
-<ul>
-<li><strong>FLUX.1 Schnell</strong>: <code>black-forest-labs/FLUX.1-schnell</code> — Apache 2.0, no token needed, 4-step default</li>
-<li><strong>FLUX.1 Kontext [dev]</strong>: <code>black-forest-labs/FLUX.1-Kontext-dev</code> — gated (requires <code>HF_READ_TOKEN</code> in <code>.env</code>), 28-step default</li>
-</ul>
+<p>Image models are HuggingFace repos cached in <code>/mnt/fast_scratch/huggingface_transformers_cache</code> (fast NVMe).</p>
 <p>GPU assignment: llamacpp uses device 0 (P100, 16 GB, ~13 GB used). nixx-image uses device 1 (GTX 1070, 8 GB) via <code>CUDA_VISIBLE_DEVICES=1</code>.</p>
-<ul>
-<li><strong>Schnell</strong>: loaded with <code>.to("cuda")</code>, no offloading. VAE slicing+tiling enabled. ~4 min total.</li>
-<li><strong>Kontext [dev]</strong>: full CPU mode - no <code>.to("cuda")</code> calls at all. Flux transformer double-stream attention allocates ~6.77 GiB in one tensor, larger than 8 GB VRAM at any resolution. CPU inference takes ~2-3 hours. <code>enable_attention_slicing()</code> has no effect (doesn't hook into <code>dispatch_attention_fn → _native_attention</code> in Flux). VAE slicing+tiling enabled.</li>
-</ul>
-<p>Performance benchmarks (GTX 1070, NVMe model cache):
-- Schnell cold load: ~6 seconds from NVMe
-- Schnell 4-step inference: ~30 seconds (GPU, <code>.to("cuda")</code>)
-- Kontext inference: ~2-3 hours (CPU, 28 steps)</p>
+<p><strong>Generation models</strong> (switch with <code>/gen-model</code> in TUI or <code>POST /v1/image/generate-model</code>):</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Repo</th>
+<th>Hardware</th>
+<th>VRAM</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sd14</code></td>
+<td><code>CompVis/stable-diffusion-v1-4</code></td>
+<td>GPU only</td>
+<td>~2 GiB</td>
+<td>SD 1.x baseline</td>
+</tr>
+<tr>
+<td><code>sd21</code></td>
+<td><code>stabilityai/stable-diffusion-2-1-base</code></td>
+<td>GPU only</td>
+<td>~3.5 GiB</td>
+<td><strong>default</strong></td>
+</tr>
+<tr>
+<td><code>sdxl</code></td>
+<td><code>stabilityai/stable-diffusion-xl-base-1.0</code></td>
+<td>model offload</td>
+<td>~6.9 GiB</td>
+<td>Higher quality, slower</td>
+</tr>
+<tr>
+<td><code>sdxl_turbo</code></td>
+<td><code>stabilityai/sdxl-turbo</code></td>
+<td>model offload</td>
+<td>~6.9 GiB</td>
+<td>4-step distilled</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Editing models</strong> (switch with <code>/image-model</code> in TUI or <code>POST /v1/image/edit-model</code>):</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Repo</th>
+<th>Hardware</th>
+<th>VRAM</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ip2p</code></td>
+<td><code>timbrooks/instruct-pix2pix</code></td>
+<td>GPU only</td>
+<td>~1.7 GiB</td>
+<td><strong>default</strong>, ~1-2 min</td>
+</tr>
+<tr>
+<td><code>magic_brush</code></td>
+<td><code>osunlp/MagicBrush</code></td>
+<td>GPU only</td>
+<td>~1.7 GiB</td>
+<td>IP2P fine-tune, real edits</td>
+</tr>
+<tr>
+<td><code>sdxl_edit</code></td>
+<td><code>stabilityai/stable-diffusion-xl-base-1.0</code></td>
+<td>sequential offload</td>
+<td>~6.9 GiB</td>
+<td>img2img; describe target, not change</td>
+</tr>
+<tr>
+<td><code>kontext</code></td>
+<td><code>black-forest-labs/FLUX.1-Kontext-dev</code></td>
+<td>CPU only</td>
+<td>~24 GiB</td>
+<td>Gated, ~2-3 hours</td>
+</tr>
+</tbody>
+</table>
+<p>All models lazy-load on first request; only one generation model and one edit model can be resident at a time (loading a new one unloads the current one).</p>
+<p>Output filenames are model-provided descriptive slugs + 6-char job ID suffix (e.g. <code>red-cat-a3f9b2.png</code>). <code>_safe_filename()</code> sanitizes and truncates to 60 chars.</p>
 <hr />
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <p>nixx is installed into pipx: <code>pipx install --editable .</code>
@@ -1026,11 +1100,11 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 <a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>    shadow.py     — shadow_backup() — auto-snapshot before file modifications
 <a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>    web_search.py — WebSearchTool (SearXNG JSON API, requires X-Forwarded-For header)
 <a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>    read_webpage.py — ReadWebpageTool (httpx + BeautifulSoup, 8000 char limit)
-<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>    image_tools.py — GenerateImageTool (Schnell, ~4 min), EditImageTool (Kontext, ~25 min). Both auto-start nixx-image via `sudo systemctl start nixx-image` if not running.
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>    image_tools.py — GenerateImageTool (SD 1.4/2.1/SDXL/SDXL Turbo), EditImageTool (IP2P/MagicBrush/SDXL img2img/Kontext). Both auto-start nixx-image via `sudo systemctl start nixx-image` if not running. Filename is a required model-provided argument.
 <a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>    registry.py   — ToolRegistry: registers tools, builds OpenAI tool defs, executes calls
 <a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>  image_service/
 <a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>    __init__.py
-<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>    app.py        — FastAPI image service: /generate (Schnell), /edit (Kontext), /jobs, /health. Lazy-loads models on first request, shuts down after 10 min idle.
+<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>    app.py        — FastAPI image service: /generate (SD family), /edit (IP2P/MagicBrush/SDXL/Kontext), /generate-model (GET/POST), /edit_model (GET/POST), /jobs, /health. Lazy-loads models on first request, shuts down after 10 min idle.
 <a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>  tui/
 <a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>    __init__.py
 <a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a>    app.py        — NixxApp (Textual): full chat UI
@@ -1154,6 +1228,12 @@ GET  /v1/project                 — get scratch_dir + current project directory
 POST /v1/project                 — set project directory (body: {directory})
 DELETE /v1/project               — clear project directory
 GET  /v1/image/jobs              — proxy to nixx-image /jobs (returns empty list if service is down)
+GET  /v1/image/preview           — serve image file from scratch_dir (?path=absolute_path)
+POST /v1/image/crop              — crop image to square (body: {path, x, y, size}) → {cropped_path}
+GET  /v1/image/generate-model   — proxy to nixx-image /generate-model → {model}
+POST /v1/image/generate-model   — set active generation model (body: {model: 'sd14'|'sd21'|'sdxl'|'sdxl_turbo'})
+GET  /v1/image/edit-model        — proxy to nixx-image /edit_model → {model}
+POST /v1/image/edit-model        — set active edit model (body: {model: 'ip2p'|'magic_brush'|'sdxl_edit'|'kontext'})
 GET  /v1/files                   — list scratch directory (optional ?subdir=)
 GET  /v1/files/download          — download a file (?path=relative/path)
 DELETE /v1/files                 — delete a file (?path=relative/path)</p>
@@ -1177,10 +1257,8 @@ or red (off). Both sync from server state on the <code>_update_summary_bar</code
 <p>When an episodic summary is due (auto-triggered by word count, or via <code>/summary</code>), it runs
 immediately in the background - no user input needed. A <code>Summary created</code> system message appears
 inline with the LLM-derived tags and entities.</p>
-<p>TUI slash commands: <code>/help</code>, <code>/context</code>, <code>/summary</code>, <code>/search "q"</code>, <code>/transcript &lt;id&gt; [end]</code>,
-<code>/clear</code>, <code>/recall</code>, <code>/interval [n]</code>, <code>/intent [text]</code>, <code>/intent-toggle</code> (toggle intent injection),
-<code>/intent-bar</code> (toggle IntentBar), <code>/threshold [0.0-1.0]</code> (view or set recall similarity threshold),
-<code>/project [dir|clear]</code> (show, set, or clear project directory).</p>
+<p>PWA slash commands: <code>/help</code>, <code>/clear</code>, <code>/summary</code>, <code>/search "q"</code>, <code>/context</code>, <code>/recall</code>, <code>/intent-toggle</code>, <code>/intent [text|clear]</code>, <code>/project [dir|clear]</code>, <code>/threshold [0.0-1.0]</code>, <code>/interval [n]</code>, <code>/image-model [ip2p|mb|xe|kontext]</code> (switch edit model; mb=MagicBrush, xe=SDXL img2img), <code>/gen-model [sd14|sd21|sdxl|turbo]</code> (switch generation model).</p>
+<p>Crop modal: when <code>edit_image</code> is called with a non-square image, the server emits a <code>crop_needed</code> SSE event before <code>[PAUSE]</code>. The PWA shows a canvas with the image and a draggable square crop box. Confirm crops server-side via <code>POST /v1/image/crop</code> and resumes with the patched path. Cancel resumes with the original path (diffusers auto-center-crops).</p>
 <p>Tool call events: when nixx calls a tool mid-stream, a dim <code>▸ tool_name</code> line is appended
 inline inside the streaming assistant message (not a separate system message).</p>
 <hr />
@@ -1273,11 +1351,15 @@ project directory. The project directory is set via <code>/project &lt;dir&gt;</
 </tr>
 <tr>
 <td><code>generate_image</code></td>
-<td>Generate image via FLUX.1 Schnell (~4 min, 4 steps default). Auto-starts nixx-image service. Output to <code>~/nixx_scratch/images/</code>.</td>
+<td>Generate image via SD 1.4/2.1/SDXL/SDXL Turbo. Active model set with <code>/gen-model</code>. <code>filename</code> is a required argument (1-3 words, lowercase, hyphen-separated, dotted revisions). Output to <code>~/nixx_scratch/images/&lt;filename&gt;-&lt;job6&gt;.png</code>. Auto-starts nixx-image.</td>
 </tr>
 <tr>
 <td><code>edit_image</code></td>
-<td>Edit image via FLUX.1 Kontext [dev] (~25 min, 28 steps default). Auto-starts nixx-image service.</td>
+<td>Edit image via IP2P, MagicBrush, SDXL img2img, or Kontext. Active model set with <code>/image-model</code>. Same <code>filename</code> convention. Auto-starts nixx-image.</td>
+</tr>
+<tr>
+<td><code>image_status</code></td>
+<td>Check status of a generation or editing job. Use this when the user asks for a progress update.</td>
 </tr>
 </tbody>
 </table>
@@ -1303,7 +1385,11 @@ before execution. The TUI renders a dim inline <code>calling tool: &lt;name&gt;<
 <li>nixx-image has <code>Restart=no</code> by design - it stays dead after idle shutdown. <code>sudo systemctl start nixx-image</code> to bring it up. Tools do this automatically.</li>
 <li>Completed image jobs (both generate and edit) are appended to <code>~/nixx_scratch/image_jobs.jsonl</code> for persistence across service restarts. Admin metrics reads this file first, then merges live in-memory jobs.</li>
 <li><code>tool_usage</code> is persisted in the <code>state</code> table (key <code>tool_usage</code>, JSON). Loaded on startup, saved after every tool call. No longer lost on restart.</li>
-<li>Kontext runs fully on CPU (no CUDA calls). Schnell runs fully on GPU (<code>.to("cuda")</code>). Do not add <code>enable_sequential_cpu_offload()</code> to either - Schnell doesn't need it, Kontext can't use GPU at all.</li>
+<li>SD 1.4 and SD 2.1 Base load with <code>.to("cuda")</code>, float16, no offloading. SD 2.1 is the default generation model.</li>
+<li>SDXL and SDXL Turbo use <code>enable_model_cpu_offload()</code> (peak VRAM ~3-4 GiB during inference).</li>
+<li>IP2P and MagicBrush use <code>.to("cuda")</code>, float16. Both are IP2P-based pipelines. 50 steps, image_guidance_scale=1.5, guidance_scale=7.5. Input resized to nearest multiple of 8.</li>
+<li>SDXL img2img uses <code>enable_sequential_cpu_offload()</code> (peak VRAM ~3-4 GiB). Input/output must be multiples of 64.</li>
+<li>Kontext runs fully on CPU - no CUDA calls at all. Flux transformer allocates ~6.77 GiB in a single attention tensor, larger than GTX 1070's 8 GB. VAE slicing+tiling enabled. Takes ~2-3 hours.</li>
 <li><code>transformers</code> pinned to <code>&lt;4.52</code> in the nixx-image venv. 4.52+ requires <code>torch.float8_e8m0fnu</code> which needs torch 2.7; image venv has torch 2.6+cu124.</li>
 <li>HF Kontext model is gated - <code>HF_READ_TOKEN</code> must be in <code>.env</code> and <code>huggingface-cli login</code> must have been run once to persist the token to <code>~/.cache/huggingface/token</code>.</li>
 <li><code>NoNewPrivileges=true</code> and <code>PrivateTmp=true</code> removed from nixx-server and nixx-admin service units - they blocked <code>sudo systemctl start nixx-image</code> from within the process.</li>
