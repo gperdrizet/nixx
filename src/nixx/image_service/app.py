@@ -119,7 +119,7 @@ _kontext_lock = threading.Lock()
 # ── Active model selection ────────────────────────────────────────────────────
 _active_generate_model: str = "sd21"  # sd14 | sd21 | sdxl | sdxl_turbo
 _generate_model_lock = threading.Lock()
-_active_edit_model: str = "ip2p"  # ip2p | magic_brush | sdxl_edit | kontext
+_active_edit_model: str = "kontext"  # ip2p | magic_brush | sdxl_edit | kontext
 _edit_model_lock = threading.Lock()
 
 _jobs: dict[str, dict[str, Any]] = {}  # job_id -> {status, result, error}
@@ -455,27 +455,32 @@ def _load_kontext() -> Any:
         from transformers import T5EncoderModel
 
         hf_token = os.environ.get("HF_READ_TOKEN")
-        # Run Kontext entirely on CPU. The Flux transformer's double-stream
-        # attention allocates ~6.77 GiB in a single tensor - larger than the
-        # GTX 1070's 8 GB VRAM. By leaving all components on CPU (default for
-        # from_pretrained without device_map or .to("cuda")), the 64 GB RAM
-        # absorbs it. Slow (~2-3 hours) but correct.
+        # Load T5 on CPU — too large (4.7B params / ~9 GiB FP16) to keep on
+        # the GTX 1070. Sequential offload will hook its layers to move to
+        # cuda:0 one at a time during inference.
+        # Use float16 throughout: GTX 1070 (Pascal SM 6.1) has no native BF16
+        # support — BF16 ops would fall back to FP32 and halve the speedup.
         text_encoder_2 = T5EncoderModel.from_pretrained(
             KONTEXT_MODEL_ID,
             subfolder="text_encoder_2",
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float16,
             token=hf_token,
         )
         p = FluxKontextPipeline.from_pretrained(
             KONTEXT_MODEL_ID,
             text_encoder_2=text_encoder_2,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float16,
             token=hf_token,
         )
         p.vae.enable_slicing()
         p.vae.enable_tiling()
+        # Sequential CPU offload: accelerate installs per-layer hooks so each
+        # submodule moves to cuda:0 for its forward pass then back to CPU.
+        # Peak VRAM stays ~3-4 GiB instead of the 24 GiB full FP16 footprint,
+        # while still using the GPU for every compute kernel.
+        p.enable_sequential_cpu_offload()
         _kontext_pipe = p
-        logger.info("FLUX.1 Kontext [dev] loaded (CPU mode).")
+        logger.info("FLUX.1 Kontext [dev] loaded (sequential CPU offload, FP16).")
         return _kontext_pipe
 
 
@@ -591,10 +596,6 @@ def _run_edit_kontext(
     try:
         from PIL import Image, ImageOps
 
-        # Hide all GPUs during Kontext inference. Even with no explicit .to("cuda"),
-        # diffusers moves tensors to the available CUDA device internally at call time.
-        # Setting CUDA_VISIBLE_DEVICES="" forces everything onto CPU.
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
         pipe = _load_kontext()
         _last_request = time.monotonic()
         logger.info("Editing image (Kontext) for job %s", job_id)
@@ -629,8 +630,6 @@ def _run_edit_kontext(
         import torch
 
         torch.cuda.empty_cache()
-        # Restore GPU visibility so GPU generate/edit models can use CUDA later
-        os.environ["CUDA_VISIBLE_DEVICES"] = "1"
         _last_request = time.monotonic()
 
 
