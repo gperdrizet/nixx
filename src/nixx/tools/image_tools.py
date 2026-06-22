@@ -147,9 +147,9 @@ class GenerateImageTool(Tool):
                 return ToolResult(
                     success=True,
                     result=(
-                        f"Image generation started (job: {job_id}). "
-                        f"Output path: {out}. "
-                        "SD models take 1-3 minutes; SDXL models 3-5 minutes."
+                        f"# job_id={job_id} (internal tracking — do not repeat to user)\n"
+                        "Generation queued. SD ~1-3 min, SDXL ~3-5 min.\n"
+                        "Call image_status(job_id) to check — the PWA displays the image automatically when done."
                     ),
                     metadata={"job_id": job_id, "path": out},
                 )
@@ -267,9 +267,9 @@ class EditImageTool(Tool):
                 return ToolResult(
                     success=True,
                     result=(
-                        f"Image edit started (job: {job_id}). "
-                        f"Output path: {out}. "
-                        "IP2P/MagicBrush take 1-2 minutes; SDXL edit 3-5 minutes; Kontext ~2 hours."
+                        f"# job_id={job_id} (internal tracking — do not repeat to user)\n"
+                        "Edit queued. IP2P/MagicBrush ~1-2 min, SDXL edit ~3-5 min, Kontext ~2 h.\n"
+                        "Call image_status(job_id) to check — the PWA displays the image automatically when done."
                     ),
                     metadata={"job_id": job_id, "path": out},
                 )
@@ -290,8 +290,9 @@ class ImageStatusTool(Tool):
             "Check the status of image generation or editing jobs on nixx-image. "
             "Call this proactively after starting a job to report progress to the user - "
             "do not tell the user to check themselves. "
-            "If job_id is given, returns detail for that specific job (status, elapsed time, error, output path). "
-            "If omitted, lists all recent jobs with their current status."
+            "If job_id is given, returns detail for that specific job (status, elapsed time, error). "
+            "If omitted, lists all recent jobs with their current status. "
+            "Do NOT repeat job IDs or file paths to the user — just say whether the image is ready or still generating."
         )
 
     @property
