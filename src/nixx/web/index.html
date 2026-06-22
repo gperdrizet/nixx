@@ -1520,13 +1520,23 @@
         }
       };
 
-      micBtn.addEventListener('click', () => {
+      micBtn.addEventListener('click', async () => {
         if (streaming) return;
         if (recognizing) {
           recognition.abort();
-        } else {
-          try { recognition.start(); recognizing = true; micBtn.classList.add('recording'); } catch {}
+          return;
         }
+        // Prime microphone permission explicitly so the browser shows its
+        // standard system dialog. SpeechRecognition alone doesn't always
+        // trigger the prompt and just returns not-allowed.
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach(t => t.stop()); // release immediately
+        } catch (err) {
+          addSystem('Microphone access denied. Allow microphone access for this site in your browser or system settings.');
+          return;
+        }
+        try { recognition.start(); recognizing = true; micBtn.classList.add('recording'); } catch {}
       });
     } else {
       micBtn.style.display = 'none';
