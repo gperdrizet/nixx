@@ -803,7 +803,27 @@
         }
       } catch (err) {
         cursor.remove();
-        assistantEl.textContent = `Error: ${err.message}`;
+        // Network error is often caused by backgrounding on mobile. Try to resync
+        // from the server buffer - the server may have finished while we were disconnected.
+        let recovered = false;
+        try {
+          const syncResp = await fetch(`${API}/v1/buffer/session`);
+          if (syncResp.ok) {
+            const syncData = await syncResp.json();
+            const syncEntries = (syncData.entries || []).filter(e => e.role !== 'marker');
+            const last = syncEntries[syncEntries.length - 1];
+            if (last?.role === 'assistant') {
+              history = syncEntries.map(e => ({ role: e.role, content: e.content }));
+              assistantEl.innerHTML = marked.parse(last.content);
+              await refreshStatus();
+              refreshContextBar();
+              recovered = true;
+            }
+          }
+        } catch {}
+        if (!recovered) {
+          assistantEl.textContent = `Error: ${err.message}`;
+        }
       }
 
       setIdle();
@@ -1391,6 +1411,30 @@
     sendBtn.addEventListener('click', send);
     document.getElementById('approve-btn').addEventListener('click', approveTools);
     document.getElementById('cancel-btn').addEventListener('click', cancelTools);
+
+    // ── Visibility recovery ───────────────────────────────────────────────────
+    // When the page returns from background while a stream was in progress,
+    // the fetch connection has likely been dropped. Resync from the server buffer
+    // so the client history stays consistent with what the server saved.
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState !== 'visible' || !streaming) return;
+      try {
+        const resp = await fetch(`${API}/v1/buffer/session`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const entries = (data.entries || []).filter(e => e.role !== 'marker');
+        const last = entries[entries.length - 1];
+        if (last?.role === 'assistant') {
+          history = entries.map(e => ({ role: e.role, content: e.content }));
+          if (currentAssistantEl) {
+            currentAssistantEl.innerHTML = marked.parse(last.content);
+          }
+          await refreshStatus();
+          refreshContextBar();
+          setIdle();
+        }
+      } catch {}
+    });
 
     // ── Image upload ───────────────────────────────────────────────────────────
     const attachBtn   = document.getElementById('attach-btn');
