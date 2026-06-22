@@ -345,6 +345,18 @@
     }
     #attach-btn:hover, #attach-btn:active { color: var(--accent); border-color: var(--accent); }
     #attach-btn svg { width: 18px; height: 18px; }
+    #mic-btn {
+      background: none; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 0.5rem;
+      width: 42px; height: 42px; display: flex; align-items: center;
+      justify-content: center; cursor: pointer; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    #mic-btn:hover, #mic-btn:active { color: var(--accent); border-color: var(--accent); }
+    #mic-btn svg { width: 18px; height: 18px; }
+    #mic-btn.recording { color: var(--red); border-color: var(--red); animation: mic-pulse 1s ease-in-out infinite; }
+    @keyframes mic-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
     /* ── Tab bar ── */
     #tab-bar {
@@ -480,6 +492,7 @@
     <div id="status-area">
       <button class="toggle-pill" id="recall-pill" title="Toggle recall">recall</button>
       <button class="toggle-pill" id="intent-pill" title="Toggle intent injection">intent</button>
+      <button class="toggle-pill off" id="voice-pill" title="Toggle voice output">voice</button>
       <span id="context-bar"></span>
       <span id="summary-bar"></span>
     </div>
@@ -489,6 +502,14 @@
       <button id="attach-btn" title="Upload image">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+        </svg>
+      </button>
+      <button id="mic-btn" title="Voice input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
         </svg>
       </button>
       <textarea id="input" placeholder="Message nixx…" rows="1"></textarea></textarea>
@@ -537,6 +558,8 @@
     let currentAssistantEl = null;
     let summaryInProgress = false;
     const activeImageJobs = new Map(); // job_id -> {path, intervalId}
+    let voiceEnabled = false;
+    let recognizing = false;
     let lastSeenId = 0;        // highest buffer id we have locally
     let lastMarkerCheck = -1;  // marker_id last seen; detects /clear on another device
 
@@ -723,6 +746,7 @@
     async function streamResponse(assistantEl) {
       streaming = true;
       sendBtn.disabled = true;
+      speechSynthesis.cancel(); // stop any ongoing speech when a new response starts
 
       let accumulated = '';
       let approvalData = null;
@@ -769,6 +793,7 @@
               if (accumulated) {
                 history.push({ role: 'assistant', content: accumulated });
                 assistantEl.innerHTML = marked.parse(accumulated);
+                speakResponse(accumulated);
               } else if (!assistantEl.textContent.trim()) {
                 assistantEl.remove();
               }
@@ -1461,6 +1486,80 @@
     sendBtn.addEventListener('click', send);
     document.getElementById('approve-btn').addEventListener('click', approveTools);
     document.getElementById('cancel-btn').addEventListener('click', cancelTools);
+
+    // ── Voice input (SpeechRecognition) ───────────────────────────────────────────
+    const micBtn = document.getElementById('mic-btn');
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRec) {
+      const recognition = new SpeechRec();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (e) => {
+        const transcript = Array.from(e.results)
+          .map(r => r[0].transcript).join(' ').trim();
+        if (transcript) {
+          inputEl.value = transcript;
+          autoResize();
+          send();
+        }
+      };
+
+      recognition.onend = () => {
+        recognizing = false;
+        micBtn.classList.remove('recording');
+      };
+
+      recognition.onerror = (e) => {
+        recognizing = false;
+        micBtn.classList.remove('recording');
+        if (e.error !== 'aborted' && e.error !== 'no-speech') {
+          addSystem(`Voice error: ${e.error}`);
+        }
+      };
+
+      micBtn.addEventListener('click', () => {
+        if (streaming) return;
+        if (recognizing) {
+          recognition.abort();
+        } else {
+          try { recognition.start(); recognizing = true; micBtn.classList.add('recording'); } catch {}
+        }
+      });
+    } else {
+      micBtn.style.display = 'none';
+    }
+
+    // ── Voice output (SpeechSynthesis) ─────────────────────────────────────────
+    const voicePill = document.getElementById('voice-pill');
+
+    if ('speechSynthesis' in window) {
+      voicePill.addEventListener('click', () => {
+        voiceEnabled = !voiceEnabled;
+        voicePill.classList.toggle('off', !voiceEnabled);
+        if (!voiceEnabled) speechSynthesis.cancel();
+      });
+    } else {
+      voicePill.style.display = 'none';
+    }
+
+    function speakResponse(text) {
+      if (!voiceEnabled || !text || !('speechSynthesis' in window)) return;
+      speechSynthesis.cancel();
+      // Strip markdown so it reads cleanly
+      const plain = text
+        .replace(/```[\s\S]*?```/g, 'code block.')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/#{1,6}\s/g, '')
+        .replace(/[*_]{1,2}([^*_\n]+)[*_]{1,2}/g, '$1')
+        .replace(/!?\[[^\]]*\]\([^)]*\)/g, '')
+        .trim();
+      const utt = new SpeechSynthesisUtterance(plain);
+      utt.rate = 1.05;
+      speechSynthesis.speak(utt);
+    }
 
     // ── Visibility recovery + cross-device sync ───────────────────────────────
     // When the page returns from background:
