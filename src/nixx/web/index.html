@@ -537,6 +537,8 @@
     let currentAssistantEl = null;
     let summaryInProgress = false;
     const activeImageJobs = new Map(); // job_id -> {path, intervalId}
+    let lastSeenId = 0;        // highest buffer id we have locally
+    let lastMarkerCheck = -1;  // marker_id last seen; detects /clear on another device
 
     // ── DOM refs ───────────────────────────────────────────────────────────────
     const messagesEl    = document.getElementById('messages');
@@ -583,14 +585,61 @@
           for (const e of entries) {
             history.push({ role: e.role, content: e.content });
             addMessage(e.role, e.content);
+            if (e.id && e.id > lastSeenId) lastSeenId = e.id;
           }
           addSystem(`Restored ${entries.length} messages.`);
         } else {
           addSystem('New session. Type a message or /help for commands.');
         }
+        // Initialise marker tracking so the first sync call has a baseline
+        try {
+          const sr = await fetch(`${API}/v1/buffer/since?after=${lastSeenId}`);
+          if (sr.ok) { const sd = await sr.json(); lastMarkerCheck = sd.marker_id ?? -1; }
+        } catch {}
       } catch (err) {
         addSystem(`Could not connect to nixx server: ${err.message}`);
       }
+    }
+
+    // Advance lastSeenId to the current server max without touching the UI.
+    // Called after our own stream completes so the next sync poll is a no-op.
+    async function advanceSeenId() {
+      try {
+        const r = await fetch(`${API}/v1/buffer/since?after=${lastSeenId}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        lastMarkerCheck = d.marker_id ?? lastMarkerCheck;
+        for (const e of d.entries || []) {
+          if (e.id > lastSeenId) lastSeenId = e.id;
+        }
+      } catch {}
+    }
+
+    // Pull new entries from another device and append them to the conversation.
+    async function syncFromRemote() {
+      if (streaming) return;
+      try {
+        const r = await fetch(`${API}/v1/buffer/since?after=${lastSeenId}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        // Session was cleared on another device — do a full reload
+        if (d.session_cleared && lastMarkerCheck >= 0) {
+          history = [];
+          messagesEl.innerHTML = '';
+          lastSeenId = 0;
+          lastMarkerCheck = -1;
+          await restoreSession();
+          return;
+        }
+        lastMarkerCheck = d.marker_id ?? lastMarkerCheck;
+        const newEntries = d.entries || [];
+        for (const e of newEntries) {
+          history.push({ role: e.role, content: e.content });
+          addMessage(e.role, e.content);
+          if (e.id > lastSeenId) lastSeenId = e.id;
+        }
+        if (newEntries.length > 0) scrollToBottom();
+      } catch {}
     }
 
     // ── Status bars ────────────────────────────────────────────────────────────
@@ -725,6 +774,7 @@
               }
               await refreshStatus();
               refreshContextBar();
+              await advanceSeenId(); // keep lastSeenId in sync before setIdle
               setIdle();
               return;
             }
@@ -1412,29 +1462,41 @@
     document.getElementById('approve-btn').addEventListener('click', approveTools);
     document.getElementById('cancel-btn').addEventListener('click', cancelTools);
 
-    // ── Visibility recovery ───────────────────────────────────────────────────
-    // When the page returns from background while a stream was in progress,
-    // the fetch connection has likely been dropped. Resync from the server buffer
-    // so the client history stays consistent with what the server saved.
+    // ── Visibility recovery + cross-device sync ───────────────────────────────
+    // When the page returns from background:
+    //  • If streaming was in progress: resync from server buffer (stream was likely dropped)
+    //  • If idle: pick up any messages sent from another device
     document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState !== 'visible' || !streaming) return;
-      try {
-        const resp = await fetch(`${API}/v1/buffer/session`);
-        if (!resp.ok) return;
-        const data = await resp.json();
-        const entries = (data.entries || []).filter(e => e.role !== 'marker');
-        const last = entries[entries.length - 1];
-        if (last?.role === 'assistant') {
-          history = entries.map(e => ({ role: e.role, content: e.content }));
-          if (currentAssistantEl) {
-            currentAssistantEl.innerHTML = marked.parse(last.content);
+      if (document.visibilityState !== 'visible') return;
+      if (streaming) {
+        // Stream was in progress — server may have finished while backgrounded
+        try {
+          const resp = await fetch(`${API}/v1/buffer/session`);
+          if (!resp.ok) return;
+          const data = await resp.json();
+          const entries = (data.entries || []).filter(e => e.role !== 'marker');
+          const last = entries[entries.length - 1];
+          if (last?.role === 'assistant') {
+            history = entries.map(e => ({ role: e.role, content: e.content }));
+            for (const e of entries) { if (e.id > lastSeenId) lastSeenId = e.id; }
+            if (currentAssistantEl) {
+              currentAssistantEl.innerHTML = marked.parse(last.content);
+            }
+            await refreshStatus();
+            refreshContextBar();
+            setIdle();
           }
-          await refreshStatus();
-          refreshContextBar();
-          setIdle();
-        }
-      } catch {}
+        } catch {}
+      } else {
+        // Idle — pick up messages from other devices
+        await syncFromRemote();
+      }
     });
+
+    // ── Cross-device sync polling ─────────────────────────────────────────────
+    setInterval(() => {
+      if (document.visibilityState === 'visible' && !streaming) syncFromRemote();
+    }, 5000);
 
     // ── Image upload ───────────────────────────────────────────────────────────
     const attachBtn   = document.getElementById('attach-btn');

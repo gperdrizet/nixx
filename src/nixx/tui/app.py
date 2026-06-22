@@ -269,6 +269,9 @@ class NixxApp(App[None]):
         self._intent_bar_visible: bool = True
         self._recall_on: bool = True
         self._intent_on: bool = True
+        self._streaming: bool = False
+        self._last_seen_id: int = 0
+        self._last_marker_check: int = -1
         # Pending tool approval state: set when the server pauses for user approval.
         # _pending_tool_calls is the OpenAI-format tool_calls array from the assistant turn.
         # _pending_assistant_msg is the widget where the final response will stream.
@@ -297,6 +300,7 @@ class NixxApp(App[None]):
         self.run_worker(self._restore_session(), exclusive=False, thread=False)
         self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
         self.run_worker(self._fetch_and_show_intent_bar(), exclusive=False, thread=False)
+        self.run_worker(self._poll_remote(), exclusive=False, thread=False)
 
     def _add_message(
         self, role: str, content: str = "", history_index: int | None = None
@@ -325,6 +329,8 @@ class NixxApp(App[None]):
             for i, entry in enumerate(entries):
                 self._history.append({"role": entry["role"], "content": entry["content"]})
                 self._add_message(entry["role"], entry["content"], history_index=i)
+                if entry.get("id", 0) > self._last_seen_id:
+                    self._last_seen_id = entry["id"]
             self._add_message(
                 "system",
                 f"Restored {len(entries)} messages. Use Ctrl+L to clear.",
@@ -335,6 +341,60 @@ class NixxApp(App[None]):
             await self._check_summary_due()
         else:
             self._show_help()
+        # Initialise marker tracking so the first poll has a baseline
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                sr = await client.get(
+                    f"{self._base_url}/v1/buffer/since",
+                    params={"after": self._last_seen_id},
+                )
+                if sr.is_success:
+                    self._last_marker_check = sr.json().get("marker_id", -1)
+        except Exception:
+            pass
+
+    async def _sync_from_remote(self) -> None:
+        """Append any new buffer entries from other devices to the conversation."""
+        if self._streaming:
+            return
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                r = await client.get(
+                    f"{self._base_url}/v1/buffer/since",
+                    params={"after": self._last_seen_id},
+                )
+                if not r.is_success:
+                    return
+                d = r.json()
+        except Exception:
+            return
+
+        # Session was cleared on another device — full reload
+        if d.get("session_cleared") and self._last_marker_check >= 0:
+            self._history.clear()
+            self._last_seen_id = 0
+            self._last_marker_check = -1
+            container = self.query_one("#messages", ScrollableContainer)
+            container.remove_children()
+            await self._restore_session()
+            return
+
+        self._last_marker_check = d.get("marker_id", self._last_marker_check)
+        new_entries = d.get("entries", [])
+        for entry in new_entries:
+            self._history.append({"role": entry["role"], "content": entry["content"]})
+            self._add_message(entry["role"], entry["content"], history_index=len(self._history) - 1)
+            if entry.get("id", 0) > self._last_seen_id:
+                self._last_seen_id = entry["id"]
+
+    async def _poll_remote(self) -> None:
+        """Background worker: check for messages from other devices every 5 s."""
+        import asyncio
+
+        await asyncio.sleep(5)  # let restore_session settle first
+        while True:
+            await self._sync_from_remote()
+            await asyncio.sleep(5)
 
     def on_key(self, event: events.Key) -> None:
         # Tool approval: Enter to proceed, Esc to cancel.
@@ -998,6 +1058,7 @@ class NixxApp(App[None]):
         self._add_message("system", text.strip())
 
     async def _stream_response(self, msg: Message) -> None:
+        self._streaming = True
         payload: dict = {
             "messages": list(self._history),
             "stream": True,
@@ -1096,10 +1157,12 @@ class NixxApp(App[None]):
                             )
         except httpx.ConnectError:
             msg.update("[red]Cannot reach server. Is `nixx serve` running?[/red]")
+            self._streaming = False
             return
         except Exception as exc:
             detail = str(exc) or f"({type(exc).__name__})"
             msg.update(f"[red]Error: {escape_markup(detail)}[/red]")
+            self._streaming = False
             return
 
         # If paused for approval, don't write to history - wait for Enter/Esc.
@@ -1114,11 +1177,29 @@ class NixxApp(App[None]):
             self._history.append({"role": "assistant", "content": accumulated})
             msg._history_index = len(self._history) - 1
             msg.render_markdown(render_content)
+            # Advance _last_seen_id so the next poll ignores our own messages
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    sr = await client.get(
+                        f"{self._base_url}/v1/buffer/since",
+                        params={"after": self._last_seen_id},
+                    )
+                    if sr.is_success:
+                        d = sr.json()
+                        self._last_marker_check = d.get("marker_id", self._last_marker_check)
+                        for e in d.get("entries", []):
+                            if e.get("id", 0) > self._last_seen_id:
+                                self._last_seen_id = e["id"]
+            except Exception:
+                pass
+            self._streaming = False
             # Check if episodic summary is due
             self.run_worker(self._check_summary_due(), exclusive=False, thread=False)
             self.run_worker(self._update_context_bar(), exclusive=False, thread=False)
             self.run_worker(self._update_summary_bar(), exclusive=False, thread=False)
             self.run_worker(self._fetch_and_show_intent_bar(), exclusive=False, thread=False)
+        else:
+            self._streaming = False
 
     def action_clear(self) -> None:
         self._history.clear()
