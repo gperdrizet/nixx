@@ -115,6 +115,7 @@ _sdxl_edit_pipe: Any = None
 _sdxl_edit_lock = threading.Lock()
 _kontext_pipe: Any = None
 _kontext_lock = threading.Lock()
+_kontext_inference_lock = threading.Lock()  # serialise inference; pipeline is not thread-safe
 
 # ── Active model selection ────────────────────────────────────────────────────
 _active_generate_model: str = "sd21"  # sd14 | sd21 | sdxl | sdxl_turbo
@@ -455,32 +456,27 @@ def _load_kontext() -> Any:
         from transformers import T5EncoderModel
 
         hf_token = os.environ.get("HF_READ_TOKEN")
-        # Load T5 on CPU — too large (4.7B params / ~9 GiB FP16) to keep on
-        # the GTX 1070. Sequential offload will hook its layers to move to
-        # cuda:0 one at a time during inference.
-        # Use float16 throughout: GTX 1070 (Pascal SM 6.1) has no native BF16
-        # support — BF16 ops would fall back to FP32 and halve the speedup.
+        # Run Kontext entirely on CPU. The Flux transformer is ~24 GiB in BF16
+        # which exceeds the GTX 1070's 8 GiB VRAM. Sequential CPU offload was
+        # tried but installs hooks on every tiny nn.Module (~3000+ layers),
+        # causing thousands of PCIe round-trips per step - slower than CPU.
+        # CUDA is hidden via CUDA_VISIBLE_DEVICES="" during inference.
         text_encoder_2 = T5EncoderModel.from_pretrained(
             KONTEXT_MODEL_ID,
             subfolder="text_encoder_2",
-            torch_dtype=torch.float16,
+            torch_dtype=torch.bfloat16,
             token=hf_token,
         )
         p = FluxKontextPipeline.from_pretrained(
             KONTEXT_MODEL_ID,
             text_encoder_2=text_encoder_2,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.bfloat16,
             token=hf_token,
         )
         p.vae.enable_slicing()
         p.vae.enable_tiling()
-        # Sequential CPU offload: accelerate installs per-layer hooks so each
-        # submodule moves to cuda:0 for its forward pass then back to CPU.
-        # Peak VRAM stays ~3-4 GiB instead of the 24 GiB full FP16 footprint,
-        # while still using the GPU for every compute kernel.
-        p.enable_sequential_cpu_offload()
         _kontext_pipe = p
-        logger.info("FLUX.1 Kontext [dev] loaded (sequential CPU offload, FP16).")
+        logger.info("FLUX.1 Kontext [dev] loaded (CPU mode).")
         return _kontext_pipe
 
 
@@ -593,44 +589,53 @@ def _run_edit_kontext(
     steps: int,
 ) -> None:
     global _last_request
-    try:
-        from PIL import Image, ImageOps
+    # _kontext_inference_lock serialises concurrent jobs: FluxKontextPipeline
+    # mutates scheduler.sigmas / step_index during inference and is not
+    # thread-safe. Two concurrent calls corrupt each other's sigma table.
+    with _kontext_inference_lock:
+        try:
+            from PIL import Image, ImageOps
 
-        pipe = _load_kontext()
-        _last_request = time.monotonic()
-        logger.info("Editing image (Kontext) for job %s", job_id)
-        input_image = ImageOps.exif_transpose(Image.open(input_path).convert("RGB"))
-        result = pipe(
-            prompt=prompt,
-            image=input_image,
-            width=width,
-            height=height,
-            num_inference_steps=steps,
-            guidance_scale=3.5,
-        )
-        img = result.images[0]
-        out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        img.save(out_path)
-        _jobs[job_id]["status"] = "done"
-        _jobs[job_id]["result"] = str(out_path)
-        _jobs[job_id]["completed_at"] = time.time()
-        _jobs[job_id]["latency_ms"] = int(
-            (_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000
-        )
-        logger.info("Job %s done: %s", job_id, out_path)
-        _append_job_log(job_id, _jobs[job_id])
-    except Exception as exc:
-        logger.exception("Job %s failed", job_id)
-        _jobs[job_id]["status"] = "error"
-        _jobs[job_id]["error"] = str(exc)
-        _jobs[job_id]["completed_at"] = time.time()
-        _append_job_log(job_id, _jobs[job_id])
-    finally:
-        import torch
+            # Hide CUDA so diffusers does not auto-move tensors to the GPU.
+            # The full BF16 model is ~24 GiB, far exceeding the 1070's 8 GiB.
+            os.environ["CUDA_VISIBLE_DEVICES"] = ""
+            pipe = _load_kontext()
+            _last_request = time.monotonic()
+            logger.info("Editing image (Kontext) for job %s", job_id)
+            input_image = ImageOps.exif_transpose(Image.open(input_path).convert("RGB"))
+            result = pipe(
+                prompt=prompt,
+                image=input_image,
+                width=width,
+                height=height,
+                num_inference_steps=steps,
+                guidance_scale=3.5,
+            )
+            img = result.images[0]
+            out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            img.save(out_path)
+            _jobs[job_id]["status"] = "done"
+            _jobs[job_id]["result"] = str(out_path)
+            _jobs[job_id]["completed_at"] = time.time()
+            _jobs[job_id]["latency_ms"] = int(
+                (_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000
+            )
+            logger.info("Job %s done: %s", job_id, out_path)
+            _append_job_log(job_id, _jobs[job_id])
+        except Exception as exc:
+            logger.exception("Job %s failed", job_id)
+            _jobs[job_id]["status"] = "error"
+            _jobs[job_id]["error"] = str(exc)
+            _jobs[job_id]["completed_at"] = time.time()
+            _append_job_log(job_id, _jobs[job_id])
+        finally:
+            import torch
 
-        torch.cuda.empty_cache()
-        _last_request = time.monotonic()
+            torch.cuda.empty_cache()
+            # Restore GPU visibility so SD generate/edit models can use CUDA
+            os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+            _last_request = time.monotonic()
 
 
 def _run_edit_magic_brush(
