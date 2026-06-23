@@ -16,7 +16,7 @@ from nixx.tools.file_tools import (
     WriteFileTool,
 )
 from nixx.tools.git_tools import ValidateAndCommitTool
-from nixx.tools.image_tools import EditImageTool, GenerateImageTool, ImageStatusTool
+from nixx.tools.image_tools import GenerateImageTool, ImageStatusTool
 from nixx.tools.memory_tools import SearchTranscriptTool, ViewTranscriptTool
 from nixx.tools.planning import ReadPlanTool, WritePlanTool
 from nixx.tools.read_webpage import ReadWebpageTool
@@ -71,7 +71,6 @@ class ToolRegistry:
             ReadWebpageTool(),
             self._git_tool,
             GenerateImageTool(self._scratch_dir),
-            EditImageTool(self._scratch_dir),
             ImageStatusTool(),
         ]
 

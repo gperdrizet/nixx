@@ -328,35 +328,6 @@
     }
     #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     #send-btn svg { width: 18px; height: 18px; }
-    #upload-input { display: none; }
-    #attach-btn {
-      background: none;
-      color: var(--text-muted);
-      border: 1px solid var(--border);
-      border-radius: 0.5rem;
-      width: 42px;
-      height: 42px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      flex-shrink: 0;
-      -webkit-tap-highlight-color: transparent;
-    }
-    #attach-btn:hover, #attach-btn:active { color: var(--accent); border-color: var(--accent); }
-    #attach-btn svg { width: 18px; height: 18px; }
-    #mic-btn {
-      background: none; color: var(--text-muted);
-      border: 1px solid var(--border); border-radius: 0.5rem;
-      width: 42px; height: 42px; display: flex; align-items: center;
-      justify-content: center; cursor: pointer; flex-shrink: 0;
-      -webkit-tap-highlight-color: transparent;
-      transition: color 0.15s, border-color 0.15s;
-    }
-    #mic-btn:hover, #mic-btn:active { color: var(--accent); border-color: var(--accent); }
-    #mic-btn svg { width: 18px; height: 18px; }
-    #mic-btn.recording { color: var(--red); border-color: var(--red); animation: mic-pulse 1s ease-in-out infinite; }
-    @keyframes mic-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
     /* ── Tab bar ── */
     #tab-bar {
@@ -492,26 +463,11 @@
     <div id="status-area">
       <button class="toggle-pill" id="recall-pill" title="Toggle recall">recall</button>
       <button class="toggle-pill" id="intent-pill" title="Toggle intent injection">intent</button>
-      <button class="toggle-pill off" id="voice-pill" title="Toggle voice output">voice</button>
       <span id="context-bar"></span>
       <span id="summary-bar"></span>
     </div>
 
     <div id="input-area">
-      <input type="file" id="upload-input" accept="image/*">
-      <button id="attach-btn" title="Upload image">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-        </svg>
-      </button>
-      <button id="mic-btn" title="Voice input">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-          <line x1="12" y1="19" x2="12" y2="23"/>
-          <line x1="8" y1="23" x2="16" y2="23"/>
-        </svg>
-      </button>
       <textarea id="input" placeholder="Message nixx…" rows="1"></textarea></textarea>
       <button id="send-btn" title="Send">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -558,10 +514,6 @@
     let currentAssistantEl = null;
     let summaryInProgress = false;
     const activeImageJobs = new Map(); // job_id -> {path, intervalId}
-    let voiceEnabled = false;
-    let recognizing = false;
-    let lastSeenId = 0;        // highest buffer id we have locally
-    let lastMarkerCheck = -1;  // marker_id last seen; detects /clear on another device
 
     // ── DOM refs ───────────────────────────────────────────────────────────────
     const messagesEl    = document.getElementById('messages');
@@ -608,61 +560,14 @@
           for (const e of entries) {
             history.push({ role: e.role, content: e.content });
             addMessage(e.role, e.content);
-            if (e.id && e.id > lastSeenId) lastSeenId = e.id;
           }
           addSystem(`Restored ${entries.length} messages.`);
         } else {
           addSystem('New session. Type a message or /help for commands.');
         }
-        // Initialise marker tracking so the first sync call has a baseline
-        try {
-          const sr = await fetch(`${API}/v1/buffer/since?after=${lastSeenId}`);
-          if (sr.ok) { const sd = await sr.json(); lastMarkerCheck = sd.marker_id ?? -1; }
-        } catch {}
       } catch (err) {
         addSystem(`Could not connect to nixx server: ${err.message}`);
       }
-    }
-
-    // Advance lastSeenId to the current server max without touching the UI.
-    // Called after our own stream completes so the next sync poll is a no-op.
-    async function advanceSeenId() {
-      try {
-        const r = await fetch(`${API}/v1/buffer/since?after=${lastSeenId}`);
-        if (!r.ok) return;
-        const d = await r.json();
-        lastMarkerCheck = d.marker_id ?? lastMarkerCheck;
-        for (const e of d.entries || []) {
-          if (e.id > lastSeenId) lastSeenId = e.id;
-        }
-      } catch {}
-    }
-
-    // Pull new entries from another device and append them to the conversation.
-    async function syncFromRemote() {
-      if (streaming) return;
-      try {
-        const r = await fetch(`${API}/v1/buffer/since?after=${lastSeenId}`);
-        if (!r.ok) return;
-        const d = await r.json();
-        // Session was cleared on another device — do a full reload
-        if (d.session_cleared && lastMarkerCheck >= 0) {
-          history = [];
-          messagesEl.innerHTML = '';
-          lastSeenId = 0;
-          lastMarkerCheck = -1;
-          await restoreSession();
-          return;
-        }
-        lastMarkerCheck = d.marker_id ?? lastMarkerCheck;
-        const newEntries = d.entries || [];
-        for (const e of newEntries) {
-          history.push({ role: e.role, content: e.content });
-          addMessage(e.role, e.content);
-          if (e.id > lastSeenId) lastSeenId = e.id;
-        }
-        if (newEntries.length > 0) scrollToBottom();
-      } catch {}
     }
 
     // ── Status bars ────────────────────────────────────────────────────────────
@@ -746,7 +651,6 @@
     async function streamResponse(assistantEl) {
       streaming = true;
       sendBtn.disabled = true;
-      speechSynthesis.cancel(); // stop any ongoing speech when a new response starts
 
       let accumulated = '';
       let approvalData = null;
@@ -793,13 +697,11 @@
               if (accumulated) {
                 history.push({ role: 'assistant', content: accumulated });
                 assistantEl.innerHTML = marked.parse(accumulated);
-                speakResponse(accumulated);
               } else if (!assistantEl.textContent.trim()) {
                 assistantEl.remove();
               }
               await refreshStatus();
               refreshContextBar();
-              await advanceSeenId(); // keep lastSeenId in sync before setIdle
               setIdle();
               return;
             }
@@ -878,27 +780,7 @@
         }
       } catch (err) {
         cursor.remove();
-        // Network error is often caused by backgrounding on mobile. Try to resync
-        // from the server buffer - the server may have finished while we were disconnected.
-        let recovered = false;
-        try {
-          const syncResp = await fetch(`${API}/v1/buffer/session`);
-          if (syncResp.ok) {
-            const syncData = await syncResp.json();
-            const syncEntries = (syncData.entries || []).filter(e => e.role !== 'marker');
-            const last = syncEntries[syncEntries.length - 1];
-            if (last?.role === 'assistant') {
-              history = syncEntries.map(e => ({ role: e.role, content: e.content }));
-              assistantEl.innerHTML = marked.parse(last.content);
-              await refreshStatus();
-              refreshContextBar();
-              recovered = true;
-            }
-          }
-        } catch {}
-        if (!recovered) {
-          assistantEl.textContent = `Error: ${err.message}`;
-        }
+        assistantEl.textContent = `Error: ${err.message}`;
       }
 
       setIdle();
@@ -1182,7 +1064,7 @@
 
       if (cmd === 'help') {
         addSystem(
-          'Commands: /clear /summary /search "query" /context /recall /intent-toggle /intent [text|clear] /project [dir|clear] /threshold [0.0-1.0] /interval [n] /image-model [ip2p|mb|xe|kontext] /gen-model [sd14|sd21|sdxl|turbo]'
+          'Commands: /clear /summary /search "query" /context /recall /intent-toggle /intent [text|clear] /project [dir|clear] /threshold [0.0-1.0] /interval [n] /gen-model [sd14|sd21|sdxl|turbo]'
         );
       } else if (cmd === 'clear') {
         history = [];
@@ -1288,32 +1170,6 @@
             body: JSON.stringify({ interval_words: parseInt(arg) }),
           });
           addSystem(`Interval set to ${arg} words.`);
-        }
-      } else if (cmd === 'image-model') {
-        const aliases = { ip2p: 'ip2p', fast: 'ip2p', mb: 'magic_brush', 'magic-brush': 'magic_brush', magic_brush: 'magic_brush', xe: 'sdxl_edit', 'sdxl-edit': 'sdxl_edit', sdxl_edit: 'sdxl_edit', kontext: 'kontext', full: 'kontext' };
-        const labels  = { ip2p: 'InstructPix2Pix (GPU, ~1.7 GiB)', magic_brush: 'MagicBrush (GPU, ~1.7 GiB)', sdxl_edit: 'SDXL img2img (seq offload, ~6.9 GiB)', kontext: 'FLUX.1 Kontext [dev] (CPU, ~24 GiB)' };
-        if (!arg) {
-          try {
-            const r = await fetch(`${API}/v1/image/edit-model`);
-            const d = await r.json();
-            addSystem(`Image edit model: ${labels[d.model] || d.model}\nSwitch with /image-model [ip2p|mb|xe|kontext]`);
-          } catch { addSystem('nixx-image not running.'); }
-        } else {
-          const model = aliases[arg.toLowerCase()];
-          if (!model) {
-            addSystem('Usage: /image-model [ip2p|mb|xe|kontext]  — ip2p=InstructPix2Pix  mb=MagicBrush  xe=SDXL img2img  kontext=Kontext (CPU)');
-          } else {
-            try {
-              const r = await fetch(`${API}/v1/image/edit-model`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model }),
-              });
-              const d = await r.json();
-              if (!r.ok) { addSystem(`Failed to set image edit model: ${d.detail || r.status}`); }
-              else { addSystem(`Image edit model set to: ${labels[d.model] || d.model}`); }
-            } catch { addSystem('Failed to set image edit model.'); }
-          }
         }
       } else if (cmd === 'gen-model') {
         const aliases = { sd14: 'sd14', sd21: 'sd21', sdxl: 'sdxl', turbo: 'sdxl_turbo', 'sdxl-turbo': 'sdxl_turbo', sdxl_turbo: 'sdxl_turbo' };
@@ -1486,179 +1342,6 @@
     sendBtn.addEventListener('click', send);
     document.getElementById('approve-btn').addEventListener('click', approveTools);
     document.getElementById('cancel-btn').addEventListener('click', cancelTools);
-
-    // ── Voice input (SpeechRecognition) ───────────────────────────────────────────
-    const micBtn = document.getElementById('mic-btn');
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (SpeechRec) {
-      const recognition = new SpeechRec();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-
-      recognition.onresult = (e) => {
-        const transcript = Array.from(e.results)
-          .map(r => r[0].transcript).join(' ').trim();
-        if (transcript) {
-          inputEl.value = transcript;
-          autoResize();
-          send();
-        }
-      };
-
-      recognition.onend = () => {
-        recognizing = false;
-        micBtn.classList.remove('recording');
-      };
-
-      recognition.onerror = (e) => {
-        recognizing = false;
-        micBtn.classList.remove('recording');
-        if (e.error !== 'aborted' && e.error !== 'no-speech') {
-          addSystem(`Voice error: ${e.error}`);
-        }
-      };
-
-      micBtn.addEventListener('click', async () => {
-        if (streaming) return;
-        if (recognizing) {
-          recognition.abort();
-          return;
-        }
-        // Prime microphone permission explicitly so the browser shows its
-        // standard system dialog. SpeechRecognition alone doesn't always
-        // trigger the prompt and just returns not-allowed.
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          stream.getTracks().forEach(t => t.stop()); // release immediately
-        } catch (err) {
-          addSystem('Microphone access denied. Allow microphone access for this site in your browser or system settings.');
-          return;
-        }
-        try { recognition.start(); recognizing = true; micBtn.classList.add('recording'); } catch {}
-      });
-    } else {
-      micBtn.style.display = 'none';
-    }
-
-    // ── Voice output (SpeechSynthesis) ─────────────────────────────────────────
-    const voicePill = document.getElementById('voice-pill');
-
-    if ('speechSynthesis' in window) {
-      voicePill.addEventListener('click', () => {
-        voiceEnabled = !voiceEnabled;
-        voicePill.classList.toggle('off', !voiceEnabled);
-        if (!voiceEnabled) speechSynthesis.cancel();
-      });
-    } else {
-      voicePill.style.display = 'none';
-    }
-
-    function speakResponse(text) {
-      if (!voiceEnabled || !text || !('speechSynthesis' in window)) return;
-      speechSynthesis.cancel();
-      // Strip markdown so it reads cleanly
-      const plain = text
-        .replace(/```[\s\S]*?```/g, 'code block.')
-        .replace(/`([^`]+)`/g, '$1')
-        .replace(/#{1,6}\s/g, '')
-        .replace(/[*_]{1,2}([^*_\n]+)[*_]{1,2}/g, '$1')
-        .replace(/!?\[[^\]]*\]\([^)]*\)/g, '')
-        .trim();
-      const utt = new SpeechSynthesisUtterance(plain);
-      utt.rate = 1.05;
-      speechSynthesis.speak(utt);
-    }
-
-    // ── Visibility recovery + cross-device sync ───────────────────────────────
-    // When the page returns from background:
-    //  • If streaming was in progress: resync from server buffer (stream was likely dropped)
-    //  • If idle: pick up any messages sent from another device
-    document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState !== 'visible') return;
-      if (streaming) {
-        // Stream was in progress — server may have finished while backgrounded
-        try {
-          const resp = await fetch(`${API}/v1/buffer/session`);
-          if (!resp.ok) return;
-          const data = await resp.json();
-          const entries = (data.entries || []).filter(e => e.role !== 'marker');
-          const last = entries[entries.length - 1];
-          if (last?.role === 'assistant') {
-            history = entries.map(e => ({ role: e.role, content: e.content }));
-            for (const e of entries) { if (e.id > lastSeenId) lastSeenId = e.id; }
-            if (currentAssistantEl) {
-              currentAssistantEl.innerHTML = marked.parse(last.content);
-            }
-            await refreshStatus();
-            refreshContextBar();
-            setIdle();
-          }
-        } catch {}
-      } else {
-        // Idle — pick up messages from other devices
-        await syncFromRemote();
-      }
-    });
-
-    // ── Cross-device sync polling ─────────────────────────────────────────────
-    setInterval(() => {
-      if (document.visibilityState === 'visible' && !streaming) syncFromRemote();
-    }, 5000);
-
-    // ── Image upload ───────────────────────────────────────────────────────────
-    const attachBtn   = document.getElementById('attach-btn');
-    const uploadInput = document.getElementById('upload-input');
-
-    attachBtn.addEventListener('click', () => uploadInput.click());
-
-    uploadInput.addEventListener('change', async () => {
-      const file = uploadInput.files[0];
-      if (!file) return;
-      uploadInput.value = ''; // reset so same file triggers change again
-
-      const statusDiv = document.createElement('div');
-      statusDiv.className = 'msg system';
-      statusDiv.textContent = `Uploading ${file.name}…`;
-      messagesEl.appendChild(statusDiv);
-      scrollToBottom();
-
-      const form = new FormData();
-      form.append('file', file);
-      try {
-        const r = await fetch(`${API}/v1/files/upload`, { method: 'POST', body: form });
-        const d = await r.json();
-        statusDiv.remove();
-        if (!r.ok) { addSystem(`Upload failed: ${d.detail || r.status}`); return; }
-
-        // Show thumbnail + path in chat
-        const relPath = d.path.replace(/.*nixx_scratch\//, '');
-        const imgUrl  = `${API}/v1/files/download?path=${encodeURIComponent(relPath)}`;
-        const div = document.createElement('div');
-        div.className = 'msg image';
-        div.innerHTML =
-          `<img src="${imgUrl}" alt="uploaded image" loading="lazy" style="max-width:100%;border-radius:6px;">` +
-          `<div class="img-caption">` +
-            `📎 ${d.filename} · ${(d.size/1024).toFixed(0)} KB` +
-            `<button class="use-edit-btn" style="margin-left:0.6rem;background:none;border:1px solid var(--border);` +
-              `border-radius:0.3rem;color:var(--accent);font-size:0.7rem;padding:0.15rem 0.45rem;cursor:pointer;">` +
-              `use for editing</button>` +
-          `</div>`;
-        messagesEl.appendChild(div);
-        scrollToBottom();
-
-        div.querySelector('.use-edit-btn').addEventListener('click', () => {
-          inputEl.value = `Edit image ${d.path}: `;
-          inputEl.dispatchEvent(new Event('input')); // trigger autoResize
-          inputEl.focus();
-          inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
-        });
-      } catch (err) {
-        statusDiv.remove();
-        addSystem(`Upload failed: ${err.message}`);
-      }
-    });
 
     inputEl.addEventListener('input', autoResize);
     inputEl.addEventListener('keydown', e => {

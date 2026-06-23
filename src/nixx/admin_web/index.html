@@ -133,10 +133,6 @@
       <div class="chart-title">image generation time</div>
       <div class="chart-wrap"><canvas id="img-gen-chart"></canvas></div>
     </div>
-    <div class="chart-card">
-      <div class="chart-title">image editing time</div>
-      <div class="chart-wrap"><canvas id="img-edit-chart"></canvas></div>
-    </div>
   </div>
 
   <div class="config-panel" id="config-panel"></div>
@@ -145,13 +141,6 @@
     <div class="model-card">
       <div class="model-card-title">generation models</div>
       <table class="model-table" id="gen-models-table">
-        <thead><tr><th>model</th><th>name</th><th>hardware</th><th>size</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <div class="model-card">
-      <div class="model-card-title">editing models</div>
-      <table class="model-table" id="edit-models-table">
         <thead><tr><th>model</th><th>name</th><th>hardware</th><th>size</th></tr></thead>
         <tbody></tbody>
       </table>
@@ -173,7 +162,6 @@
         <tr><td>/project [dir|clear]</td><td>show, set, or clear project directory</td></tr>
         <tr><td>/transcript [id] [end]</td><td>view transcript messages</td></tr>
         <tr><td>/context</td><td>show current context debug info</td></tr>
-        <tr><td>/image-model [ip2p|mb|xe|kontext]</td><td>switch edit model (mb=MagicBrush, xe=SDXL img2img)</td></tr>
         <tr><td>/gen-model [sd14|sd21|sdxl|turbo]</td><td>switch generation model</td></tr>
         <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
         <tr><td>Ctrl+L</td><td>clear conversation</td></tr>
@@ -261,7 +249,7 @@
 <script>
   const API = window.location.origin;
   let latencyChart = null, tokensChart = null, toolDonutChart = null;
-  let imgGenChart = null, imgEditChart = null, toolItersChart = null, toolUsageChart = null, responseTimeChart = null;
+  let imgGenChart = null, toolItersChart = null, toolUsageChart = null, responseTimeChart = null;
 
   const BAR_DEFAULTS = {
     responsive: true,
@@ -403,10 +391,8 @@
 
       // Image models — separate compact table
       const genModels = c.image_models?.generate || [];
-      const editModels = c.image_models?.edit || [];
       const activeGen = c.image_models?.active_generate;
-      const activeEdit = c.image_models?.active_edit;
-      if (genModels.length || editModels.length) {
+      if (genModels.length) {
         document.getElementById('image-models-section').style.display = '';
         const modelRow = (m, active) =>
           `<tr class="${active ? 'active-model' : ''}">
@@ -417,8 +403,6 @@
           </tr>`;
         document.querySelector('#gen-models-table tbody').innerHTML =
           genModels.map(m => modelRow(m, m.id === activeGen)).join('');
-        document.querySelector('#edit-models-table tbody').innerHTML =
-          editModels.map(m => modelRow(m, m.id === activeEdit)).join('');
       }
     }
 
@@ -532,7 +516,6 @@
         });
       };
       imgGenChart  = makeImgHistogram(imgJobs.filter(j => j.type === 'generate'), 'img-gen-chart',  imgGenChart);
-      imgEditChart = makeImgHistogram(imgJobs.filter(j => j.type === 'edit'),     'img-edit-chart', imgEditChart);
 
       // 6. Tool calls per response histogram
       const toolCallVals = h.map(r => r.tool_calls_made).filter(v => v != null && v > 0);

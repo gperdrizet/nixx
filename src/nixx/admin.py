@@ -93,7 +93,7 @@ def create_app() -> FastAPI:
                     _hr = await client.get("http://127.0.0.1:8090/health")
                     if _hr.status_code == 200:
                         _hd = _hr.json()
-                        _image_model_label = f"{_hd.get('active_generate_model', '?')} / {_hd.get('active_edit_model', '?')}"
+                        _image_model_label = _hd.get("active_generate_model", "?")
             except Exception:
                 _image_model_label = "unknown"
 
@@ -334,7 +334,6 @@ def create_app() -> FastAPI:
             "read_webpage",
             "validate_and_commit",
             "generate_image",
-            "edit_image",
             "search_transcript",
             "view_transcript",
         ]
@@ -385,34 +384,7 @@ def create_app() -> FastAPI:
                         "size": "~6.9 GiB",
                     },
                 ],
-                "edit": [
-                    {
-                        "id": "ip2p",
-                        "label": "InstructPix2Pix",
-                        "hardware": "GPU only",
-                        "size": "~1.7 GiB",
-                    },
-                    {
-                        "id": "magic_brush",
-                        "label": "MagicBrush",
-                        "hardware": "GPU only",
-                        "size": "~1.7 GiB",
-                    },
-                    {
-                        "id": "sdxl_edit",
-                        "label": "SDXL img2img",
-                        "hardware": "seq offload",
-                        "size": "~6.9 GiB",
-                    },
-                    {
-                        "id": "kontext",
-                        "label": "Kontext [dev]",
-                        "hardware": "CPU only",
-                        "size": "~24 GiB",
-                    },
-                ],
                 "active_generate": image_health.get("active_generate_model", "sd21"),
-                "active_edit": image_health.get("active_edit_model", "ip2p"),
             },
         }
 
