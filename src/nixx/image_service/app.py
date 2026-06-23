@@ -90,8 +90,6 @@ class EditRequest(BaseModel):
     width: int = 768
     height: int = 768
     steps: int = 30  # IP2P/MagicBrush use 50 internally; SDXL edit and Kontext use this
-    image_guidance: float = 1.0  # IP2P/MagicBrush: how much to preserve the source image
-    text_guidance: float = 9.5  # IP2P/MagicBrush: how strongly to follow the instruction
 
 
 # ── Global state ───────────────────────────────────────────────────────────────
@@ -115,12 +113,11 @@ _sdxl_edit_pipe: Any = None
 _sdxl_edit_lock = threading.Lock()
 _kontext_pipe: Any = None
 _kontext_lock = threading.Lock()
-_kontext_inference_lock = threading.Lock()  # serialise inference; pipeline is not thread-safe
 
 # ── Active model selection ────────────────────────────────────────────────────
 _active_generate_model: str = "sd21"  # sd14 | sd21 | sdxl | sdxl_turbo
 _generate_model_lock = threading.Lock()
-_active_edit_model: str = "kontext"  # ip2p | magic_brush | sdxl_edit | kontext
+_active_edit_model: str = "ip2p"  # ip2p | magic_brush | sdxl_edit | kontext
 _edit_model_lock = threading.Lock()
 
 _jobs: dict[str, dict[str, Any]] = {}  # job_id -> {status, result, error}
@@ -456,11 +453,11 @@ def _load_kontext() -> Any:
         from transformers import T5EncoderModel
 
         hf_token = os.environ.get("HF_READ_TOKEN")
-        # Run Kontext entirely on CPU. The Flux transformer is ~24 GiB in BF16
-        # which exceeds the GTX 1070's 8 GiB VRAM. Sequential CPU offload was
-        # tried but installs hooks on every tiny nn.Module (~3000+ layers),
-        # causing thousands of PCIe round-trips per step - slower than CPU.
-        # CUDA is hidden via CUDA_VISIBLE_DEVICES="" during inference.
+        # Run Kontext entirely on CPU. The Flux transformer's double-stream
+        # attention allocates ~6.77 GiB in a single tensor - larger than the
+        # GTX 1070's 8 GB VRAM. By leaving all components on CPU (default for
+        # from_pretrained without device_map or .to("cuda")), the 64 GB RAM
+        # absorbs it. Measured: ~72 min/step, so 28 steps ≈ 30-35 hours.
         text_encoder_2 = T5EncoderModel.from_pretrained(
             KONTEXT_MODEL_ID,
             subfolder="text_encoder_2",
@@ -533,8 +530,6 @@ def _run_edit_ip2p(
     filename: str,
     width: int,
     height: int,
-    image_guidance: float = 1.0,
-    text_guidance: float = 9.5,
 ) -> None:
     global _last_request
     try:
@@ -551,8 +546,8 @@ def _run_edit_ip2p(
             prompt=prompt,
             image=input_image,
             num_inference_steps=50,
-            image_guidance_scale=image_guidance,
-            guidance_scale=text_guidance,
+            image_guidance_scale=1.5,  # how much to preserve original
+            guidance_scale=7.5,  # how strongly to follow text prompt
         )
         img = result.images[0]
         out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
@@ -589,53 +584,50 @@ def _run_edit_kontext(
     steps: int,
 ) -> None:
     global _last_request
-    # _kontext_inference_lock serialises concurrent jobs: FluxKontextPipeline
-    # mutates scheduler.sigmas / step_index during inference and is not
-    # thread-safe. Two concurrent calls corrupt each other's sigma table.
-    with _kontext_inference_lock:
-        try:
-            from PIL import Image, ImageOps
+    try:
+        from PIL import Image, ImageOps
 
-            # Hide CUDA so diffusers does not auto-move tensors to the GPU.
-            # The full BF16 model is ~24 GiB, far exceeding the 1070's 8 GiB.
-            os.environ["CUDA_VISIBLE_DEVICES"] = ""
-            pipe = _load_kontext()
-            _last_request = time.monotonic()
-            logger.info("Editing image (Kontext) for job %s", job_id)
-            input_image = ImageOps.exif_transpose(Image.open(input_path).convert("RGB"))
-            result = pipe(
-                prompt=prompt,
-                image=input_image,
-                width=width,
-                height=height,
-                num_inference_steps=steps,
-                guidance_scale=3.5,
-            )
-            img = result.images[0]
-            out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            img.save(out_path)
-            _jobs[job_id]["status"] = "done"
-            _jobs[job_id]["result"] = str(out_path)
-            _jobs[job_id]["completed_at"] = time.time()
-            _jobs[job_id]["latency_ms"] = int(
-                (_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000
-            )
-            logger.info("Job %s done: %s", job_id, out_path)
-            _append_job_log(job_id, _jobs[job_id])
-        except Exception as exc:
-            logger.exception("Job %s failed", job_id)
-            _jobs[job_id]["status"] = "error"
-            _jobs[job_id]["error"] = str(exc)
-            _jobs[job_id]["completed_at"] = time.time()
-            _append_job_log(job_id, _jobs[job_id])
-        finally:
-            import torch
+        # Hide all GPUs during Kontext inference. Even with no explicit .to("cuda"),
+        # diffusers moves tensors to the available CUDA device internally at call time.
+        # Setting CUDA_VISIBLE_DEVICES="" forces everything onto CPU.
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        pipe = _load_kontext()
+        _last_request = time.monotonic()
+        logger.info("Editing image (Kontext) for job %s", job_id)
+        input_image = ImageOps.exif_transpose(Image.open(input_path).convert("RGB"))
+        result = pipe(
+            prompt=prompt,
+            image=input_image,
+            width=width,
+            height=height,
+            num_inference_steps=steps,
+            guidance_scale=3.5,
+        )
+        img = result.images[0]
+        out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(out_path)
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["result"] = str(out_path)
+        _jobs[job_id]["completed_at"] = time.time()
+        _jobs[job_id]["latency_ms"] = int(
+            (_jobs[job_id]["completed_at"] - _jobs[job_id]["submitted_at"]) * 1000
+        )
+        logger.info("Job %s done: %s", job_id, out_path)
+        _append_job_log(job_id, _jobs[job_id])
+    except Exception as exc:
+        logger.exception("Job %s failed", job_id)
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["error"] = str(exc)
+        _jobs[job_id]["completed_at"] = time.time()
+        _append_job_log(job_id, _jobs[job_id])
+    finally:
+        import torch
 
-            torch.cuda.empty_cache()
-            # Restore GPU visibility so SD generate/edit models can use CUDA
-            os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-            _last_request = time.monotonic()
+        torch.cuda.empty_cache()
+        # Restore GPU visibility so GPU generate/edit models can use CUDA later
+        os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+        _last_request = time.monotonic()
 
 
 def _run_edit_magic_brush(
@@ -645,8 +637,6 @@ def _run_edit_magic_brush(
     filename: str,
     width: int,
     height: int,
-    image_guidance: float = 1.0,
-    text_guidance: float = 9.5,
 ) -> None:
     global _last_request
     try:
@@ -662,8 +652,8 @@ def _run_edit_magic_brush(
             prompt=prompt,
             image=input_image,
             num_inference_steps=50,
-            image_guidance_scale=image_guidance,
-            guidance_scale=text_guidance,
+            image_guidance_scale=1.5,
+            guidance_scale=7.5,
         )
         img = result.images[0]
         out_path = OUTPUT_DIR / f"{_safe_filename(filename)}.png"
@@ -806,22 +796,16 @@ def _run_edit(
     width: int,
     height: int,
     steps: int,
-    image_guidance: float = 1.0,
-    text_guidance: float = 9.5,
 ) -> None:
     """Dispatch to the active edit model."""
     if _active_edit_model == "kontext":
         _run_edit_kontext(job_id, prompt, input_path, filename, width, height, steps)
     elif _active_edit_model == "magic_brush":
-        _run_edit_magic_brush(
-            job_id, prompt, input_path, filename, width, height, image_guidance, text_guidance
-        )
+        _run_edit_magic_brush(job_id, prompt, input_path, filename, width, height)
     elif _active_edit_model == "sdxl_edit":
         _run_edit_sdxl(job_id, prompt, input_path, filename, width, height, steps)
     else:
-        _run_edit_ip2p(
-            job_id, prompt, input_path, filename, width, height, image_guidance, text_guidance
-        )
+        _run_edit_ip2p(job_id, prompt, input_path, filename, width, height)
 
 
 # ── FastAPI app ────────────────────────────────────────────────────────────────
@@ -960,8 +944,6 @@ def create_app() -> FastAPI:
                 req.width,
                 req.height,
                 req.steps,
-                req.image_guidance,
-                req.text_guidance,
             ),
             daemon=True,
         )

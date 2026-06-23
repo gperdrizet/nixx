@@ -175,7 +175,7 @@ class EditImageTool(Tool):
             "Good: 'make the sky orange', 'add a hat to the person', 'turn it to winter'. "
             "Bad: 'an orange sky', 'a person wearing a hat'. "
             "Two edit models are available (switch with /image-model in chat): "
-            "'ip2p' uses InstructPix2Pix (GPU, ~1-2 min, default) and 'kontext' uses FLUX.1 Kontext [dev] (CPU, ~2-3 hours). "
+            "'ip2p' uses InstructPix2Pix (GPU, ~1-2 min, default) and 'kontext' uses FLUX.1 Kontext [dev] (CPU only, ~30 hours — ~72 min/step × 28 steps on pyrite's CPU). "
             "Use this when you need to modify an existing image - for new images use generate_image instead. "
             "The input image must be an absolute path to a PNG/JPG in the scratch directory. "
             "Non-blocking: starts the job and returns immediately. "
@@ -268,7 +268,7 @@ class EditImageTool(Tool):
                     success=True,
                     result=(
                         f"# job_id={job_id} (internal tracking — do not repeat to user)\n"
-                        "Edit queued. IP2P/MagicBrush ~1-2 min, SDXL edit ~3-5 min, Kontext ~2 h.\n"
+                        "Edit queued. IP2P/MagicBrush ~1-2 min, SDXL edit ~3-5 min, Kontext ~30 hours (CPU, 28 steps × ~72 min each).\n"
                         "Call image_status(job_id) to check — the PWA displays the image automatically when done."
                     ),
                     metadata={"job_id": job_id, "path": out},
