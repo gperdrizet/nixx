@@ -287,7 +287,7 @@ class ImageStatusTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Check the status of image generation or editing jobs on nixx-image. "
+            "Check the status of image generation jobs on nixx-image. "
             "Call this proactively after starting a job to report progress to the user - "
             "do not tell the user to check themselves. "
             "If job_id is given, returns detail for that specific job (status, elapsed time, error). "
