@@ -26,8 +26,6 @@ from nixx.memory.db import (
     delete_buffer_tail,
     get_buffer_entries,
     get_current_session_entries,
-    get_last_session_marker_id,
-    get_max_buffer_id,
     get_state,
     get_source,
     get_source_content,
@@ -723,34 +721,8 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         pool = app.state.memory._pool
         entries = await get_current_session_entries(pool)
         return {
-            "entries": [
-                {"id": e["id"], "role": e["role"], "content": e["content"]} for e in entries
-            ],
+            "entries": [{"role": e["role"], "content": e["content"]} for e in entries],
             "count": len(entries),
-        }
-
-    @app.get("/v1/buffer/since")
-    async def buffer_since(after: int = 0) -> dict:
-        """Return session entries with id > after, for cross-device sync.
-
-        Also returns the current session marker_id so clients can detect
-        when the conversation was cleared on another device.
-        """
-        pool = app.state.memory._pool
-        marker_id: int = (await get_last_session_marker_id(pool)) or 0
-        session_cleared = marker_id > after
-        start_id = max(after + 1, marker_id + 1)
-        max_id = await get_max_buffer_id(pool)
-        if max_id is None or start_id > max_id:
-            return {"entries": [], "marker_id": marker_id, "session_cleared": session_cleared}
-        raw = await get_buffer_entries(pool, start_id, max_id)
-        entries = [e for e in raw if e["role"] != "marker"]
-        return {
-            "entries": [
-                {"id": e["id"], "role": e["role"], "content": e["content"]} for e in entries
-            ],
-            "marker_id": marker_id,
-            "session_cleared": session_cleared,
         }
 
     @app.post("/v1/buffer/clear")
