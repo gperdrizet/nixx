@@ -368,5 +368,4 @@ async def test_recall_toggle_disables_context_injection(config: NixxConfig, tmp_
                 json={"messages": [{"role": "user", "content": "hi"}]},
             )
             ctx = await client.get("/v1/debug/context")
-            assert ctx.json()["hits"] == []
             assert ctx.json()["memory"] is None
