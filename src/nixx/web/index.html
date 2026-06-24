@@ -1386,60 +1386,57 @@
       micBtn.classList.add('unsupported');
     } else {
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;   // Chrome's own silence detection triggers onend
+      recognition.continuous = true;      // we control when to stop
       recognition.interimResults = true;
       recognition.lang = 'en-US';
+      const SILENCE_MS = 3000;            // send after 3s of no new speech
 
-      let sessionActive = false;  // true while the hands-free session is running
-      let finalTranscript = '';
+      let sessionActive = false;
+      let silenceTimer = null;
+
+      function resetSilenceTimer() {
+        clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => recognition.stop(), SILENCE_MS);
+      }
 
       function startListening() {
         if (!sessionActive) return;
-        finalTranscript = '';
         inputEl.value = '';
         autoResize();
         try { recognition.start(); } catch { /* already running */ }
       }
 
-      recognition.onstart = () => {
-        micBtn.classList.add('recording');
-      };
+      recognition.onstart = () => micBtn.classList.add('recording');
 
       recognition.onresult = e => {
-        let interim = '';
-        finalTranscript = '';
-        for (const result of e.results) {
-          if (result.isFinal) finalTranscript += result[0].transcript + ' ';
-          else interim += result[0].transcript;
-        }
-        inputEl.value = finalTranscript + interim;
+        resetSilenceTimer();
+        let text = '';
+        for (const result of e.results)
+          text += result[0].transcript + (result.isFinal ? ' ' : '');
+        inputEl.value = text;
         autoResize();
       };
 
       recognition.onend = () => {
-        if (!sessionActive) {
-          micBtn.classList.remove('recording');
-          return;
-        }
-        const toSend = finalTranscript.trim();
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+        if (!sessionActive) { micBtn.classList.remove('recording'); return; }
+        const toSend = inputEl.value.trim();
         if (toSend) {
-          inputEl.value = toSend;
-          autoResize();
-          setTimeout(() => {
-            send();                              // clears input, fires request
-            setTimeout(startListening, 600);     // restart after brief gap
-          }, 400);                               // pause so user can see what's sending
+          setTimeout(() => { send(); setTimeout(startListening, 600); }, 400);
         } else {
-          setTimeout(startListening, 300);       // nothing captured — restart immediately
+          setTimeout(startListening, 300);
         }
       };
 
       recognition.onerror = e => {
-        if (e.error === 'no-speech') {           // silence timeout — just restart
+        clearTimeout(silenceTimer);
+        if (e.error === 'aborted') return;
+        if (e.error === 'network' || e.error === 'no-speech') {
+          // Chrome 60s timeout or silence timeout — restart silently
           if (sessionActive) setTimeout(startListening, 300);
           return;
         }
-        if (e.error === 'aborted') return;
         addSystem(`Speech error: ${e.error}`);
         sessionActive = false;
         micBtn.classList.remove('recording');
@@ -1448,6 +1445,7 @@
       micBtn.addEventListener('click', () => {
         if (sessionActive) {
           sessionActive = false;
+          clearTimeout(silenceTimer);
           recognition.abort();
           micBtn.classList.remove('recording');
           inputEl.value = '';
