@@ -1403,64 +1403,78 @@
     });
 
     // ── Speech input ───────────────────────────────────────────────────────────
+    // Design: continuous=false (one utterance per session) + manual restart.
+    // Text accumulates across restarts in `accumulated`. A 3-second timer
+    // fires after the last completed utterance and triggers send.
+    // This avoids Chrome's result-accumulation bugs with continuous=true
+    // and the onerror+onend double-restart race condition.
     const micBtn = document.getElementById('mic-btn');
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       micBtn.classList.add('unsupported');
     } else {
       const recognition = new SpeechRecognition();
-      recognition.continuous = true;      // we control when to stop
+      recognition.continuous = false;     // Chrome handles one utterance at a time
       recognition.interimResults = true;
       recognition.lang = 'en-US';
-      const SILENCE_MS = 3000;            // send after 3s of no new speech
+      const SILENCE_MS = 3000;            // send after 3s since last completed word
 
       let sessionActive = false;
-      let silenceTimer = null;
+      let sendTimer = null;
+      let accumulated = '';               // text confirmed across restarts
+      let isSending = false;              // true while send+restart are in flight
 
-      function resetSilenceTimer() {
-        clearTimeout(silenceTimer);
-        silenceTimer = setTimeout(() => recognition.stop(), SILENCE_MS);
+      function cancelSendTimer() { clearTimeout(sendTimer); sendTimer = null; }
+
+      function armSendTimer() {
+        cancelSendTimer();
+        sendTimer = setTimeout(() => {
+          sendTimer = null;
+          if (!sessionActive || !accumulated.trim()) return;
+          isSending = true;
+          recognition.abort();            // onend won't restart (isSending guard)
+          lastInputWasVoice = true;
+          accumulated = '';
+          inputEl.value = '';
+          autoResize();
+          send();
+          setTimeout(() => { isSending = false; startListening(); }, 600);
+        }, SILENCE_MS);
       }
 
       function startListening() {
         if (!sessionActive) return;
-        window.speechSynthesis?.cancel(); // stop any TTS before listening
-        inputEl.value = '';
+        window.speechSynthesis?.cancel(); // stop TTS before mic opens
+        inputEl.value = accumulated;
         autoResize();
-        try { recognition.start(); } catch { /* already running */ }
+        try { recognition.start(); } catch {}
       }
 
       recognition.onstart = () => micBtn.classList.add('recording');
 
       recognition.onresult = e => {
-        resetSilenceTimer();
-        let text = '';
-        for (const result of e.results)
-          text += result[0].transcript + (result.isFinal ? ' ' : '');
-        inputEl.value = text;
+        // With continuous=false there is exactly one result slot.
+        const transcript = e.results[0][0].transcript;
+        const isFinal = e.results[0].isFinal;
+        const sep = accumulated && transcript ? ' ' : '';
+        inputEl.value = (accumulated + sep + transcript).trim();
         autoResize();
+        if (isFinal) {
+          accumulated = inputEl.value;
+          armSendTimer();                 // (re)start the 3s silence countdown
+        }
       };
 
       recognition.onend = () => {
-        clearTimeout(silenceTimer);
-        silenceTimer = null;
-        if (!sessionActive) { micBtn.classList.remove('recording'); return; }
-        const toSend = inputEl.value.trim();
-        if (toSend) {
-          setTimeout(() => { lastInputWasVoice = true; send(); setTimeout(startListening, 600); }, 400);
-        } else {
-          setTimeout(startListening, 300);
-        }
+        // Restart for the next utterance unless we're in the send flow.
+        if (!sessionActive || isSending) { micBtn.classList.remove('recording'); return; }
+        setTimeout(startListening, 200);
       };
 
       recognition.onerror = e => {
-        clearTimeout(silenceTimer);
-        if (e.error === 'aborted') return;
-        if (e.error === 'network' || e.error === 'no-speech') {
-          // Chrome 60s timeout or silence timeout — restart silently
-          if (sessionActive) setTimeout(startListening, 300);
-          return;
-        }
+        // aborted (our own abort) and no-speech/network all end naturally via
+        // onend — don't double-restart here.
+        if (e.error === 'aborted' || e.error === 'no-speech' || e.error === 'network') return;
         addSystem(`Speech error: ${e.error}`);
         sessionActive = false;
         micBtn.classList.remove('recording');
@@ -1469,7 +1483,9 @@
       micBtn.addEventListener('click', () => {
         if (sessionActive) {
           sessionActive = false;
-          clearTimeout(silenceTimer);
+          cancelSendTimer();
+          accumulated = '';
+          isSending = false;
           recognition.abort();
           micBtn.classList.remove('recording');
           inputEl.value = '';
