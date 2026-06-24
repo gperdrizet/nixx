@@ -1386,7 +1386,7 @@
       micBtn.classList.add('unsupported');
     } else {
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
+      recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
       let isRecording = false;
@@ -1407,6 +1407,7 @@
       };
 
       recognition.onend = () => {
+        // In continuous mode onend only fires on explicit stop or error
         isRecording = false;
         micBtn.classList.remove('recording');
         inputEl.focus();
