@@ -8,6 +8,7 @@ uvicorn nixx.admin:create_app --factory --host 100.64.0.2 --port 8001
 from __future__ import annotations
 
 import json
+from typing import cast
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -27,7 +28,7 @@ def create_app() -> FastAPI:
         from nixx.config import NixxConfig  # only for DATABASE_URL
 
         cfg = NixxConfig()
-        return await asyncpg.connect(cfg.database_url)
+        return cast(asyncpg.Connection, await asyncpg.connect(cfg.database_url))
 
     # ── Service status ────────────────────────────────────────────────────────
 
