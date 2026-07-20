@@ -318,6 +318,20 @@ async def get_current_session_entries(
             return [dict(r) for r in rows]
 
 
+async def get_buffer_since(
+    pool: asyncpg.Pool,  # type: ignore[type-arg]
+    after_id: int,
+) -> list[dict]:
+    """Return non-marker buffer rows with id > after_id, oldest first."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, role, content, origin, created_at FROM buffer "
+            "WHERE role != 'marker' AND id > $1 ORDER BY id ASC",
+            after_id,
+        )
+        return [dict(r) for r in rows]
+
+
 async def delete_buffer_tail(
     pool: asyncpg.Pool,  # type: ignore[type-arg]
     keep: int,

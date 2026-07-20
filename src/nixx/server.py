@@ -25,7 +25,9 @@ from nixx.memory.db import (
     create_pool,
     delete_buffer_tail,
     get_buffer_entries,
+    get_buffer_since,
     get_current_session_entries,
+    get_last_session_marker_id,
     get_state,
     get_source,
     get_source_content,
@@ -725,6 +727,40 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             "count": len(entries),
         }
 
+    @app.get("/v1/buffer/since")
+    async def buffer_since(after: int = 0) -> dict:
+        """Return entries after `after`, with marker/session-clear awareness for TUI sync."""
+        if after < 0:
+            raise HTTPException(status_code=400, detail="after must be >= 0")
+
+        pool = app.state.memory._pool
+        marker_id = await get_last_session_marker_id(pool)
+        marker_val = marker_id or 0
+
+        # If the caller is behind the latest clear marker, force session resync.
+        session_cleared = marker_id is not None and after < marker_val
+
+        if session_cleared:
+            entries = await get_current_session_entries(pool)
+        else:
+            entries = await get_buffer_since(pool, after)
+
+        return {
+            "entries": [
+                {
+                    "id": e["id"],
+                    "role": e["role"],
+                    "content": e["content"],
+                    "origin": e.get("origin"),
+                    "created_at": e.get("created_at"),
+                }
+                for e in entries
+            ],
+            "count": len(entries),
+            "marker_id": marker_id,
+            "session_cleared": session_cleared,
+        }
+
     @app.post("/v1/buffer/clear")
     async def buffer_clear() -> dict:
         """Write a session marker to the buffer, starting a new session."""
@@ -1239,28 +1275,43 @@ async def _chat_event_stream(
                     }
                 )
             for tc in pending_tool_calls:
-                logger.info("Executing tool: %s", tc["name"])
-                yield f"data: {json.dumps({'tool_call': {'name': tc['name']}})}\n\n"
-                if app is not None:
-                    usage = getattr(app.state, "tool_usage", {})
-                    usage[tc["name"]] = usage.get(tc["name"], 0) + 1
-                    app.state.tool_usage = usage
-                    _usage_pool = getattr(app.state, "memory", None)
-                    _usage_pool = getattr(_usage_pool, "_pool", None)
-                    if _usage_pool is not None:
-                        await set_state(_usage_pool, "tool_usage", json.dumps(usage))
-                tool_result = await tools.execute(tc["name"], tc["arguments"])
-                # If the tool returned metadata with a job_id (e.g. image generation),
-                # emit a tracking event so frontends can poll for completion.
-                if tool_result.metadata and "job_id" in tool_result.metadata:
-                    yield f"data: {json.dumps({'image_job_started': tool_result.metadata})}\n\n"
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc["id"],
-                        "content": tool_result.to_content(),
+                try:
+                    logger.info("Executing tool: %s", tc["name"])
+                    yield f"data: {json.dumps({'tool_call': {'name': tc['name']}})}\n\n"
+                    if app is not None:
+                        usage = getattr(app.state, "tool_usage", {})
+                        usage[tc["name"]] = usage.get(tc["name"], 0) + 1
+                        app.state.tool_usage = usage
+                        _usage_pool = getattr(app.state, "memory", None)
+                        _usage_pool = getattr(_usage_pool, "_pool", None)
+                        if _usage_pool is not None:
+                            try:
+                                await set_state(_usage_pool, "tool_usage", json.dumps(usage))
+                            except Exception as exc:
+                                logger.warning("Tool usage state update failed: %s", exc)
+                    tool_result = await tools.execute(tc["name"], tc["arguments"])
+                    # If the tool returned metadata with a job_id (e.g. image generation),
+                    # emit a tracking event so frontends can poll for completion.
+                    if tool_result.metadata and "job_id" in tool_result.metadata:
+                        yield f"data: {json.dumps({'image_job_started': tool_result.metadata})}\n\n"
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": tool_result.to_content(),
+                        }
+                    )
+                except Exception as exc:
+                    logger.exception("Unexpected tool-loop failure: %s", exc)
+                    error = {
+                        "error": {
+                            "message": str(exc) or f"{type(exc).__name__} (no message)",
+                            "type": "server_error",
+                        }
                     }
-                )
+                    yield f"data: {json.dumps(error)}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
             # Discard any content streamed before tool calls (thinking/preamble).
             yield f"data: {json.dumps({'reset_accumulated': True})}\n\n"
             # Detect stuck loops: same tool called 3+ times consecutively.
