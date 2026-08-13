@@ -97,3 +97,19 @@ async def test_base_url_trailing_slash_stripped() -> None:
     client = OpenAIClient(base_url=BASE_URL + "/")
     await client.chat("model", [])
     assert respx.calls.call_count == 1
+
+
+@respx.mock
+async def test_base_url_v1_suffix_is_not_duplicated() -> None:
+    respx.post(f"{BASE_URL}/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"role": "assistant", "content": ""}}],
+                "usage": {},
+            },
+        )
+    )
+    client = OpenAIClient(base_url=BASE_URL + "/v1")
+    await client.chat("model", [])
+    assert respx.calls.call_count == 1

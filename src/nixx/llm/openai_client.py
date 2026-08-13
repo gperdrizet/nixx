@@ -37,6 +37,8 @@ class OpenAIClient:
 
     def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 600.0) -> None:
         self._base_url = base_url.rstrip("/")
+        if self._base_url.endswith("/v1"):
+            self._base_url = self._base_url[:-3]
         self._api_key = api_key
         # Use a split timeout: short connect/write, long read to survive slow prefill on large prompts
         self._timeout = httpx.Timeout(connect=60.0, read=timeout, write=60.0, pool=10.0)
