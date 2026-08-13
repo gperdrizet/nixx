@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -222,6 +223,33 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     temperature: float | None = None
     max_tokens: int | None = None
+    tool_choice: str | dict[str, Any] | None = None
+
+
+def _image_tool_choice(
+    user_text: str,
+    tool_defs: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Force image generation only for an unambiguous image-creation request."""
+    tool_names = {
+        tool.get("function", {}).get("name")
+        for tool in tool_defs
+        if isinstance(tool.get("function"), dict)
+    }
+    if "generate_image" not in tool_names:
+        return None
+    if re.search(r"\b(status|progress|running|finished|done|check)\b", user_text, re.I):
+        return None
+    if not re.search(
+        r"\b(make|create|generate|draw|paint|render|picture|image|photo|illustration|wallpaper)\b",
+        user_text,
+        re.I,
+    ):
+        return None
+    return {
+        "type": "function",
+        "function": {"name": "generate_image"},
+    }
 
 
 class CreateSourceRequest(BaseModel):
@@ -538,6 +566,10 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         }
 
         if request.stream:
+            stream_tool_defs = app.state.tools.to_openai_tools()
+            selected_tool_choice = request.tool_choice or _image_tool_choice(
+                last_user, stream_tool_defs
+            )
             return StreamingResponse(
                 _chat_event_stream(
                     llm,
@@ -552,6 +584,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                     tools=app.state.tools,
                     app=app,
                     config=config,
+                    tool_choice=selected_tool_choice,
                 ),
                 media_type="text/event-stream",
             )
@@ -561,6 +594,7 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
 
         tools = app.state.tools
         tool_defs = tools.to_openai_tools()
+        selected_tool_choice = request.tool_choice or _image_tool_choice(last_user, tool_defs)
         max_tool_rounds = 10  # Prevent infinite loops
         ns_tool_call_count = 0
         ns_start = _time.monotonic()
@@ -569,7 +603,16 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
             _strip_trailing_empty_assistant(messages)
             try:
                 result = await llm.chat(
-                    model, messages, temperature, request.max_tokens, tools=tool_defs
+                    model,
+                    messages,
+                    temperature,
+                    request.max_tokens,
+                    tools=tool_defs,
+                    **(
+                        {"tool_choice": selected_tool_choice}
+                        if selected_tool_choice is not None
+                        else {}
+                    ),
                 )
             except HttpError as exc:
                 raise HTTPException(status_code=502, detail=f"LLM backend error: {exc}") from exc
@@ -1081,6 +1124,7 @@ async def _chat_event_stream(
     tools: ToolRegistry | None = None,
     app: FastAPI | None = None,
     config: NixxConfig | None = None,
+    tool_choice: str | dict[str, Any] | None = None,
 ) -> AsyncGenerator[str, None]:
     import time
 
@@ -1132,7 +1176,12 @@ async def _chat_event_stream(
             try:
                 _strip_trailing_empty_assistant(messages)
                 async for chunk in llm.chat_stream(
-                    model, messages, temperature, max_tokens, tools=tool_defs
+                    model,
+                    messages,
+                    temperature,
+                    max_tokens,
+                    tools=tool_defs,
+                    **({"tool_choice": tool_choice} if tool_choice is not None else {}),
                 ):
                     content = chunk.content
                     done = chunk.done

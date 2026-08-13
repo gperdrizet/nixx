@@ -1,5 +1,7 @@
 """Tests for OpenAIClient."""
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -50,6 +52,32 @@ async def test_chat_sends_api_key() -> None:
 
     request = respx.calls.last.request
     assert request.headers["Authorization"] == "Bearer sk-test-key"
+
+
+@respx.mock
+async def test_chat_sends_tool_choice() -> None:
+    respx.post(f"{BASE_URL}/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"role": "assistant", "content": ""}}],
+                "usage": {},
+            },
+        )
+    )
+    client = OpenAIClient(base_url=BASE_URL)
+    await client.chat(
+        "model",
+        [{"role": "user", "content": "make an image"}],
+        tools=[{"type": "function", "function": {"name": "generate_image"}}],
+        tool_choice={"type": "function", "function": {"name": "generate_image"}},
+    )
+
+    request = respx.calls.last.request
+    assert json.loads(request.content)["tool_choice"] == {
+        "type": "function",
+        "function": {"name": "generate_image"},
+    }
 
 
 @respx.mock

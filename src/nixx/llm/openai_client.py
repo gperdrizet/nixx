@@ -58,6 +58,7 @@ class OpenAIClient:
         temperature: float = 0.7,
         max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
     ) -> ChatResponse:
         """Non-streaming chat completion.
 
@@ -73,6 +74,8 @@ class OpenAIClient:
             payload["max_tokens"] = max_tokens
         if tools:
             payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
 
         async with httpx.AsyncClient(timeout=self._timeout) as http:
             response = await http.post(
@@ -120,6 +123,7 @@ class OpenAIClient:
         temperature: float = 0.7,
         max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
     ) -> AsyncGenerator[ChatResponse, None]:
         """Streaming chat completion.
 
@@ -136,6 +140,8 @@ class OpenAIClient:
             payload["max_tokens"] = max_tokens
         if tools:
             payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
 
         # Accumulate tool calls across chunks
         tool_calls_acc: dict[int, dict[str, str]] = {}  # index -> {id, name, arguments}
