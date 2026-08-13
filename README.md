@@ -13,13 +13,13 @@ Nixx is an open-source, local-first system designed to provide unified context a
 - **Suggestion-only**: Collaborative assistant that asks before acting
 - **Open source**: MIT licensed, public development
 
-## Features (planned)
+## Features
 
 - **Persistent memory** across workspaces and projects
 - **Custom terminal UI** for terminal-native workflows
 - **OpenAI-compatible API** for editor integration (Zed, VS Code, Neovim, etc.)
 - **Knowledge graph** connecting conversations, code, and context
-- **Encrypted storage** for conversation history and personal data
+- **Persistent PostgreSQL storage** for conversation history and curated memories
 
 ## Architecture
 
@@ -50,7 +50,7 @@ Nixx is an open-source, local-first system designed to provide unified context a
                              │  └─────────────────────────────────┘ │
                              │                                      │
                              │  ┌─────────────────────────────────┐ │
-                             │  │  Semantic memory  (planned)     │ │
+                             │  │  Semantic memory                │ │
                              │  │  ingested docs, notes, papers   │ │
                              │  │  chunked + embedded for recall  │ │
                              │  │  knowledge graph (future)       │ │
@@ -107,7 +107,8 @@ cp .env.example .env
 
 # 7. Start the server
 sudo systemctl start nixx-server
-# Or run directly: nixx serve
+# For a foreground development server, stop nixx-server first, then run:
+# nixx serve
 ```
 
 Verify it's working:
@@ -158,7 +159,9 @@ sudo systemctl stop nixx.target
 sudo systemctl status nixx.target
 ```
 
-Services are manually started by default - they won't auto-start on reboot. To enable auto-start: `sudo systemctl enable nixx.target`.
+The service units are enabled for automatic startup. `nixx.target` starts the API,
+embedding, and pgweb services; the LLM service is managed separately. Do not run
+`nixx serve` while `nixx-server.service` is active because both use port 8000.
 
 See [docs/architecture.md](docs/architecture.md) for the full system design.
 
@@ -225,7 +228,7 @@ pytest -v                     # run tests
 ## Project status
 
 - [x] Project planning and architecture design
-- [x] Backend API server (`/v1/chat/completions`, `/v1/completions`)
+- [x] Backend API server (`/v1/chat/completions`)
 - [x] CLI (`nixx serve`, `nixx status`)
 - [x] Test suite and CI
 - [x] Memory system (pgvector embeddings)
@@ -239,7 +242,7 @@ pytest -v                     # run tests
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) - system design, data flow, three-tier memory model
+- [Architecture](docs/architecture.md) - system design, data flow, two-tier memory model
 - [Tech stack](docs/stack.md) - every library and tool with documentation links
 - [Knowledge graph](docs/knowledge-graph.md) - vision for integrating papers, notes, code, and docs
 - [Phone access](docs/phone-access.md) - SSH + TUI via Tailscale

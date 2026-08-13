@@ -191,10 +191,12 @@ internet. Runs as a systemd service (`tailscaled`).
 
 ## systemd
 
-Service orchestration for all nixx components. A `nixx.target` groups the stack:
-nixx-server, pgweb, and Tailscale. Services are manually started
-(`sudo systemctl start nixx.target`), not enabled for auto-boot. Unit files live in
-`scripts/` and are symlinked into `/etc/systemd/system/`.
+Service orchestration for the nixx components. A `nixx.target` groups the stack:
+nixx-server, nixx-embed, and pgweb. These units are enabled for auto-boot on the
+production machine. Unit files live in `scripts/` and are symlinked into
+`/etc/systemd/system/`.
+
+Start the group manually when needed with `sudo systemctl start nixx.target`.
 
 Note: `systemctl restart nixx.target` does **not** cascade to individual services -
 a target restart only affects the target unit itself. To reload code changes, restart
