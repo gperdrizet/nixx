@@ -1,0 +1,23 @@
+[Unit]
+Description=nixx image generation service (FLUX.1 Kontext)
+After=network.target
+
+[Service]
+Type=simple
+User=siderealyear
+Environment=NIXX_IMAGE_IDLE_TIMEOUT=600
+Environment=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# PCI_BUS_ID makes device 0 the physical GTX 1070, not a P100 (default order is fastest-first).
+Environment=CUDA_DEVICE_ORDER=PCI_BUS_ID
+Environment=CUDA_VISIBLE_DEVICES=0
+Environment=NIXX_IMAGE_OUTPUT_DIR=/home/siderealyear/nixx_scratch/images
+Environment=HF_HOME=/mnt/fast_scratch/huggingface_transformers_cache
+EnvironmentFile=/home/siderealyear/nixx/.env
+ExecStart=/home/siderealyear/.local/share/pipx/venvs/nixx-image/bin/nixx-image
+Restart=no
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nixx-image
+
+[Install]
+WantedBy=multi-user.target

@@ -12,6 +12,7 @@ UNITS=(
     "nixx-server.service"
     "nixx-pgweb.service"
     "nixx-searxng.service"
+    "nixx-image.service"
 )
 
 echo "Installing nixx systemd units..."
