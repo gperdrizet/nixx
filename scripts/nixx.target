@@ -5,7 +5,7 @@ After=network.target
 
 # Core dependencies
 Requires=docker.service
-Wants=nixx-embed.service nixx-server.service nixx-pgweb.service tailscaled.service
+Wants=nixx-embed.service nixx-server.service nixx-pgweb.service nixx-searxng.service tailscaled.service
 
 [Install]
 # Manually managed: sudo systemctl start nixx.target
