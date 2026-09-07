@@ -790,14 +790,14 @@
 <li>Generate an SSH key in Termux: <code>ssh-keygen -t ed25519</code></li>
 <li>Copy the key to pyrite (requires temporarily enabling password auth):
    <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># On pyrite: enable password auth</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>sudo<span class="w"> </span>sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/^PasswordAuthentication no/PasswordAuthentication yes/&#39;</span><span class="w"> </span>/etc/ssh/sshd_config
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>sudo<span class="w"> </span>sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">'s/^PasswordAuthentication no/PasswordAuthentication yes/'</span><span class="w"> </span>/etc/ssh/sshd_config
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>ssh
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># On phone (Termux): copy the key</span>
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>ssh-copy-id<span class="w"> </span>-p<span class="w"> </span><span class="m">4444</span><span class="w"> </span>siderealyear@100.80.177.16
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># On pyrite: disable password auth</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>sudo<span class="w"> </span>sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">&#39;s/^PasswordAuthentication yes/PasswordAuthentication no/&#39;</span><span class="w"> </span>/etc/ssh/sshd_config
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>sudo<span class="w"> </span>sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">'s/^PasswordAuthentication yes/PasswordAuthentication no/'</span><span class="w"> </span>/etc/ssh/sshd_config
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>ssh
 </code></pre></div></li>
 <li>In Termius, create a connection: host <code>100.80.177.16</code>, port <code>4444</code>, user <code>siderealyear</code>, select the key generated in step 3</li>

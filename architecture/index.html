@@ -941,10 +941,10 @@
 <a id="__codelineno-0-64" name="__codelineno-0-64" href="#__codelineno-0-64"></a>        ┌─────────┴──────────┐                                 │ │
 <a id="__codelineno-0-65" name="__codelineno-0-65" href="#__codelineno-0-65"></a>        ▼                    ▼                                 ▼ ▼
 <a id="__codelineno-0-66" name="__codelineno-0-66" href="#__codelineno-0-66"></a>  ┌────────────────────┐ ┌────────────────────┐ ┌────────────────────────────────┐
-<a id="__codelineno-0-67" name="__codelineno-0-67" href="#__codelineno-0-67"></a>  │ llama.cpp (remote) │ │ llama.cpp (local)  │ │ PostgreSQL + pgvector · 5432   │
+<a id="__codelineno-0-67" name="__codelineno-0-67" href="#__codelineno-0-67"></a>  │ promptly gateway   │ │ llama.cpp (local)  │ │ PostgreSQL + pgvector · 5432   │
 <a id="__codelineno-0-68" name="__codelineno-0-68" href="#__codelineno-0-68"></a>  │ promptlyapi.com/v1 │ │ localhost:8082     │ │ (student-postgres container)   │
 <a id="__codelineno-0-69" name="__codelineno-0-69" href="#__codelineno-0-69"></a>  │                    │ │                    │ │                                │
-<a id="__codelineno-0-70" name="__codelineno-0-70" href="#__codelineno-0-70"></a>  │ gpt-oss-20b        │ │ mxbai-embed-large  │ │ Episodic:                      │
+<a id="__codelineno-0-70" name="__codelineno-0-70" href="#__codelineno-0-70"></a>  │ model varies daily │ │ mxbai-embed-large  │ │ Episodic:                      │
 <a id="__codelineno-0-71" name="__codelineno-0-71" href="#__codelineno-0-71"></a>  │ chat + completions │ │ embeddings         │ │   buffer    (transcript + FTS) │
 <a id="__codelineno-0-72" name="__codelineno-0-72" href="#__codelineno-0-72"></a>  └────────────────────┘ └────────────────────┘ │   summaries (embedded chunks)  │
 <a id="__codelineno-0-73" name="__codelineno-0-73" href="#__codelineno-0-73"></a>                                                │ Semantic:                      │
@@ -1085,7 +1085,7 @@ to keep and how to label it.</p>
 <a id="__codelineno-1-90" name="__codelineno-1-90" href="#__codelineno-1-90"></a>  │  created_at   timestamptz                  auto                         │
 <a id="__codelineno-1-91" name="__codelineno-1-91" href="#__codelineno-1-91"></a>  └────────────────────────────────────┬────────────────────────────────────┘
 <a id="__codelineno-1-92" name="__codelineno-1-92" href="#__codelineno-1-92"></a>                                       │  chunk verbatim transcript → embed
-<a id="__codelineno-1-93" name="__codelineno-1-93" href="#__codelineno-1-93"></a>              /source &quot;name&quot;           │  each chunk → store in memories
+<a id="__codelineno-1-93" name="__codelineno-1-93" href="#__codelineno-1-93"></a>              /source "name"           │  each chunk → store in memories
 <a id="__codelineno-1-94" name="__codelineno-1-94" href="#__codelineno-1-94"></a>              /ingest &lt;file|url&gt;       │  summary is for display only
 <a id="__codelineno-1-95" name="__codelineno-1-95" href="#__codelineno-1-95"></a>                                       ▼
 <a id="__codelineno-1-96" name="__codelineno-1-96" href="#__codelineno-1-96"></a>  memories · embedded semantic recall index

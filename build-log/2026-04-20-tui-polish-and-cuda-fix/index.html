@@ -724,7 +724,7 @@ Ollama's private library directory at <code>/usr/local/lib/ollama/cuda_v12/</cod
 to add <code>LD_LIBRARY_PATH=/usr/local/lib/ollama/cuda_v12</code> to the systemd drop-ins, but this was
 not persisted correctly across the last reboot.</p>
 <p>Proper fix: registered the directory with the system linker cache:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>echo &quot;/usr/local/lib/ollama/cuda_v12&quot; | sudo tee /etc/ld.so.conf.d/ollama-cuda12.conf
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>echo "/usr/local/lib/ollama/cuda_v12" | sudo tee /etc/ld.so.conf.d/ollama-cuda12.conf
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>sudo ldconfig
 </code></pre></div>
 <p><code>libcudart.so.12</code> is now visible to all processes via ldconfig and survives reboots. The

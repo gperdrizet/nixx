@@ -795,7 +795,7 @@ treatment - it now extracts <code>message</code> with a fallback to <code>type</
 <h3 id="tool-call-flag-in-chat">Tool call flag in chat<a class="headerlink" href="#tool-call-flag-in-chat" title="Permanent link">&para;</a></h3>
 <p>The server executed tools silently with no client-visible signal. Added a <code>tool_call</code> SSE
 event emitted immediately before each tool execution:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span><span class="nt">&quot;tool_call&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;web_search&quot;</span><span class="p">}}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span><span class="nt">"tool_call"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"web_search"</span><span class="p">}}</span>
 </code></pre></div>
 <p>The TUI handles it by adding a dim system message: <code>calling tool: web_search</code>. The message
 appears inline in the chat flow between the user turn and the eventual assistant response.</p>

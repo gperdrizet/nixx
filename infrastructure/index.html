@@ -888,9 +888,9 @@ for architectures the driver does not support.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>gpt-oss-20b-mxfp4.gguf</code></td>
-<td>~11 GB</td>
-<td>LLM inference (port 8502)</td>
+<td>current LLM <code>.gguf</code> (varies)</td>
+<td>varies</td>
+<td>promptly gateway backend (port 8502)</td>
 </tr>
 <tr>
 <td><code>mxbai-embed-large-v1-f16.gguf</code></td>
@@ -899,9 +899,11 @@ for architectures the driver does not support.</p>
 </tr>
 </tbody>
 </table>
-<p>At 65536 context length (<code>-c 65536</code>), the LLM uses ~13.9 GB of the 16 GB P100. Reduce
-context in <code>llamacpp.service</code> if VRAM budget changes (e.g. if running both services
-simultaneously causes OOM).</p>
+<p>The LLM model served by promptly changes over time - nixx treats it as a black-box
+OpenAI-compatible endpoint and does not depend on a specific model. The backend model and
+its context length are managed in the <a href="https://github.com/gperdrizet/llama.cpp">llama.cpp</a>
+and <a href="https://github.com/gperdrizet/promptly">promptly</a> projects. nixx auto-discovers the
+current model (<code>/v1/models</code>) and context length (<code>/props</code>) at runtime.</p>
 <hr />
 <h2 id="systemd-services">Systemd services<a class="headerlink" href="#systemd-services" title="Permanent link">&para;</a></h2>
 <h3 id="service-files">Service files<a class="headerlink" href="#service-files" title="Permanent link">&para;</a></h3>
@@ -968,7 +970,7 @@ simultaneously causes OOM).</p>
 service explicitly when needed.</p>
 <h3 id="llamacppservice-key-parameters">llamacpp.service key parameters<a class="headerlink" href="#llamacppservice-key-parameters" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="na">ExecStart</span><span class="o">=</span><span class="s">/opt/llama.cpp/build/bin/llama-server </span>\
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="s">-m /opt/models/gpt-oss-20b-mxfp4.gguf </span>\
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="s">-m /opt/models/&lt;current-model&gt;.gguf </span>\
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="s">--n-gpu-layers 999 </span>\<span class="w">       </span><span class="s"># all layers on GPU</span>
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="na">-c 65536 \                 # context length</span>
 <a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="na">--flash-attn on \          # required for long context on P100</span>
@@ -978,7 +980,7 @@ service explicitly when needed.</p>
 <a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">    </span><span class="na">--api-key &lt;key&gt; \</span>
 <a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">    </span><span class="na">--metrics</span>
 </code></pre></div>
-<p>The local server runs at localhost:8502. nixx currently uses a remote inference API (<code>promptlyapi.com/v1</code>) configured in <code>.env</code> as <code>NIXX_LLM_BASE_URL</code>. To switch to the local instance, update that value to <code>http://localhost:8502</code>.</p>
+<p>nixx talks to the promptly gateway (<code>promptlyapi.com/v1</code>, set in <code>.env</code> as <code>NIXX_LLM_BASE_URL</code>) by design - it's the experimental inference API we run, and using it keeps nixx consistent with our other clients while doubling as a live demo of promptly. promptly currently proxies a local llama.cpp on port 8502; you <em>could</em> point <code>NIXX_LLM_BASE_URL</code> straight at <code>http://localhost:8502/v1</code> to bypass the gateway, but the gateway is the default path. The backend model and context change over time; nixx discovers both at runtime.</p>
 <h3 id="recovering-from-a-failed-service">Recovering from a failed service<a class="headerlink" href="#recovering-from-a-failed-service" title="Permanent link">&para;</a></h3>
 <p>If <code>llamacpp.service</code> hits its restart limit (5 attempts in 300 seconds):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span>reset-failed<span class="w"> </span>llamacpp
@@ -992,7 +994,7 @@ service explicitly when needed.</p>
 <a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Check GPU memory usage</span>
 <a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>nvidia-smi<span class="w"> </span>--query-gpu<span class="o">=</span>index,name,memory.used,memory.total<span class="w"> </span>--format<span class="o">=</span>csv,noheader
 <a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># Check what&#39;s using the GPU</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># Check what's using the GPU</span>
 <a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>nvidia-smi
 <a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>
 <a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="c1"># Verify llama-server linked correctly</span>

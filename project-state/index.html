@@ -834,11 +834,11 @@ workspaces and conversations - nixx remembers everything across sessions.</p>
 <td>On-demand SD/SDXL image service. <code>Restart=no</code> - stays dead until explicitly started. Auto-shuts-down after 10 min idle (never while a job is running).</td>
 </tr>
 <tr>
-<td>LLM server</td>
-<td>llama.cpp <code>llama-server</code></td>
-<td>8502</td>
+<td>LLM backend</td>
+<td>promptly gateway (<code>promptlyapi.com/v1</code>)</td>
+<td>8502*</td>
 <td>llama</td>
-<td>gpt-oss-20b-mxfp4.gguf</td>
+<td>Experimental OpenAI-compatible API we run; nixx's LLM endpoint. Served model + context change over time (auto-discovered at runtime). *promptly proxies a local <code>llama-server</code> on 8502.</td>
 </tr>
 <tr>
 <td>Embed server</td>
@@ -888,13 +888,20 @@ workspaces and conversations - nixx remembers everything across sessions.</p>
 services</strong>. To pick up code changes: <code>sudo systemctl restart nixx-server</code>.</p>
 <hr />
 <h2 id="models">Models<a class="headerlink" href="#models" title="Permanent link">&para;</a></h2>
-<p>LLM and embed models live in <code>/opt/models/</code>, owned by <code>llama:llama</code>:</p>
-<ul>
-<li><strong>LLM</strong>: <code>gpt-oss-20b-mxfp4.gguf</code> — served at port 8502, OpenAI-compatible API</li>
-<li><strong>Embeddings</strong>: <code>mxbai-embed-large-v1-f16.gguf</code> — served at port 8082, 1024-dimensional vectors</li>
-</ul>
+<p><strong>LLM</strong> is provided by the <strong>promptly gateway</strong> (<code>promptlyapi.com/v1</code>), an experimental
+OpenAI-compatible inference API we run. nixx does not hardcode the model or context window -
+promptly's loaded model and context change over time. nixx auto-discovers the current model
+from <code>/v1/models</code> and context length from <code>/props</code> at startup (and retries on <code>/health</code>);
+<code>gpt-oss-20b</code> / <code>8192</code> are fallback defaults only. promptly currently proxies a local
+llama.cpp on port 8502 (managed in the llama.cpp repo).</p>
+<p>The <strong>embedding</strong> model runs locally: <code>mxbai-embed-large-v1-f16.gguf</code> in <code>/opt/models/</code>
+(owned by <code>llama:llama</code>), served at port 8082, 1024-dimensional vectors.</p>
 <p>Image models are HuggingFace repos cached in <code>/mnt/fast_scratch/huggingface_transformers_cache</code> (fast NVMe).</p>
-<p>GPU assignment: llamacpp uses device 0 (P100, 16 GB, ~13 GB used). nixx-image uses device 1 (GTX 1070, 8 GB) via <code>CUDA_VISIBLE_DEVICES=1</code>.</p>
+<p>GPU assignment (PCI bus order): device 0 = GTX 1070 (8 GB), devices 1-2 = Tesla P100
+(16 GB each). promptly's local llama.cpp runs on the two P100s; the embedding server is
+pinned to the GTX 1070 via <code>CUDA_DEVICE_ORDER=PCI_BUS_ID</code> + <code>CUDA_VISIBLE_DEVICES=0</code>.
+nixx-image also targets the GTX 1070 - verify its <code>CUDA_VISIBLE_DEVICES</code> ordering, since
+without <code>CUDA_DEVICE_ORDER=PCI_BUS_ID</code> CUDA enumerates fastest-first (device 0 = a P100).</p>
 <p><strong>Generation models</strong> (switch with <code>/gen-model</code> in TUI or <code>POST /v1/image/generate-model</code>):</p>
 <table>
 <thead>
@@ -1129,17 +1136,17 @@ applied inline with <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code>.</p>
 <tr>
 <td><code>llm_base_url</code></td>
 <td><code>http://localhost:8080</code></td>
-<td>Overridden in .env to <code>http://localhost:8502</code> (local llamacpp)</td>
+<td>Overridden in .env to <code>https://promptlyapi.com/v1</code> (promptly gateway)</td>
 </tr>
 <tr>
 <td><code>llm_model</code></td>
 <td><code>gpt-oss-20b</code></td>
-<td></td>
+<td>Fallback only; real model auto-fetched from the gateway's <code>/v1/models</code> at startup</td>
 </tr>
 <tr>
 <td><code>llm_context_length</code></td>
 <td><code>8192</code></td>
-<td>Auto-fetched from LLM <code>/props</code> at startup (overrides .env value). Fallback if fetch fails.</td>
+<td>Fallback only; auto-fetched from the gateway's <code>/props</code> at startup (overrides .env value)</td>
 </tr>
 <tr>
 <td><code>max_history_tokens</code></td>
@@ -1373,14 +1380,14 @@ before execution. The TUI renders a dim inline <code>calling tool: &lt;name&gt;<
 <li><code>sudo systemctl restart nixx.target</code> does NOT restart individual services.</li>
 <li><code>.venv/</code> is the project virtualenv (used for dev/tests). The running server uses the pipx venv at
   <code>~/.local/share/pipx/venvs/nixx/</code>.</li>
-<li>The <code>llm_base_url</code> default in config.py (port 8080) is wrong for this machine. The real LLM
-  port (8502) is set in <code>.env</code>.</li>
+<li>The <code>llm_base_url</code> default in config.py (port 8080) is a placeholder. <code>.env</code> overrides it to
+  the promptly gateway (<code>https://promptlyapi.com/v1</code>).</li>
 <li>DB table for episodic summaries is <code>summaries</code> (not <code>episodic_summaries</code>).</li>
 <li><code>pre-commit</code> hook requires venv activated. Bypass with <code>git -c core.hooksPath=/dev/null commit</code>.</li>
-<li><code>llm_context_length</code> in <code>.env</code> is overridden at startup by the <code>/props</code> fetch from the local
-  llamacpp server (port 8502). The running value can be verified at <code>GET /health</code> (<code>context_length</code>
-  field) or from server logs at startup. If llamacpp isn't up yet when nixx-server starts, the fetch
-  fails silently and falls back to 8192. The <code>/health</code> route retries the fetch.</li>
+<li><code>llm_model</code> and <code>llm_context_length</code> in <code>.env</code>/config are fallbacks only. At startup nixx fetches
+  the current model from the gateway's <code>/v1/models</code> and context length from <code>/props</code> (both proxied by
+  promptly). The running values can be verified at <code>GET /health</code>. If the gateway is unreachable when
+  nixx-server starts, the fetches fall back to the config values; the <code>/health</code> route retries them.</li>
 <li><code>/props</code> returns <code>n_ctx</code> under <code>default_generation_settings</code>, not at the top level.</li>
 <li>nixx-image has <code>Restart=no</code> by design - it stays dead after idle shutdown. <code>sudo systemctl start nixx-image</code> to bring it up. Tools do this automatically.</li>
 <li>Completed image jobs (both generate and edit) are appended to <code>~/nixx_scratch/image_jobs.jsonl</code> for persistence across service restarts. Admin metrics reads this file first, then merges live in-memory jobs.</li>
