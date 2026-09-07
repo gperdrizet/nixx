@@ -5,6 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=llama
+# PCI_BUS_ID makes device 0 the physical GTX 1070, not a P100 (default order is fastest-first).
+Environment=CUDA_DEVICE_ORDER=PCI_BUS_ID
 Environment=CUDA_VISIBLE_DEVICES=0
 ExecStart=/opt/llama.cpp/build/bin/llama-server \
     --model /opt/models/mxbai-embed-large-v1-f16.gguf \

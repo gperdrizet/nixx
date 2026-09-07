@@ -86,10 +86,13 @@ Four tables across two memory systems:
 
 ## llama.cpp
 
-LLM backend. An OpenAI-compatible server for chat completions and embeddings. Currently
-configured to use `promptlyapi.com/v1` (remote). The local instance runs at port 8502
-and can be switched in by updating `NIXX_LLM_BASE_URL` in `.env`. The default model is
-`gpt-oss-20b`.
+LLM backend. nixx talks to an OpenAI-compatible endpoint for chat completions. It's
+configured to use the **promptly gateway** (`promptlyapi.com/v1`) - an experimental
+inference API we run. The model it serves and its context window change over time, so
+nixx never hardcodes them: it fetches the current model from `/v1/models` and context
+length from `/props` at runtime (`gpt-oss-20b` / `8192` are fallback defaults). promptly
+currently proxies a local llama.cpp on port 8502; embeddings are served locally by a
+separate llama.cpp on port 8082.
 
 - [llama.cpp GitHub](https://github.com/ggerganov/llama.cpp)
 - [llama.cpp server docs](https://github.com/ggerganov/llama.cpp/tree/master/examples/server)

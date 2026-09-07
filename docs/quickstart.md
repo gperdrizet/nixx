@@ -29,7 +29,7 @@ Allow ~60 seconds after `llamacpp` starts before the first inference request - i
 
 | Service | What it does | Port | Managed by |
 |---|---|---|---|
-| `llamacpp.service` | LLM inference (gpt-oss-20b) | 8502 | systemd, auto-boot |
+| `llamacpp.service` | LLM inference (promptly backend; model varies) | 8502 | systemd, auto-boot |
 | `nixx-embed.service` | Embeddings (mxbai-embed-large) | 8082 | `nixx.target` |
 | `nixx-server.service` | nixx API server (FastAPI) | 8000 | `nixx.target` |
 | `nixx-pgweb.service` | DB browser | 8081 | `nixx.target` |

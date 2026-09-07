@@ -100,12 +100,14 @@ for architectures the driver does not support.
 
 | File | Size | Used by |
 |---|---|---|
-| `gpt-oss-20b-mxfp4.gguf` | ~11 GB | LLM inference (port 8502) |
+| current LLM `.gguf` (varies) | varies | promptly gateway backend (port 8502) |
 | `mxbai-embed-large-v1-f16.gguf` | ~670 MB | Embeddings (port 8082) |
 
-At 65536 context length (`-c 65536`), the LLM uses ~13.9 GB of the 16 GB P100. Reduce
-context in `llamacpp.service` if VRAM budget changes (e.g. if running both services
-simultaneously causes OOM).
+The LLM model served by promptly changes over time - nixx treats it as a black-box
+OpenAI-compatible endpoint and does not depend on a specific model. The backend model and
+its context length are managed in the [llama.cpp](https://github.com/gperdrizet/llama.cpp)
+and [promptly](https://github.com/gperdrizet/promptly) projects. nixx auto-discovers the
+current model (`/v1/models`) and context length (`/props`) at runtime.
 
 ---
 
@@ -159,7 +161,7 @@ service explicitly when needed.
 
 ```ini
 ExecStart=/opt/llama.cpp/build/bin/llama-server \
-    -m /opt/models/gpt-oss-20b-mxfp4.gguf \
+    -m /opt/models/<current-model>.gguf \
     --n-gpu-layers 999 \       # all layers on GPU
     -c 65536 \                 # context length
     --flash-attn on \          # required for long context on P100
@@ -170,7 +172,7 @@ ExecStart=/opt/llama.cpp/build/bin/llama-server \
     --metrics
 ```
 
-The local server runs at localhost:8502. nixx currently uses a remote inference API (`promptlyapi.com/v1`) configured in `.env` as `NIXX_LLM_BASE_URL`. To switch to the local instance, update that value to `http://localhost:8502`.
+nixx talks to the promptly gateway (`promptlyapi.com/v1`, set in `.env` as `NIXX_LLM_BASE_URL`) by design - it's the experimental inference API we run, and using it keeps nixx consistent with our other clients while doubling as a live demo of promptly. promptly currently proxies a local llama.cpp on port 8502; you *could* point `NIXX_LLM_BASE_URL` straight at `http://localhost:8502/v1` to bypass the gateway, but the gateway is the default path. The backend model and context change over time; nixx discovers both at runtime.
 
 ### Recovering from a failed service
 

@@ -82,9 +82,12 @@ Follow the build journey in [docs/build-log/](docs/build-log/).
 ### Setup
 
 ```bash
-# 1. Start llama.cpp server
-# The production instance runs at model.perdrizet.org with API key auth.
-# For local development, see https://github.com/ggerganov/llama.cpp
+# 1. LLM backend
+# nixx talks to an OpenAI-compatible endpoint. The default is the promptly gateway
+# (promptlyapi.com/v1) - an experimental inference API we run; the served model and
+# context window change over time and nixx discovers them at runtime. For a local
+# backend, run llama.cpp yourself (https://github.com/ggerganov/llama.cpp) and point
+# NIXX_LLM_BASE_URL at it.
 
 # 2. Start PostgreSQL + pgvector container
 docker compose up -d

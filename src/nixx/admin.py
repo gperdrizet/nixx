@@ -341,11 +341,14 @@ def create_app() -> FastAPI:
         # Fetch runtime context length from nixx-server /health (auto-fetched from llama.cpp
         # at startup, so more accurate than cfg.llm_context_length which is the .env default)
         runtime_ctx = cfg.llm_context_length
+        runtime_model = cfg.llm_model
         try:
             async with httpx.AsyncClient(timeout=1.0) as client:
                 hr = await client.get("http://127.0.0.1:8000/health")
                 if hr.status_code == 200:
-                    runtime_ctx = int(hr.json().get("context_length", runtime_ctx))
+                    _hj = hr.json()
+                    runtime_ctx = int(_hj.get("context_length", runtime_ctx))
+                    runtime_model = _hj.get("model", runtime_model)
         except Exception:
             pass
         image_health: dict[str, Any] = {}
@@ -357,7 +360,7 @@ def create_app() -> FastAPI:
         except Exception:
             pass
         return {
-            "model": cfg.llm_model,
+            "model": runtime_model,
             "context_length": runtime_ctx,
             "summary_interval": cfg.summary_interval,
             "intent_interval": cfg.intent_interval,

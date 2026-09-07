@@ -368,6 +368,28 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
                 flush=True,
             )
 
+        # Auto-fetch the model name the gateway currently serves. promptly's loaded
+        # model changes over time; the config value is only a fallback.
+        app.state.model_fetched = False
+        try:
+            headers = (
+                {"Authorization": f"Bearer {config.llm_api_key}"} if config.llm_api_key else {}
+            )
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                _resp = await client.get(f"{config.llm_base_url}/models", headers=headers)
+                _resp.raise_for_status()
+                _models = _resp.json().get("data") or []
+                _mid = _models[0].get("id") if _models else None
+                if _mid:
+                    config.llm_model = _mid
+                    app.state.model_fetched = True
+                    print(f"nixx: model name auto-fetched: {_mid}", flush=True)
+        except Exception as _exc:
+            print(
+                f"nixx: could not fetch model name from LLM server ({_exc}), using {config.llm_model}",
+                flush=True,
+            )
+
         logger.info("Memory store ready")
         logger.info("Tool registry ready (scratch_dir=%s)", config.scratch_dir)
         yield
@@ -382,8 +404,8 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict[str, str]:
-        # Retry /props fetch if it failed at startup (e.g. LLM server wasn't ready yet).
-        await _ensure_n_ctx()
+        # Retry model/context fetch if it failed at startup (e.g. gateway wasn't ready yet).
+        await _ensure_runtime_info()
         return {
             "status": "ok",
             "model": config.llm_model,
@@ -511,24 +533,34 @@ def create_app(config: NixxConfig | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    async def _ensure_n_ctx() -> None:
-        """Retry fetching n_ctx from the LLM server if the startup attempt failed."""
-        if getattr(app.state, "n_ctx_fetched", True):
-            return
-        try:
-            _headers = (
-                {"Authorization": f"Bearer {config.llm_api_key}"} if config.llm_api_key else {}
-            )
-            async with httpx.AsyncClient(timeout=5.0) as _client:
-                _r = await _client.get(f"{config.llm_base_url}/props", headers=_headers)
-                _r.raise_for_status()
-                _n = _r.json().get("default_generation_settings", {}).get("n_ctx")
-                if _n and isinstance(_n, int) and _n > 0:
-                    config.llm_context_length = _n
-                    app.state.n_ctx_fetched = True
-                    logger.info("nixx: context length fetched on demand: %d", _n)
-        except Exception:
-            pass
+    async def _ensure_runtime_info() -> None:
+        """Retry fetching context length and model name from the gateway if startup failed."""
+        _headers = {"Authorization": f"Bearer {config.llm_api_key}"} if config.llm_api_key else {}
+        if not getattr(app.state, "n_ctx_fetched", True):
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as _client:
+                    _r = await _client.get(f"{config.llm_base_url}/props", headers=_headers)
+                    _r.raise_for_status()
+                    _n = _r.json().get("default_generation_settings", {}).get("n_ctx")
+                    if _n and isinstance(_n, int) and _n > 0:
+                        config.llm_context_length = _n
+                        app.state.n_ctx_fetched = True
+                        logger.info("nixx: context length fetched on demand: %d", _n)
+            except Exception:
+                pass
+        if not getattr(app.state, "model_fetched", True):
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as _client:
+                    _r = await _client.get(f"{config.llm_base_url}/models", headers=_headers)
+                    _r.raise_for_status()
+                    _models = _r.json().get("data") or []
+                    _mid = _models[0].get("id") if _models else None
+                    if _mid:
+                        config.llm_model = _mid
+                        app.state.model_fetched = True
+                        logger.info("nixx: model name fetched on demand: %s", _mid)
+            except Exception:
+                pass
 
     @app.post("/v1/chat/completions", response_model=None)
     async def chat_completions(

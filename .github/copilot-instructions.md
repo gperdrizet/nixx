@@ -14,14 +14,14 @@ Frontend Layer (TUI / Zed / VS Code / Neovim)
   OpenAI-compatible API (FastAPI + Uvicorn)
         ↓                       ↓
   LLM Backend               Memory System
-  (llama.cpp)           (PostgreSQL + pgvector)
+  (promptly gateway)    (PostgreSQL + pgvector)
                           ↓                ↓
                    Episodic Memory    Semantic Memory
                    (buffer + FTS,     (sources → memories,
                     summaries)         /source + /ingest)
 ```
 
-All frontends communicate only through the OpenAI-compatible API - no direct backend imports from frontend code. Default LLM: `gpt-oss-20b` via llama.cpp server. Default embedding model: `mxbai-embed-large` (1024d). PostgreSQL + pgvector is the only database.
+All frontends communicate only through the OpenAI-compatible API - no direct backend imports from frontend code. LLM backend: the experimental `promptlyapi.com` gateway (an OpenAI-compatible inference API we run); the served model and context window change over time, so nixx never hardcodes them - it discovers the model from `/v1/models` and context from `/props` at runtime (`gpt-oss-20b` / `8192` are fallback defaults only). Default embedding model: `mxbai-embed-large` (1024d), served locally. PostgreSQL + pgvector is the only database.
 
 Two memory systems: **episodic** (automatic - buffer transcript with full-text search + periodic LLM-generated summaries with vector embeddings, tags, and entity extraction) and **semantic** (deliberate - user-curated sources and ingested documents, chunked and embedded for vector recall).
 

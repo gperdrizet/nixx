@@ -200,7 +200,6 @@ class OpenAIClient:
                     # Handle content
                     content = delta.get("content", "") or ""
                     reasoning = delta.get("reasoning_content", "") or ""
-                    reasoning = delta.get("reasoning_content", "") or ""
 
                     # Handle tool calls (accumulate across deltas)
                     for tc in delta.get("tool_calls", []):
@@ -219,8 +218,6 @@ class OpenAIClient:
                     # can optionally display thinking progress.
                     if content:
                         yield ChatResponse(content=content, done=False)
-                    elif reasoning:
-                        yield ChatResponse(content="", reasoning=reasoning, done=False)
                     elif reasoning:
                         yield ChatResponse(content="", reasoning=reasoning, done=False)
 
