@@ -93,6 +93,39 @@ def _truncate_messages(
     return [messages[0]] + kept
 
 
+_HEARTBEAT = object()  # sentinel marking an idle-keepalive tick in a wrapped stream
+
+
+async def _heartbeat_wrap(
+    aiter: AsyncGenerator[Any, None], interval: float = 10.0
+) -> AsyncGenerator[Any, None]:
+    """Yield items from aiter, emitting _HEARTBEAT when idle longer than interval seconds.
+
+    Keeps a streaming HTTP response alive during silent windows (prompt prefill and
+    server-side reasoning) so proxies or mobile connections don't drop it.
+    """
+    ait = aiter.__aiter__()
+    task: "asyncio.Task[Any] | None" = None
+    try:
+        while True:
+            if task is None:
+                task = asyncio.ensure_future(ait.__anext__())
+            done, _ = await asyncio.wait({task}, timeout=interval)
+            if task in done:
+                try:
+                    item = task.result()
+                except StopAsyncIteration:
+                    return
+                finally:
+                    task = None
+                yield item
+            else:
+                yield _HEARTBEAT
+    finally:
+        if task is not None:
+            task.cancel()
+
+
 def _strip_trailing_empty_assistant(messages: list[dict[str, Any]]) -> None:
     """Drop invalid assistant-prefill tails for llama.cpp reasoning mode.
 
@@ -1207,19 +1240,29 @@ async def _chat_event_stream(
             reasoning_acc = ""
             try:
                 _strip_trailing_empty_assistant(messages)
-                async for chunk in llm.chat_stream(
-                    model,
-                    messages,
-                    temperature,
-                    max_tokens,
-                    tools=tool_defs,
-                    **({"tool_choice": tool_choice} if tool_choice is not None else {}),
+                async for chunk in _heartbeat_wrap(
+                    llm.chat_stream(
+                        model,
+                        messages,
+                        temperature,
+                        max_tokens,
+                        tools=tool_defs,
+                        **({"tool_choice": tool_choice} if tool_choice is not None else {}),
+                    )
                 ):
+                    if chunk is _HEARTBEAT:
+                        # Keep the connection alive during the silent prompt-prefill
+                        # window so proxies/mobile don't drop it.
+                        yield ": keepalive\n\n"
+                        continue
                     content = chunk.content
                     done = chunk.done
 
                     if chunk.reasoning:
                         reasoning_acc += chunk.reasoning
+                        # Reasoning isn't forwarded as content; emit a keepalive so the
+                        # connection stays active through the thinking phase.
+                        yield ": keepalive\n\n"
 
                     if content:
                         accumulated += content
