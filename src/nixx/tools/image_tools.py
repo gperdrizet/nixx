@@ -30,11 +30,13 @@ async def _ensure_running() -> bool:
 
     # Not running - start it
     logger.info("nixx-image not running, starting via systemctl...")
+    # No sudo: nixx-server runs with NoNewPrivileges=true, which blocks sudo
+    # outright. Polkit (see /etc/polkit-1/rules.d/) authorizes this specific
+    # unit/verb for this user instead.
     proc = await asyncio.create_subprocess_exec(
-        "sudo",
         "systemctl",
         "start",
-        "nixx-image",
+        "nixx-image.service",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )

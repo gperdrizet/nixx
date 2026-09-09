@@ -325,11 +325,13 @@ async def _start_and_wait_image_service(timeout: float = 45.0) -> None:
     except Exception:
         pass
 
+    # No sudo: this service runs with NoNewPrivileges=true, which blocks sudo
+    # outright. Polkit (see /etc/polkit-1/rules.d/) authorizes this specific
+    # unit/verb for this user instead.
     proc = await asyncio.create_subprocess_exec(
-        "sudo",
         "systemctl",
         "start",
-        "nixx-image",
+        "nixx-image.service",
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
     )

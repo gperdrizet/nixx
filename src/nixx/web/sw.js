@@ -2,7 +2,7 @@
 // Enables installability. Network-first strategy: serve fresh content when
 // online, fall back to cache for the app shell when offline.
 
-const CACHE = 'nixx-pwa-v1';
+const CACHE = 'nixx-pwa-v2';
 const SHELL = ['/app/', '/app/manifest.json', '/app/icon.svg'];
 
 self.addEventListener('install', event => {
